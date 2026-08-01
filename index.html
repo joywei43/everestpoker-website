@@ -6,9 +6,9 @@
 
   <title>Everest Poker Room</title>
 
-<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/joywei43/everest-member-registration/main/logo.png" />
-<link rel="shortcut icon" type="image/png" href="https://raw.githubusercontent.com/joywei43/everest-member-registration/main/logo.png" />
-<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/joywei43/everest-member-registration/main/logo.png" />
+  <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/joywei43/everest-member-registration/main/logo.png" />
+  <link rel="shortcut icon" type="image/png" href="https://raw.githubusercontent.com/joywei43/everest-member-registration/main/logo.png" />
+  <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/joywei43/everest-member-registration/main/logo.png" />
 
   <style>
     * { box-sizing: border-box; }
@@ -25,8 +25,8 @@
     .page {
       min-height: 100vh;
       background:
-        radial-gradient(circle at top, rgba(255, 215, 120, 0.15), transparent 32%),
-        radial-gradient(circle at 80% 20%, rgba(56, 189, 248, 0.08), transparent 26%),
+        radial-gradient(circle at top, rgba(250, 204, 21, 0.16), transparent 34%),
+        radial-gradient(circle at 82% 18%, rgba(34, 197, 94, 0.09), transparent 28%),
         linear-gradient(180deg, #080808 0%, #050505 100%);
     }
 
@@ -111,11 +111,6 @@
       white-space: nowrap;
     }
 
-    .contact-btn-small {
-      background: #facc15;
-      color: #111111;
-    }
-
     .member-btn-small {
       background: #ffffff;
       color: #111111;
@@ -165,25 +160,24 @@
       align-items: center;
     }
 
-    .primary-btn {
-      display: inline-block;
-      padding: 16px 24px;
-      border-radius: 16px;
-      background: #facc15;
-      color: #111111;
-      font-weight: 900;
-      font-size: 16px;
-      box-shadow: 0 12px 30px rgba(250,204,21,0.12);
-    }
-
+    .primary-btn,
     .secondary-btn {
       display: inline-block;
       padding: 16px 24px;
       border-radius: 16px;
-      background: #ffffff;
-      color: #111111;
       font-weight: 900;
       font-size: 16px;
+    }
+
+    .primary-btn {
+      background: #facc15;
+      color: #111111;
+      box-shadow: 0 12px 30px rgba(250,204,21,0.12);
+    }
+
+    .secondary-btn {
+      background: #ffffff;
+      color: #111111;
       box-shadow: 0 12px 30px rgba(255,255,255,0.08);
     }
 
@@ -197,20 +191,24 @@
 
     .showcase {
       background:
-        linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0.03));
+        linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
       border: 1px solid rgba(250, 204, 21, 0.25);
       border-radius: 30px;
-      padding: 24px;
+      padding: 30px;
       box-shadow: 0 24px 60px rgba(0,0,0,0.55);
       position: relative;
       overflow: hidden;
+      min-height: 390px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .showcase::before {
       content: "";
       position: absolute;
-      width: 260px;
-      height: 260px;
+      width: 280px;
+      height: 280px;
       border-radius: 50%;
       background: rgba(250, 204, 21, 0.12);
       top: -90px;
@@ -222,188 +220,40 @@
       content: "";
       position: absolute;
       inset: 0;
-      background:
-        linear-gradient(120deg, transparent, rgba(255,255,255,0.08), transparent);
+      background: linear-gradient(120deg, transparent, rgba(255,255,255,0.08), transparent);
       pointer-events: none;
     }
 
-    .membership-card {
+    .showcase-inner {
       position: relative;
       z-index: 1;
-      border-radius: 26px;
-      min-height: 255px;
-      padding: 24px;
-      border: 1px solid rgba(255,255,255,0.26);
-      box-shadow:
-        inset 0 0 34px rgba(255,255,255,0.08),
-        0 22px 50px rgba(0,0,0,0.5);
-      overflow: hidden;
-      transition: background 0.25s ease, transform 0.25s ease;
+      text-align: center;
+      width: 100%;
     }
 
-    .membership-card:hover { transform: translateY(-2px); }
-
-    .membership-card::before {
-      content: "";
-      position: absolute;
-      inset: -40%;
-      background:
-        linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.28), transparent 65%);
-      transform: rotate(12deg);
-      opacity: 0.42;
-    }
-
-    .membership-card::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background:
-        radial-gradient(circle at 20% 18%, rgba(255,255,255,0.35), transparent 16%),
-        radial-gradient(circle at 82% 20%, rgba(255,255,255,0.16), transparent 18%),
-        linear-gradient(180deg, transparent, rgba(0,0,0,0.28));
-      pointer-events: none;
-    }
-
-    .card-silver {
-      background:
-        linear-gradient(135deg, #f5f5f4 0%, #b8b8b8 34%, #636363 72%, #111111 100%);
-    }
-
-    .card-gold {
-      background:
-        linear-gradient(135deg, #fde68a 0%, #d97706 36%, #7c2d12 74%, #111111 100%);
-    }
-
-    .card-diamond {
-      background:
-        linear-gradient(135deg, rgba(255,255,255,0.98), rgba(103,232,249,0.85), rgba(129,140,248,0.35), #111111),
-        repeating-linear-gradient(45deg, rgba(255,255,255,0.22) 0 12px, rgba(255,255,255,0.02) 12px 24px);
-    }
-
-    .card-sky {
-      background:
-        linear-gradient(135deg, #7dd3fc 0%, #38bdf8 38%, #075985 74%, #020617 100%);
-    }
-
-    .card-content {
-      position: relative;
-      z-index: 2;
-      height: 100%;
-      min-height: 207px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .card-logo-line {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .card-logo-text {
-      font-size: 12px;
-      letter-spacing: 3px;
-      color: rgba(255,255,255,0.88);
-      font-weight: 900;
-    }
-
-    .card-silver .card-logo-text,
-    .card-diamond .card-logo-text {
-      color: rgba(20,20,20,0.72);
-    }
-
-    .card-title {
-      margin-top: 44px;
-      font-size: 38px;
-      font-weight: 900;
-      letter-spacing: 1px;
-      color: #ffffff;
-      text-shadow: 0 2px 16px rgba(0,0,0,0.35);
-    }
-
-    .card-silver .card-title,
-    .card-diamond .card-title {
-      color: #111111;
-      text-shadow: 0 2px 20px rgba(255,255,255,0.2);
-    }
-
-    .card-bottom {
-      display: flex;
-      justify-content: space-between;
-      align-items: end;
-      gap: 12px;
-    }
-
-    .card-bottom small {
+    .showcase-logo {
+      width: 190px;
+      max-width: 70%;
       display: block;
-      color: rgba(255,255,255,0.7);
-      font-size: 11px;
+      margin: 0 auto 22px;
+      filter: drop-shadow(0 20px 35px rgba(0,0,0,0.55));
+    }
+
+    .showcase-title {
+      color: #facc15;
+      font-weight: 900;
+      font-size: 30px;
       letter-spacing: 2px;
+      margin-bottom: 12px;
     }
 
-    .card-silver .card-bottom small,
-    .card-diamond .card-bottom small {
-      color: rgba(20,20,20,0.58);
-    }
-
-    .card-bottom strong {
-      display: block;
-      margin-top: 4px;
-      font-size: 14px;
-      color: #ffffff;
-    }
-
-    .card-silver .card-bottom strong,
-    .card-diamond .card-bottom strong {
-      color: #111111;
-    }
-
-    .tier-pill {
-      padding: 7px 11px;
-      border-radius: 999px;
-      background: #facc15;
-      color: #111111;
-      font-size: 12px;
-      font-weight: 900;
-      white-space: nowrap;
-    }
-
-    .tier-selector {
-      position: relative;
-      z-index: 2;
-      margin-top: 16px;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-    }
-
-    .tier-btn {
-      min-height: 68px;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,0.14);
-      color: #ffffff;
-      cursor: pointer;
-      font-weight: 900;
-      transition: transform 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
-      padding: 10px;
+    .showcase-text {
+      color: #c7c7c7;
+      line-height: 1.7;
+      margin: 0 auto;
+      max-width: 460px;
       font-size: 15px;
     }
-
-    .tier-btn:hover {
-      transform: translateY(-2px);
-    }
-
-    .tier-btn.active {
-      border: 2px solid #facc15;
-      box-shadow: 0 0 22px rgba(250,204,21,0.22);
-    }
-
-    .btn-silver { background: linear-gradient(135deg, #d4d4d4, #303030); }
-    .btn-gold { background: linear-gradient(135deg, #fbbf24, #422006); }
-    .btn-diamond { background: linear-gradient(135deg, #e0f2fe, #0f172a); }
-    .btn-sky { background: linear-gradient(135deg, #38bdf8, #082f49); }
 
     .section {
       padding: 34px 0;
@@ -458,23 +308,28 @@
       line-height: 1.6;
     }
 
-    .social-card {
+    .social-card,
+    .location-card {
       background: linear-gradient(135deg, #121212, #080808);
       border: 1px solid #2a2a2a;
       border-radius: 24px;
       padding: 24px;
-      text-align: center;
       margin-bottom: 22px;
     }
 
-    .social-card h2 {
+    .social-card {
+      text-align: center;
+    }
+
+    .social-card h2,
+    .location-card h2 {
       margin: 0;
       font-size: 28px;
     }
 
-    .social-card p {
-      margin: 10px auto 20px;
-      max-width: 620px;
+    .social-card p,
+    .location-card p {
+      margin: 10px 0 20px;
       color: #a3a3a3;
       line-height: 1.7;
       font-size: 15px;
@@ -518,26 +373,26 @@
       font-size: 13px;
     }
 
-    .location-card {
-      background: linear-gradient(135deg, #121212, #080808);
-      border: 1px solid #2a2a2a;
-      border-radius: 24px;
-      padding: 24px;
+    .location-grid {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 18px;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 24px;
       align-items: center;
     }
 
-    .location-card h2 {
-      margin: 0 0 10px;
-      font-size: 28px;
+    .map-embed {
+      width: 100%;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid rgba(216, 183, 74, 0.28);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
     }
 
-    .location-card p {
-      margin: 0;
-      color: #a3a3a3;
-      line-height: 1.7;
+    .map-embed iframe {
+      display: block;
+      width: 100%;
+      height: 420px;
+      border: 0;
     }
 
     .map-btn {
@@ -574,8 +429,12 @@
         grid-template-columns: 1fr 1fr;
       }
 
-      .location-card {
+      .location-grid {
         grid-template-columns: 1fr;
+      }
+
+      .map-embed iframe {
+        height: 340px;
       }
     }
 
@@ -604,18 +463,6 @@
 
       .features {
         grid-template-columns: 1fr;
-      }
-
-      .tier-selector {
-        grid-template-columns: 1fr 1fr;
-      }
-
-      .membership-card {
-        min-height: 235px;
-      }
-
-      .card-title {
-        font-size: 30px;
       }
 
       .social-link,
@@ -655,28 +502,28 @@
             <button class="lang-btn" onclick="setLanguage('ko')" id="lang-ko">KR</button>
           </div>
 
-<a
-  class="header-btn member-btn-small"
-  href="./member.html"
-  data-i18n="memberLogin"
->
-  Member Login
-</a>
+          <a
+            class="header-btn member-btn-small"
+            href="./member.html"
+            data-i18n="memberLogin"
+          >
+            Member Login
+          </a>
         </div>
       </header>
 
       <main>
         <section class="hero">
           <div>
-            <div class="tag" data-i18n="tagline">Play more, earn without limits</div>
+            <div class="tag" data-i18n="tagline">Poker · Community · Rewards</div>
 
             <h1>
-              <span data-i18n="heroLine1">Join</span><br />
-              <span class="gold" data-i18n="heroLine2">EVEREST REWARDS</span>
+              <span data-i18n="heroLine1">Welcome to</span><br />
+              <span class="gold" data-i18n="heroLine2">EVEREST POKER ROOM</span>
             </h1>
 
             <p class="hero-text" data-i18n="heroText">
-              Welcome to Everest Poker Room, a professional poker space located on the 2nd floor of Midori Casino. We offer international poker tables where you can freely interact with players from different regions, while earning exclusive member rewards and redeemable points through continuous play. Both local and overseas players can enjoy high-quality games and service here.
+              Everest Poker Room is a professional poker space located on the 2nd floor of Midori Casino. We provide live cash games, friendly service, and an international poker community for both local and overseas players.
             </p>
 
             <div class="cta-row">
@@ -700,73 +547,56 @@
             </div>
 
             <p class="cta-note" data-i18n="ctaNote">
-              To register as a member or learn more about our latest events, please contact us through Telegram. Already a member? Log in to check your points, card tier, and recent transactions.
+              Contact us through Telegram for table updates, registration assistance, and the latest room information. Existing members may log in to check points and recent transactions.
             </p>
           </div>
 
           <div class="showcase">
-            <div id="mainCard" class="membership-card card-sky">
-              <div class="card-content">
-                <div class="card-logo-line">
-                  <div class="card-logo-text">EVEREST POKER ROOM</div>
-                  <div>♠</div>
-                </div>
-
-                <div>
-                  <div id="cardTitle" class="card-title">Sky Blue</div>
-                </div>
-
-                <div class="card-bottom">
-                  <div>
-                    <small data-i18n="memberCard">MEMBER CARD</small>
-                    <strong data-i18n="rewardsCard">EVEREST REWARDS</strong>
-                  </div>
-                  <span id="cardBadge" class="tier-pill">Sky Blue</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="tier-selector">
-              <button class="tier-btn btn-silver" onclick="selectTier('silver')" id="tier-silver">Silver</button>
-              <button class="tier-btn btn-gold" onclick="selectTier('gold')" id="tier-gold">Gold</button>
-              <button class="tier-btn btn-diamond" onclick="selectTier('diamond')" id="tier-diamond">Diamond</button>
-              <button class="tier-btn btn-sky active" onclick="selectTier('sky')" id="tier-sky">Sky Blue</button>
+            <div class="showcase-inner">
+              <img
+                class="showcase-logo"
+                src="https://raw.githubusercontent.com/joywei43/everest-member-registration/main/logo.png"
+                alt="Everest Poker Room Logo"
+              />
+              <div class="showcase-title" data-i18n="showcaseTitle">EVEREST POKER ROOM</div>
+              <p class="showcase-text" data-i18n="showcaseText">
+                Located inside Midori Casino, Clark. Join us for daily cash games, player service, and community updates.
+              </p>
             </div>
           </div>
         </section>
 
         <section class="section">
           <div class="section-title">
-            <h2 data-i18n="benefitsTitle">EVEREST REWARDS Features</h2>
-            <p data-i18n="benefitsText">
-              Everest Poker Room membership cards are designed to reward active players with better
-              access to exclusive perks, redemption options, and player services.
+            <h2 data-i18n="featuresTitle">Why Visit Everest Poker Room?</h2>
+            <p data-i18n="featuresText">
+              A comfortable poker room experience for players who value convenience, service, and a welcoming table atmosphere.
             </p>
           </div>
 
           <div class="features">
             <div class="feature">
+              <div class="icon">♠</div>
+              <h3 data-i18n="feature1Title">Live Poker Games</h3>
+              <p data-i18n="feature1Text">Enjoy live poker cash games in a dedicated poker room environment.</p>
+            </div>
+
+            <div class="feature">
               <div class="icon">🌍</div>
-              <h3 data-i18n="feature1Title">International Community</h3>
-              <p data-i18n="feature1Text">Players from different countries gather here to enjoy an international poker environment.</p>
+              <h3 data-i18n="feature2Title">International Community</h3>
+              <p data-i18n="feature2Text">Meet local and overseas players in a friendly international poker setting.</p>
             </div>
 
             <div class="feature">
               <div class="icon">★</div>
-              <h3 data-i18n="feature2Title">Member Rewards</h3>
-              <p data-i18n="feature2Text">Track your points, card tier, and eligible member benefits through the member system.</p>
+              <h3 data-i18n="feature3Title">Member Points</h3>
+              <p data-i18n="feature3Text">Members can check points and eligible redemption records through the member portal.</p>
             </div>
 
             <div class="feature">
-              <div class="icon">🎁</div>
-              <h3 data-i18n="feature3Title">F&amp;B / Rewards Redemption</h3>
-              <p data-i18n="feature3Text">Use member points for selected food, beverage, and reward redemption options when available.</p>
-            </div>
-
-            <div class="feature">
-              <div class="icon">✈</div>
-              <h3 data-i18n="feature4Title">Overseas Player Support</h3>
-              <p data-i18n="feature4Text">Support for international poker travelers, including basic travel and player assistance.</p>
+              <div class="icon">📍</div>
+              <h3 data-i18n="feature4Title">Easy Location</h3>
+              <p data-i18n="feature4Text">Located on the 2nd floor of Midori Clark Hotel and Casino in Clark Freeport Zone.</p>
             </div>
           </div>
         </section>
@@ -775,7 +605,7 @@
           <div class="social-card">
             <h2 data-i18n="socialTitle">Follow Everest Poker Room</h2>
             <p data-i18n="socialText">
-              Follow our official social media channels for the latest updates, events, promotions, and member rewards.
+              Follow our official social media channels for the latest updates, events, promotions, and table announcements.
             </p>
 
             <div class="social-links">
@@ -813,50 +643,38 @@
         </section>
 
         <section class="section">
-          <div class="location-card">
+          <div class="location-card location-grid">
             <div>
               <h2 data-i18n="locationTitle">Location</h2>
               <p data-i18n="locationText">
                 Everest Poker Room is located on the 2nd floor of Midori Clark Hotel and Casino, Clark Freeport Zone, Pampanga, Philippines.
               </p>
+
+              <a
+                class="map-btn"
+                href="https://maps.app.goo.gl/PbKyHyQpKHZravSk6"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-i18n="mapButton"
+              >
+                Open Google Maps
+              </a>
             </div>
 
-<div
-  style="
-    width: 100%;
-    margin: 24px 0 18px;
-    overflow: hidden;
-    border-radius: 18px;
-    border: 1px solid rgba(216, 183, 74, 0.28);
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-  "
->
-  <iframe
-    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3850.369603510579!2d120.521554!3d15.192926599999998!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x339693de59545e6b%3A0x6bb7ffb6861ec2b!2sEverest%20Poker%20Room!5e0!3m2!1szh-TW!2stw!4v1780701841409!5m2!1szh-TW!2stw"
-    width="100%"
-    height="420"
-    style="border:0; display:block;"
-    allowfullscreen=""
-    loading="lazy"
-    referrerpolicy="no-referrer-when-downgrade">
-  </iframe>
-</div>
-
-<a
-  class="map-btn"
-  href="https://maps.app.goo.gl/PbKyHyQpKHZravSk6"
-  target="_blank"
-  rel="noopener noreferrer"
-  data-i18n="mapButton"
->
-  Open Google Maps
-</a>
+            <div class="map-embed">
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3850.369603510579!2d120.521554!3d15.192926599999998!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x339693de59545e6b%3A0x6bb7ffb6861ec2b!2sEverest%20Poker%20Room!5e0!3m2!1szh-TW!2stw!4v1780701841409!5m2!1szh-TW!2stw"
+                allowfullscreen=""
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade">
+              </iframe>
+            </div>
           </div>
         </section>
       </main>
 
       <footer class="footer" data-i18n="footer">
-        © Everest Poker Room. All member perks are subject to availability and review of gaming records.
+        © Everest Poker Room. All services, table availability, and member benefits are subject to room policy and management review.
       </footer>
 
     </div>
@@ -868,210 +686,177 @@
         brandSub: "In Midori Casino",
         contactUs: "Contact Us",
         memberLogin: "Member Login",
-        tagline: "Play more, earn without limits",
-        heroLine1: "Join",
-        heroLine2: "EVEREST REWARDS",
-        heroText: "Welcome to Everest Poker Room, a professional poker space located on the 2nd floor of Midori Casino. We offer international poker tables where you can freely interact with players from different regions, while earning exclusive member rewards and redeemable points through continuous play. Both local and overseas players can enjoy high-quality games and service here.",
-        ctaNote: "To register as a member or learn more about our latest events, please contact us through Telegram. Already a member? Log in to check your points, card tier, and recent transactions.",
-        memberCard: "MEMBER CARD",
-        rewardsCard: "EVEREST REWARDS",
-        benefitsTitle: "EVEREST REWARDS Features",
-        benefitsText: "Everest Poker Room membership cards are designed to reward active players with better access to exclusive perks, redemption options, and player services.",
-        feature1Title: "International Community",
-        feature1Text: "Players from different countries gather here to enjoy an international poker environment.",
-        feature2Title: "Member Rewards",
-        feature2Text: "Track your points, card tier, and eligible member benefits through the member system.",
-        feature3Title: "F&B / Rewards Redemption",
-        feature3Text: "Use member points for selected food, beverage, and reward redemption options when available.",
-        feature4Title: "Overseas Player Support",
-        feature4Text: "Support for international poker travelers, including basic travel and player assistance.",
+        tagline: "Poker · Community · Rewards",
+        heroLine1: "Welcome to",
+        heroLine2: "EVEREST POKER ROOM",
+        heroText: "Everest Poker Room is a professional poker space located on the 2nd floor of Midori Casino. We provide live cash games, friendly service, and an international poker community for both local and overseas players.",
+        ctaNote: "Contact us through Telegram for table updates, registration assistance, and the latest room information. Existing members may log in to check points and recent transactions.",
+        showcaseTitle: "EVEREST POKER ROOM",
+        showcaseText: "Located inside Midori Casino, Clark. Join us for daily cash games, player service, and community updates.",
+        featuresTitle: "Why Visit Everest Poker Room?",
+        featuresText: "A comfortable poker room experience for players who value convenience, service, and a welcoming table atmosphere.",
+        feature1Title: "Live Poker Games",
+        feature1Text: "Enjoy live poker cash games in a dedicated poker room environment.",
+        feature2Title: "International Community",
+        feature2Text: "Meet local and overseas players in a friendly international poker setting.",
+        feature3Title: "Member Points",
+        feature3Text: "Members can check points and eligible redemption records through the member portal.",
+        feature4Title: "Easy Location",
+        feature4Text: "Located on the 2nd floor of Midori Clark Hotel and Casino in Clark Freeport Zone.",
         socialTitle: "Follow Everest Poker Room",
-        socialText: "Follow our official social media channels for the latest updates, events, promotions, and member rewards.",
+        socialText: "Follow our official social media channels for the latest updates, events, promotions, and table announcements.",
         locationTitle: "Location",
         locationText: "Everest Poker Room is located on the 2nd floor of Midori Clark Hotel and Casino, Clark Freeport Zone, Pampanga, Philippines.",
         mapButton: "Open Google Maps",
-        footer: "© Everest Poker Room. All member perks are subject to availability and review of gaming records."
+        footer: "© Everest Poker Room. All services, table availability, and member benefits are subject to room policy and management review."
       },
 
       zh: {
         brandSub: "位於 Midori Casino",
         contactUs: "聯繫我們",
         memberLogin: "會員登入",
-        tagline: "玩得越多，回饋無上限",
-        heroLine1: "加入",
-        heroLine2: "EVEREST REWARDS",
-        heroText: "歡迎來到 Everest Poker Room，位於 Midori Casino 的 2F 專業撲克空間。我們提供國際化的撲克牌桌，讓你可以在這裡盡情與不同玩家交流，並且透過持續遊戲獲得會員專屬回饋、點數兌換獎勵。無論本地或海外玩家，都能盡情享受高質量牌局以及服務。",
-        ctaNote: "想註冊成為會員或了解最新活動，請點擊按鈕與我們聯繫。已註冊會員可登入查詢點數、卡級與近期交易紀錄。",
-        memberCard: "會員卡",
-        rewardsCard: "EVEREST REWARDS",
-        benefitsTitle: "EVEREST REWARDS 特色介紹",
-        benefitsText: "Everest Poker Room 會員卡專為活躍玩家設計，提供更完整的專屬回饋、點數兌換與玩家服務。",
-        feature1Title: "多國交流",
-        feature1Text: "各國玩家匯聚於此，體驗國際級的交流空間。",
-        feature2Title: "會員回饋",
-        feature2Text: "透過會員系統查詢點數、卡級與可享有的會員禮遇。",
-        feature3Title: "餐飲 / 獎勵兌換",
-        feature3Text: "可依現場供應情況，使用會員點數兌換指定餐飲與獎勵項目。",
-        feature4Title: "海外玩家支援",
-        feature4Text: "為海外撲克旅客提供基礎旅遊與玩家服務協助。",
+        tagline: "撲克 · 社群 · 回饋",
+        heroLine1: "歡迎來到",
+        heroLine2: "EVEREST POKER ROOM",
+        heroText: "Everest Poker Room 是位於 Midori Casino 2F 的專業撲克空間。我們提供現場現金桌、友善服務，以及適合本地與海外玩家交流的國際化撲克社群。",
+        ctaNote: "如需查詢牌桌動態、會員註冊協助或最新資訊，請透過 Telegram 聯繫我們。既有會員可登入查詢點數與近期交易紀錄。",
+        showcaseTitle: "EVEREST POKER ROOM",
+        showcaseText: "位於 Clark 的 Midori Casino 內。歡迎加入我們的每日牌局、玩家服務與社群更新。",
+        featuresTitle: "為什麼選擇 Everest Poker Room？",
+        featuresText: "適合重視便利、服務與舒適牌桌氛圍的玩家。",
+        feature1Title: "現場撲克牌局",
+        feature1Text: "在專業撲克室環境中享受現場現金桌遊戲。",
+        feature2Title: "國際玩家社群",
+        feature2Text: "與本地及海外玩家一起體驗友善的國際化撲克氛圍。",
+        feature3Title: "會員點數",
+        feature3Text: "會員可透過會員頁面查詢點數與符合資格的兌換紀錄。",
+        feature4Title: "便利位置",
+        feature4Text: "位於 Clark Freeport Zone 的 Midori Clark Hotel and Casino 2F。",
         socialTitle: "追蹤 Everest Poker Room",
-        socialText: "追蹤我們的官方社群，掌握最新消息、活動資訊、優惠內容與會員回饋。",
+        socialText: "追蹤我們的官方社群，掌握最新消息、活動資訊、優惠內容與牌桌公告。",
         locationTitle: "地點",
         locationText: "Everest Poker Room 位於 Midori Clark Hotel and Casino 2F，地點位於菲律賓 Pampanga，Clark Freeport Zone。",
         mapButton: "開啟 Google 地圖",
-        footer: "© Everest Poker Room。所有會員禮遇皆依供應情況與遊戲紀錄審核為準。"
+        footer: "© Everest Poker Room。所有服務、牌桌開放與會員權益皆依現場規範及管理層審核為準。"
       },
 
       ja: {
         brandSub: "Midori Casino 内",
         contactUs: "お問い合わせ",
         memberLogin: "メンバーログイン",
-        tagline: "プレイするほど、リワードはさらに広がる",
-        heroLine1: "EVEREST REWARDS",
-        heroLine2: "に参加",
-        heroText: "Everest Poker Roomへようこそ。Midori Casino 2階にある本格的なポーカー空間です。国際的なポーカーテーブルを通じて、さまざまな地域のプレイヤーと交流しながら、継続的なプレイで会員限定リワードやポイント交換特典を獲得できます。ローカルプレイヤーも海外プレイヤーも、質の高いゲームとサービスをお楽しみいただけます。",
-        ctaNote: "会員登録をご希望の方、または最新イベントについて知りたい方は、Telegramよりお問い合わせください。登録済みの方はログインしてポイント、カードランク、最近の取引履歴を確認できます。",
-        memberCard: "メンバーカード",
-        rewardsCard: "EVEREST REWARDS",
-        benefitsTitle: "EVEREST REWARDS 特徴",
-        benefitsText: "Everest Poker Roomのメンバーカードは、アクティブなプレイヤーに向けて、限定特典、ポイント交換、プレイヤーサービスを提供するために設計されています。",
-        feature1Title: "国際交流",
-        feature1Text: "各国のプレイヤーが集まり、国際的な交流空間を体験できます。",
-        feature2Title: "会員リワード",
-        feature2Text: "会員システムでポイント、カードランク、対象特典を確認できます。",
-        feature3Title: "飲食 / リワード交換",
-        feature3Text: "提供状況に応じて、会員ポイントを指定の飲食やリワードに交換できます。",
-        feature4Title: "海外プレイヤーサポート",
-        feature4Text: "海外からのポーカー旅行者向けに、基本的な旅行・プレイヤーサポートを提供します。",
+        tagline: "ポーカー · コミュニティ · リワード",
+        heroLine1: "ようこそ",
+        heroLine2: "EVEREST POKER ROOM",
+        heroText: "Everest Poker Roomは、Midori Casino 2階にある本格的なポーカー空間です。ライブキャッシュゲーム、フレンドリーなサービス、そしてローカル・海外プレイヤー向けの国際的なポーカーコミュニティを提供しています。",
+        ctaNote: "テーブル情報、会員登録サポート、最新情報についてはTelegramよりお問い合わせください。既存メンバーはログインしてポイントと最近の取引履歴を確認できます。",
+        showcaseTitle: "EVEREST POKER ROOM",
+        showcaseText: "ClarkのMidori Casino内に位置しています。デイリーキャッシュゲーム、プレイヤーサービス、コミュニティ情報をお楽しみください。",
+        featuresTitle: "Everest Poker Room の魅力",
+        featuresText: "利便性、サービス、快適なテーブル環境を重視するプレイヤーのためのポーカールーム体験です。",
+        feature1Title: "ライブポーカーゲーム",
+        feature1Text: "専用ポーカールーム環境でライブキャッシュゲームをお楽しみいただけます。",
+        feature2Title: "国際コミュニティ",
+        feature2Text: "ローカルおよび海外プレイヤーと交流できる国際的なポーカー環境です。",
+        feature3Title: "会員ポイント",
+        feature3Text: "メンバーポータルでポイントと対象交換履歴を確認できます。",
+        feature4Title: "便利なロケーション",
+        feature4Text: "Clark Freeport ZoneのMidori Clark Hotel and Casino 2階にあります。",
         socialTitle: "Everest Poker Room をフォロー",
-        socialText: "公式SNSをフォローして、最新情報、イベント、プロモーション、メンバー特典をチェックしてください。",
+        socialText: "公式SNSをフォローして、最新情報、イベント、プロモーション、テーブル案内をチェックしてください。",
         locationTitle: "所在地",
         locationText: "Everest Poker Roomは、Midori Clark Hotel and Casino 2階、フィリピン Pampanga、Clark Freeport Zone にあります。",
         mapButton: "Google Maps を開く",
-        footer: "© Everest Poker Room。すべての会員特典は提供状況およびプレイ記録の確認に基づきます。"
+        footer: "© Everest Poker Room。すべてのサービス、テーブル稼働、会員特典はルームポリシーおよび管理者確認に基づきます。"
       },
 
       ko: {
         brandSub: "Midori Casino 내 위치",
         contactUs: "문의하기",
         memberLogin: "회원 로그인",
-        tagline: "더 많이 플레이할수록, 리워드는 더 커집니다",
-        heroLine1: "EVEREST REWARDS",
-        heroLine2: "가입하기",
-        heroText: "Everest Poker Room에 오신 것을 환영합니다. Midori Casino 2층에 위치한 전문 포커 공간입니다. 다양한 지역의 플레이어들과 자유롭게 교류할 수 있는 국제적인 포커 테이블을 제공하며, 지속적인 플레이를 통해 회원 전용 리워드와 포인트 교환 혜택을 받을 수 있습니다. 현지 및 해외 플레이어 모두 고품질 게임과 서비스를 즐길 수 있습니다.",
-        ctaNote: "회원 등록 또는 최신 이벤트 안내를 원하시면 Telegram으로 문의해 주세요. 이미 가입한 회원은 로그인하여 포인트, 카드 등급 및 최근 거래 내역을 확인할 수 있습니다.",
-        memberCard: "회원 카드",
-        rewardsCard: "EVEREST REWARDS",
-        benefitsTitle: "EVEREST REWARDS 특징",
-        benefitsText: "Everest Poker Room 회원 카드는 활발히 플레이하는 고객에게 전용 혜택, 포인트 사용 옵션 및 플레이어 서비스를 제공하기 위해 설계되었습니다.",
-        feature1Title: "다국적 교류",
-        feature1Text: "여러 국가의 플레이어들이 모여 국제적인 교류 공간을 경험할 수 있습니다.",
-        feature2Title: "회원 리워드",
-        feature2Text: "회원 시스템을 통해 포인트, 카드 등급 및 이용 가능한 혜택을 확인할 수 있습니다.",
-        feature3Title: "F&B / 리워드 사용",
-        feature3Text: "이용 가능 여부에 따라 회원 포인트를 지정된 식음료 및 리워드 항목으로 사용할 수 있습니다.",
-        feature4Title: "해외 플레이어 지원",
-        feature4Text: "해외 포커 여행객을 위한 기본 여행 및 플레이어 지원을 제공합니다.",
+        tagline: "포커 · 커뮤니티 · 리워드",
+        heroLine1: "환영합니다",
+        heroLine2: "EVEREST POKER ROOM",
+        heroText: "Everest Poker Room은 Midori Casino 2층에 위치한 전문 포커 공간입니다. 라이브 캐시게임, 친절한 서비스, 현지 및 해외 플레이어를 위한 국제적인 포커 커뮤니티를 제공합니다.",
+        ctaNote: "테이블 업데이트, 회원 등록 지원 및 최신 룸 정보를 원하시면 Telegram으로 문의해 주세요. 기존 회원은 로그인하여 포인트와 최근 거래 내역을 확인할 수 있습니다.",
+        showcaseTitle: "EVEREST POKER ROOM",
+        showcaseText: "Clark의 Midori Casino 내에 위치합니다. 데일리 캐시게임, 플레이어 서비스 및 커뮤니티 업데이트를 확인하세요.",
+        featuresTitle: "Everest Poker Room 방문 이유",
+        featuresText: "편리함, 서비스, 쾌적한 테이블 분위기를 중요하게 생각하는 플레이어를 위한 포커룸입니다.",
+        feature1Title: "라이브 포커 게임",
+        feature1Text: "전용 포커룸 환경에서 라이브 캐시게임을 즐기실 수 있습니다.",
+        feature2Title: "국제 커뮤니티",
+        feature2Text: "현지 및 해외 플레이어들과 함께 친근한 국제 포커 환경을 경험하세요.",
+        feature3Title: "회원 포인트",
+        feature3Text: "회원 포털에서 포인트와 사용 가능 내역을 확인할 수 있습니다.",
+        feature4Title: "편리한 위치",
+        feature4Text: "Clark Freeport Zone의 Midori Clark Hotel and Casino 2층에 위치합니다.",
         socialTitle: "Everest Poker Room 팔로우",
-        socialText: "공식 소셜 미디어를 팔로우하고 최신 소식, 이벤트, 프로모션 및 회원 리워드를 확인하세요.",
+        socialText: "공식 소셜 미디어를 팔로우하고 최신 소식, 이벤트, 프로모션 및 테이블 공지를 확인하세요.",
         locationTitle: "위치",
         locationText: "Everest Poker Room은 필리핀 Pampanga, Clark Freeport Zone의 Midori Clark Hotel and Casino 2층에 위치해 있습니다.",
         mapButton: "Google Maps 열기",
-        footer: "© Everest Poker Room. 모든 회원 혜택은 이용 가능 여부 및 게임 기록 검토에 따라 제공됩니다."
-      }
-    };
-
-    const tiers = {
-      silver: {
-        title: "Silver",
-        className: "card-silver"
-      },
-      gold: {
-        title: "Gold",
-        className: "card-gold"
-      },
-      diamond: {
-        title: "Diamond",
-        className: "card-diamond"
-      },
-      sky: {
-        title: "Sky Blue",
-        className: "card-sky"
+        footer: "© Everest Poker Room. 모든 서비스, 테이블 운영 및 회원 혜택은 룸 정책과 관리 검토에 따라 제공됩니다."
       }
     };
 
     let currentLang = "en";
-    let currentTier = "sky";
 
-function setLanguage(lang, saveChoice = true) {
-  currentLang = lang;
+    function setLanguage(lang, saveChoice = true) {
+      currentLang = lang;
 
-  if (saveChoice) {
-    localStorage.setItem("everest_lang", lang);
-  }
+      if (saveChoice) {
+        localStorage.setItem("everest_lang", lang);
+      }
 
-  const dict = translations[lang] || translations.en;
+      const dict = translations[lang] || translations.en;
 
-  document.querySelectorAll("[data-i18n]").forEach(el => {
-    const key = el.getAttribute("data-i18n");
-    if (dict[key]) {
-      el.innerHTML = dict[key];
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        if (dict[key]) {
+          el.innerHTML = dict[key];
+        }
+      });
+
+      document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active"));
+
+      const langBtn = document.getElementById("lang-" + lang);
+      if (langBtn) {
+        langBtn.classList.add("active");
+      }
     }
-  });
 
-  document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active"));
-
-  const langBtn = document.getElementById("lang-" + lang);
-  if (langBtn) {
-    langBtn.classList.add("active");
-  }
-}
     async function detectLanguageByIP() {
-  const savedLang = localStorage.getItem("everest_lang");
+      const savedLang = localStorage.getItem("everest_lang");
 
-  if (savedLang && translations[savedLang]) {
-    setLanguage(savedLang, false);
-    return;
-  }
+      if (savedLang && translations[savedLang]) {
+        setLanguage(savedLang, false);
+        return;
+      }
 
-  try {
-    const response = await fetch("https://ipapi.co/json/");
-    const data = await response.json();
-    const country = data.country_code;
+      try {
+        const response = await fetch("https://ipapi.co/json/");
+        const data = await response.json();
+        const country = data.country_code;
 
-    let detectedLang = "en";
+        let detectedLang = "en";
 
-    if (country === "JP") {
-      detectedLang = "ja";
-    } else if (country === "KR") {
-      detectedLang = "ko";
-    } else if (["SG", "MY", "TW", "HK", "MO", "CN"].includes(country)) {
-      detectedLang = "zh";
-    } else {
-      detectedLang = "en";
+        if (country === "JP") {
+          detectedLang = "ja";
+        } else if (country === "KR") {
+          detectedLang = "ko";
+        } else if (["SG", "MY", "TW", "HK", "MO", "CN"].includes(country)) {
+          detectedLang = "zh";
+        } else {
+          detectedLang = "en";
+        }
+
+        setLanguage(detectedLang, false);
+      } catch (error) {
+        setLanguage("en", false);
+      }
     }
 
-    setLanguage(detectedLang, false);
-  } catch (error) {
-    setLanguage("en", false);
-  }
-}
-
-    function selectTier(tier) {
-      currentTier = tier;
-
-      const mainCard = document.getElementById("mainCard");
-      mainCard.className = "membership-card " + tiers[tier].className;
-
-      document.getElementById("cardTitle").innerText = tiers[tier].title;
-      document.getElementById("cardBadge").innerText = tiers[tier].title;
-
-      document.querySelectorAll(".tier-btn").forEach(btn => btn.classList.remove("active"));
-      document.getElementById("tier-" + tier).classList.add("active");
-    }
-
-detectLanguageByIP();
-selectTier("sky");
+    detectLanguageByIP();
   </script>
 </body>
 </html>
