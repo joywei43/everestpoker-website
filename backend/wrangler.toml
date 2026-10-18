@@ -1,0 +1,12 @@
+name = "everest-waiting-api"
+main = "worker.mjs"
+compatibility_date = "2026-10-18"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://everestpokerroom.com,https://www.everestpokerroom.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "everest-waiting"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
