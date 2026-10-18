@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import worker,{initial} from './worker.mjs';
+const memory={state:initial(),version:0,sessions:new Map(),attempts:0};
+const DB={prepare(sql){let args=[];return {bind(...v){args=v;return this},async first(){if(sql.startsWith('INSERT INTO attempts'))return {count:++memory.attempts};if(sql.startsWith('SELECT expires'))return memory.sessions.has(args[0])?{expires:memory.sessions.get(args[0])}:null;if(sql.startsWith('SELECT version'))return {version:memory.version,data:JSON.stringify(memory.state)};if(sql.startsWith('UPDATE room')){if(args[1]!==memory.version)return null;memory.state=JSON.parse(args[0]);return {version:++memory.version};}throw Error(sql);},async run(){if(sql.startsWith('INSERT INTO sessions'))memory.sessions.set(args[0],args[1]);if(sql.startsWith('DELETE FROM sessions WHERE token'))memory.sessions.delete(args[0]);return {};}}},async batch(statements){for(const s of statements)await s.run();}};
+const env={DB,ADMIN_PASSWORD:'test-only-password'};const req=(path,method='GET',body,token)=>worker.fetch(new Request('https://worker.test'+path,{method,headers:{Origin:'https://everestpokerroom.com',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})}),env);
+assert.equal((await req('/state','PUT',{version:0,state:initial()})).status,401);
+assert.equal((await req('/login','POST',{username:'admin01',password:'wrong'})).status,401);
+let r=await req('/login','POST',{username:'admin01',password:env.ADMIN_PASSWORD});assert.equal(r.status,200);const {token}=await r.json();assert.equal(token.length,64);
+let state=initial();state.queue.push({num:1,name:'Tester',game:'50 / 100 NLH'});state.counters['50 / 100 NLH']=2;
+r=await req('/state','PUT',{version:0,state},token);assert.equal(r.status,200);assert.equal((await r.json()).version,1);
+assert.equal((await req('/state','PUT',{version:0,state},token)).status,409);
+const data=await (await req('/state')).json();assert.equal(data.state.queue[0].name,'Tester');
+assert.equal((await req('/state','PUT',{version:1,state:{...state,occupied:[]}},token)).status,400);
+assert.equal((await worker.fetch(new Request('https://worker.test/state',{headers:{Origin:'https://evil.test'}}),env)).status,403);
+assert.equal((await req('/logout','POST',{},token)).status,200);assert.equal((await req('/state','PUT',{version:1,state},token)).status,401);
+console.log('PASS: bad login, login, unauthenticated write blocked, authenticated write, shared read, concurrency conflict, validation, CORS, logout revocation');
