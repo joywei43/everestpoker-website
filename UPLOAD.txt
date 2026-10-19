@@ -1,1 +1,5 @@
-Upload the waiting-list folder to the existing website publishing root, alongside the original homepage index.html. Replace the existing waiting-list/index.html, waiting-list/admin/index.html and waiting-list/config.js. Do not replace the homepage. The API URL is already configured. No Cloudflare code or database changes are required. Existing live room data and login remain unchanged. After deployment, hard-refresh both pages.
+Upload waiting-list to your existing website root and replace the same files. Cloudflare does not need changes. Existing cloud data is not reset by uploading.
+
+Staff-only: Close all tables / Clear all. A confirmation is required. Clears all seats, all game/stakes queues, and all calls. Restarts all queue numbers at 001. Preserves table count, blinds, and game settings. Saved through the existing cloud API; other screens refresh automatically. This clears the room for closing; the existing table diagrams remain visible with empty seats.
+
+Includes the previous call-clearing fix. Hard-refresh player and staff pages after deployment.
