@@ -39,13 +39,33 @@ export default {async fetch(req,env){
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});
  }
- if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')){
+ if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))){
   const bearer=req.headers.get('Authorization')||'';if(!/^Bearer [a-f0-9]{64}$/.test(bearer))return reply({error:'Login required'},401);
   const hashed=await digest(bearer.slice(7));const session=await env.DB.prepare('SELECT expires FROM sessions WHERE token=?').bind(hashed).first();if(!session||session.expires<=now)return reply({error:'Session expired'},401);
   if(path==='/logout'){await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(hashed).run();return reply({ok:true});}
+  if(path==='/ppm'){
+   const row=await env.DB.prepare('SELECT version,data FROM ppm WHERE id=1').first();
+   if(req.method==='GET')return reply({version:row.version,tables:JSON.parse(row.data)});
+   const raw=await req.text();if(raw.length>2000000)return reply({error:'Too large'},413);
+   const body=JSON.parse(raw),ts=body.tables;
+   if(!Number.isSafeInteger(body.version)||!Array.isArray(ts)||ts.length!==4||!ts.every((t,i)=>t.id===i+1&&typeof t.isRunning==='boolean'&&blinds.includes(t.blinds)&&types.includes(t.gameType)&&Array.isArray(t.seats)&&t.seats.length===9&&t.seats.every((s,j)=>s.id===j+1&&['idle','seated','rest'].includes(s.status)&&typeof s.memberId==='string'&&s.memberId.length<=60)&&Array.isArray(t.sessions)))return reply({error:'Invalid PPM data'},400);
+   const members=ts.flatMap(t=>t.seats.filter(s=>s.status!=='idle').map(s=>s.memberId));
+   if(members.some(m=>!m.trim())||new Set(members).size!==members.length)return reply({error:'Member already seated or missing ID'},400);
+   const room=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();const state=JSON.parse(room.data);
+   state.occupied=ts.map(t=>t.seats.map(s=>t.isRunning&&s.status!=='idle'?1:0));
+   state.games=ts.map(t=>t.blinds);state.tableTypes=ts.map(t=>t.gameType);state.tableOpen=ts.map(t=>t.isRunning);state.count='4';
+   const results=await env.DB.batch([
+    env.DB.prepare('UPDATE ppm SET version=version+1,data=? WHERE id=1 AND version=? AND (SELECT version FROM room WHERE id=1)=?').bind(JSON.stringify(ts),body.version,room.version),
+    env.DB.prepare('UPDATE room SET version=version+1,data=? WHERE id=1 AND changes()=1').bind(JSON.stringify(state))
+   ]);
+   if(!results[0].meta.changes)return reply({error:'Another staff member updated the room. Reload and retry.'},409);
+   return reply({version:body.version+1,tables:ts});
+  }
   if(Number(req.headers.get('content-length'))>100000)return reply({error:'Too large'},413);
   const text=await req.text();if(text.length>100000)return reply({error:'Too large'},413);const body=JSON.parse(text);
   if(!Number.isSafeInteger(body.version)||body.version<0||!validate(body.state))return reply({error:'Invalid room data'},400);
+  const ppm=await env.DB.prepare('SELECT version,data FROM ppm WHERE id=1').first();
+  if(ppm&&ppm.version>0){const room=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();const live=JSON.parse(room.data);for(const key of ['occupied','games','tableTypes','tableOpen','count'])body.state[key]=live[key];}
   const result=await env.DB.prepare('UPDATE room SET version=version+1,data=? WHERE id=1 AND version=? RETURNING version').bind(JSON.stringify(body.state),body.version).first();
   if(!result)return reply({error:'其他員工已更新資料，請查看最新狀態後重試。'},409);
   return reply({version:result.version});
@@ -53,3 +73,4 @@ export default {async fetch(req,env){
  return reply({error:'Not found'},404);
  }catch(e){return reply({error:e instanceof SyntaxError?'Invalid JSON':'Service error'},e instanceof SyntaxError?400:500);}
 }};
+
