@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="favicon.png">
 <title>Everest Members · Staff Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <script src="../waiting-list/config.js"></script>
 <style>
-:root{--ink:#0F1B2D;--ink2:#172740;--ink3:#22344F;--bg:#EEF1F5;--card:#FFFFFF;--line:#DDE3EA;--line2:#EEF1F5;--text:#1B2430;--muted:#5B6675;--blue:#1F5FA8;--blue-d:#16467D;--blue-l:#E3EDF9;--green:#1E6B43;--green-l:#DFF3E7;--red:#B42318;--red-l:#FDECEA;--amber:#6B4A00;--amber-l:#FFF1D1;--note:#FFF8E6;--note-line:#EBD9A6}
+:root{--ink:#121212;--ink2:#1D1C1A;--ink3:#2C2719;--gold:#D1A647;--gold-d:#BF9339;--bg:#EEF1F5;--card:#FFFFFF;--line:#DDE3EA;--line2:#EEF1F5;--text:#1B2430;--muted:#5B6675;--blue:#1F5FA8;--blue-d:#16467D;--blue-l:#E3EDF9;--green:#1E6B43;--green-l:#DFF3E7;--red:#B42318;--red-l:#FDECEA;--amber:#6B4A00;--amber-l:#FFF1D1;--note:#FFF8E6;--note-line:#EBD9A6}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 'IBM Plex Sans','Noto Sans TC',system-ui,sans-serif}
 a{color:var(--blue)}a:hover{color:var(--blue-d)}
@@ -17,16 +18,16 @@ button,input,select,textarea{font:inherit;color:inherit}
 .mono{font-family:'IBM Plex Mono',monospace}
 .app{display:flex;flex-wrap:wrap;min-height:100vh}
 nav.side{flex:1 1 220px;max-width:100%;background:var(--ink);color:#E6ECF3;padding:20px 14px;display:flex;flex-direction:column;gap:22px}
-.brand{display:flex;gap:10px;align-items:center;padding:0 8px}
-.brand b{letter-spacing:.16em;font-size:15px}.brand small{display:block;font-size:12px;color:#9FB0C4}
+.brand{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:4px 8px}.brand img{width:132px;height:auto}
+.brand b{letter-spacing:.2em;font-size:14px;color:var(--gold)}.brand small{display:block;font-size:12px;color:#A8A29A}
 .navlinks{display:flex;flex-direction:column;gap:3px}
-.navlinks a{color:#C9D4E1;text-decoration:none;padding:10px 12px;border-radius:8px;display:flex;justify-content:space-between;align-items:center}
-.navlinks a[aria-current=page]{background:var(--ink3);color:#fff;font-weight:600}
-.navlinks a:hover{background:#1A2B44;color:#fff}
+.navlinks a{color:#D8D2C8;text-decoration:none;padding:10px 12px;border-radius:8px;display:flex;justify-content:space-between;align-items:center}
+.navlinks a[aria-current=page]{background:var(--ink3);color:var(--gold);font-weight:600}
+.navlinks a:hover{background:#24221E;color:#fff}
 .pill{background:#2C4363;color:#fff;border-radius:999px;padding:0 8px;font-size:12px;line-height:20px}
 .staffbox{margin-top:auto;padding:12px;border-radius:10px;background:var(--ink2);font-size:13px}
-.staffbox small{color:#9FB0C4;display:block}
-.staffbox button{margin-top:8px;background:none;border:1px solid #3A5175;color:#C9D4E1;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px}
+.staffbox small{color:#A8A29A;display:block}
+.staffbox button{margin-top:8px;background:none;border:1px solid #4A443A;color:#D8D2C8;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px}
 main{flex:999 1 560px;min-width:0;padding:24px 28px 48px;display:flex;flex-direction:column;gap:18px}
 h1{margin:0;font-size:24px}h2{margin:0;font-size:17px}
 .sub{color:var(--muted);margin:4px 0 0}
@@ -39,7 +40,7 @@ h1{margin:0;font-size:24px}h2{margin:0;font-size:17px}
 .tile .k{font-size:13px;color:var(--muted)}.tile .v{font-size:24px;font-weight:700;margin-top:2px}.tile .s{font-size:12px;color:var(--muted)}
 .btn{height:38px;padding:0 14px;border-radius:8px;border:1px solid #CDD5DF;background:#fff;cursor:pointer;font-weight:500;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--text)}
 .btn:hover{border-color:#9AA7B6}
-.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.primary:hover{background:var(--blue-d)}
+.btn.primary{background:var(--gold);border-color:var(--gold);color:#1B1406;font-weight:600}.btn.primary:hover{background:var(--gold-d);border-color:var(--gold-d)}
 .btn.danger{color:var(--red);border-color:var(--red)}
 .btn.sm{height:32px;padding:0 10px;font-size:13px}
 .btn[disabled]{opacity:.55;cursor:not-allowed}
@@ -124,7 +125,7 @@ function render() {
   const link = (p, label, extra = '') => `<a href="#/${p}" ${page === p || (p === 'members' && page === 'member') ? 'aria-current="page"' : ''}>${label}${extra}</a>`;
   root.innerHTML = `<div class="app">
     <nav class="side" aria-label="Main">
-      <div class="brand"><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><path d="M1 27 L12 9 L17 17 L21 12 L31 27 Z" fill="#E6ECF3"/><path d="M12 9 L15.5 14.5 L13 13.5 L10.5 15.5 Z" fill="#0F1B2D"/></svg><div><b>EVEREST</b><small>Member console</small></div></div>
+      <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Member console</small></div></div>
       <div class="navlinks">
         ${link('members', 'Members')}
         ${link('groups', 'Player groups')}
@@ -149,7 +150,7 @@ function renderStaff() {
   box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; sessionStorage.removeItem(TOKEN_KEY); render(); };
 }
 function renderLogin() {
-  root.innerHTML = `<div class="card login"><h1>Everest members</h1><p class="sub">Staff sign in · admin01</p>
+  root.innerHTML = `<div class="card login"><div style="background:#121212;border-radius:12px;padding:18px;margin:-8px -8px 18px;text-align:center"><img src="logo.png" alt="Everest Poker Room" style="width:160px;height:auto"></div><h1>Everest members</h1><p class="sub">Staff sign in · admin01</p>
     <form id="lf" class="row" style="margin-top:16px"><label class="f" style="flex:1">Password<input type="password" id="pw" autocomplete="current-password" required></label>
     <button class="btn primary" style="align-self:flex-end">Sign in</button></form><div id="lm" style="margin-top:12px"></div></div>`;
   document.getElementById('lf').onsubmit = async (e) => {
