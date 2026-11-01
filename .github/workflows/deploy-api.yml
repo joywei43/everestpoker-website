@@ -1,0 +1,46 @@
+# Deploys the Everest API (Cloudflare Worker + D1) whenever backend/ changes on main.
+# One-time setup in GitHub → Settings → Secrets and variables → Actions → New repository secret:
+#   CLOUDFLARE_API_TOKEN   – Cloudflare API token with "Edit Cloudflare Workers" and "D1 Edit" permissions
+#   CLOUDFLARE_ACCOUNT_ID  – shown on the right side of the Cloudflare Workers & Pages overview
+#   D1_DATABASE_ID         – Cloudflare → Storage & Databases → D1 → everest-waiting → Database ID
+# The ADMIN_PASSWORD secret already set on the Worker is kept; deploying does not change Worker secrets.
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/deploy-api.yml']
+  workflow_dispatch:
+
+concurrency: deploy-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the three secrets are set
+        run: |
+          missing=0
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID D1_DATABASE_ID; do
+            if [ -z "${!v}" ]; then echo "::error::Missing repository secret $v (see the top of deploy-api.yml)"; missing=1; fi
+          done
+          exit $missing
+      - name: Run tests
+        run: node test.mjs && node ppm.test.mjs && node members.test.mjs && node member-app.test.mjs
+      - name: Point wrangler.toml at the live database
+        run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Update database tables (safe to repeat; existing data is kept)
+        run: npx --yes wrangler@4 d1 execute everest-waiting --remote --file=schema.sql
+      - name: Deploy Worker
+        run: npx --yes wrangler@4 deploy

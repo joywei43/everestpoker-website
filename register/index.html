@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Everest Poker Room Member Registration</title>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <main class="page">
+    <section class="card">
+      <div class="brand">
+        <div class="logo-mark">▲</div>
+        <div>
+          <h1 data-i18n="title">Everest Poker Room</h1>
+          <p data-i18n="subtitle">Member Registration</p>
+        </div>
+      </div>
+
+      <div class="language-row">
+        <label for="language" data-i18n="languageLabel">Language</label>
+        <select id="language">
+          <option value="en">English</option>
+          <option value="zh">中文</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="th">ไทย</option>
+          <option value="vi">Tiếng Việt</option>
+        </select>
+      </div>
+
+      <form id="registerForm" autocomplete="on">
+        <div class="section-title" data-i18n="personalInfo">Personal Information</div>
+
+        <div class="grid">
+          <div class="form-group">
+            <label for="surname" data-i18n="surname">Surname</label>
+            <input
+              type="text"
+              id="surname"
+              name="surname"
+              required
+              autocomplete="family-name"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="middleName" data-i18n="middleName">Middle Name</label>
+            <input
+              type="text"
+              id="middleName"
+              name="middleName"
+              autocomplete="additional-name"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="familyName" data-i18n="familyName">Given Name</label>
+            <input
+              type="text"
+              id="familyName"
+              name="familyName"
+              required
+              autocomplete="given-name"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="nickName" data-i18n="nickName">Nick Name</label>
+            <input
+              type="text"
+              id="nickName"
+              name="nickName"
+              data-i18n-placeholder="nickNamePlaceholder"
+              placeholder="Optional"
+              autocomplete="nickname"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="nationality" data-i18n="nationality">Nationality</label>
+            <input
+              type="text"
+              id="nationality"
+              name="nationality"
+              required
+              autocomplete="country-name"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="birthday" data-i18n="birthday">Date of Birth</label>
+            <input
+              type="date"
+              id="birthday"
+              name="birthday"
+              required
+            />
+          </div>
+
+          <div class="form-group full">
+            <label for="passportId" data-i18n="passportId">Passport / ID Number</label>
+            <input
+              type="text"
+              id="passportId"
+              name="passportId"
+              required
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <div class="section-title" data-i18n="contactInfo">Contact Information</div>
+
+        <div class="grid">
+          <div class="form-group full">
+            <label for="email" data-i18n="email">Email</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+            />
+          </div>
+
+          <div class="form-group full">
+            <label for="phone" data-i18n="phone">Phone Number</label>
+            <input
+              type="tel"
+              id="phone"
+              name="phone"
+              required
+              autocomplete="tel"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="whatsapp">WhatsApp</label>
+            <input
+              type="text"
+              id="whatsapp"
+              name="whatsapp"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="telegram">Telegram</label>
+            <input
+              type="text"
+              id="telegram"
+              name="telegram"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="line">LINE</label>
+            <input
+              type="text"
+              id="line"
+              name="line"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="referralId" data-i18n="referralId">Referral ID</label>
+            <input
+              type="text"
+              id="referralId"
+              name="referralId"
+              data-i18n-placeholder="referralPlaceholder"
+              placeholder="Optional"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <div class="terms-box">
+          <label class="checkbox-row">
+            <input type="checkbox" id="agreeTerms" required />
+            <span data-i18n="terms1">
+              I confirm that the information provided is true and accurate.
+            </span>
+          </label>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="agreeAge" required />
+            <span data-i18n="terms2">
+              I confirm that I meet the legal age requirement to enter and participate.
+            </span>
+          </label>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="agreePolicy" required />
+            <span data-i18n="terms3">
+              I agree to follow all Everest Poker Room membership rules and house policies.
+            </span>
+          </label>
+        </div>
+
+        <button type="submit" id="submitBtn">
+          <span data-i18n="submit">Submit Registration</span>
+        </button>
+
+        <p id="formMessage" class="form-message"></p>
+      </form>
+    </section>
+
+    <div id="successModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="success-icon">✓</div>
+        <h2 data-i18n="successTitle">Thank you for your registration</h2>
+        <p data-i18n="successText1">
+          Thank you for registering as an Everest Poker Room member.
+        </p>
+        <p data-i18n="successText2">
+          We have received your membership registration information.
+        </p>
+        <p data-i18n="successText3">
+          Please proceed to the counter with your ID to complete identity verification and receive your member code.
+        </p>
+        <button type="button" id="closeModalBtn" data-i18n="closeButton">
+          Close
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <script src="../waiting-list/config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
