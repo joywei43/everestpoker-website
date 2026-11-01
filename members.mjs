@@ -205,7 +205,9 @@ function pickFields(b) {
   return out;
 }
 
-export async function handleMembersApi(req, env, path, now, reply, user) {
+export async function handleMembersApi(req, env, path, now, reply, user, role = 'admin') {
+  const manager = role !== 'staff';
+  const managerOnly = () => bad(reply, 'Manager only.', 403);
   // The signed-in staff account is the actor in every log entry; the typed name is only a fallback for old sessions.
   const who = (b) => str(user, 60) || str(b && b.staff, 60);
   const url = new URL(req.url);
@@ -233,7 +235,8 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
       WHERE ps.start_at>=? AND ps.start_at<? GROUP BY ps.group_id, ps.member_id`).bind(r.start, r.end));
     const rw = await all(env.DB.prepare(`SELECT rw.group_id, rw.member_id, SUM(rw.amount) amt, m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.group_id AS current_group
       FROM rewards rw JOIN members m ON m.id=rw.member_id
-      WHERE rw.voided=0 AND rw.given_at>=? AND rw.given_at<? GROUP BY rw.group_id, rw.member_id`).bind(r.start, r.end));
+      WHERE rw.voided=0 AND rw.approved_at IS NOT NULL AND rw.given_at>=? AND rw.given_at<? GROUP BY rw.group_id, rw.member_id`).bind(r.start, r.end));
+    const pendingRw = await env.DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(amount),0) amt FROM rewards WHERE voided=0 AND approved_at IS NULL').first();
     const unassigned = await env.DB.prepare("SELECT COUNT(*) n FROM members WHERE group_id IS NULL AND status='active'").first();
     const unmatched = await env.DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(active_seconds),0) secs FROM play_sessions WHERE member_id IS NULL AND start_at>=? AND start_at<?').bind(r.start, r.end).first();
     const buckets = new Map();
@@ -259,6 +262,7 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
     const list = [...buckets.values()].map((b) => ({ ...b, players: [...b.players.values()].sort((x, y) => y.seconds - x.seconds), player_count: b.players.size }));
     list.sort((a, b) => ((groups.get(a.id) || { sort: 99 }).sort - (groups.get(b.id) || { sort: 99 }).sort));
     return reply({ from: r.from, to: r.to, groups: list, total_seconds: list.reduce((s, b) => s + b.seconds, 0), total_rewards: list.reduce((s, b) => s + b.rewards, 0),
+      pending_rewards: pendingRw.n, pending_amount: pendingRw.amt,
       unassigned_members: unassigned.n, unmatched_sessions: unmatched.n, unmatched_seconds: unmatched.secs });
   }
 
@@ -296,6 +300,7 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
     return reply({ ok: true, member_no: created.member_no });
   }
   if (parts[0] === 'members' && parts[1] === 'import' && method === 'POST') {
+    if (!manager) return managerOnly();
     const b = await readJson(req, 1000000);
     const rows = Array.isArray(b.rows) ? b.rows.slice(0, 100) : [];
     const actor = who(b) || 'import';
@@ -340,7 +345,7 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
     if (parts.length === 2 && method === 'GET') {
       const t30 = now - 30 * DAY;
       const stat = (since) => env.DB.prepare('SELECT COUNT(*) sessions, COUNT(DISTINCT play_date) days, COALESCE(SUM(active_seconds),0) secs, COALESCE(SUM(buy_in),0) buy_in FROM play_sessions WHERE member_id=? AND start_at>=?').bind(m.id, since).first();
-      const rwSum = (since) => env.DB.prepare('SELECT COALESCE(SUM(amount),0) amt FROM rewards WHERE member_id=? AND voided=0 AND given_at>=?').bind(m.id, since).first();
+      const rwSum = (since) => env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN approved_at IS NOT NULL THEN amount ELSE 0 END),0) amt, COALESCE(SUM(CASE WHEN approved_at IS NULL THEN amount ELSE 0 END),0) pending FROM rewards WHERE member_id=? AND voided=0 AND given_at>=?').bind(m.id, since).first();
       const [s30, sAll, r30, rAll] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0)]);
       let share = null;
       if (m.group_id) {
@@ -349,13 +354,13 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
         share = { group_seconds: g.secs, member_seconds: mine.secs };
       }
       const sessions = await all(env.DB.prepare('SELECT id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,buy_in,transfer_note,group_id FROM play_sessions WHERE member_id=? ORDER BY start_at DESC LIMIT 200').bind(m.id));
-      const rewards = await all(env.DB.prepare('SELECT id,type,detail,amount,given_at,recorded_by,approved_by,voided,void_reason,group_id FROM rewards WHERE member_id=? ORDER BY given_at DESC, id DESC LIMIT 500').bind(m.id));
+      const rewards = await all(env.DB.prepare('SELECT id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,voided,void_reason,group_id FROM rewards WHERE member_id=? ORDER BY given_at DESC, id DESC LIMIT 500').bind(m.id));
       const history = await all(env.DB.prepare('SELECT group_id,effective_from,changed_by,note FROM member_group_history WHERE member_id=? ORDER BY effective_from DESC, id DESC').bind(m.id));
       const log = await all(env.DB.prepare('SELECT at,actor,action,detail FROM audit_log WHERE member_id=? ORDER BY at DESC, id DESC LIMIT 50').bind(m.id));
       const gname = (id) => (id ? (groups.get(id) || { name: id }).name : null);
       return reply({
         member: publicMember(m, groups),
-        stats: { last30: { ...s30, rewards: r30.amt }, all: { ...sAll, rewards: rAll.amt }, group_share: share },
+        stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share },
         sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id) })),
         rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
         group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),
@@ -367,7 +372,7 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
       const b = await readJson(req);
       const fields = pickFields(b);
       if ('staff_notes' in b) fields.staff_notes = str(b.staff_notes, 4000);
-      if ('status' in b) { if (!STATUSES.includes(b.status)) return bad(reply, 'Unknown status.'); fields.status = b.status; }
+      if ('status' in b && b.status !== m.status) { if (!manager) return managerOnly(); if (!STATUSES.includes(b.status)) return bad(reply, 'Unknown status.'); fields.status = b.status; }
       const keys = Object.keys(fields);
       if (!keys.length) return bad(reply, 'Nothing to update.');
       const changed = keys.filter((k) => fields[k] !== m[k]);
@@ -379,6 +384,7 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
     }
 
     if (parts[2] === 'group' && method === 'POST') {
+      if (!manager) return managerOnly();
       const b = await readJson(req, 5000);
       const groupId = b.group_id ? str(b.group_id, 30) : null;
       if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
@@ -411,16 +417,38 @@ export async function handleMembersApi(req, env, path, now, reply, user) {
       const givenAt = date && date !== localDate(now) ? dayStart(date) + 12 * 3600 : now;
       if (givenAt > now + DAY) return bad(reply, 'Date is in the future.');
       const groupId = await groupAt(env, m.id, givenAt);
+      // A manager's entry is approved by that manager; a staff entry waits for a manager.
+      const approver = manager ? (str(b.approved_by, 60) || who(b)) : '';
       await env.DB.batch([
-        env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
-          .bind(m.id, groupId, type, str(b.detail, 200), amount, givenAt, str(b.recorded_by, 60), str(b.approved_by, 60), now),
-        audit(env, now, who(b) || b.recorded_by, 'reward.add', m.id, `${type} ₱${amount} ${str(b.detail, 120)}`)
+        env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+          .bind(m.id, groupId, type, str(b.detail, 200), amount, givenAt, str(b.recorded_by, 60), approver, manager ? now : null, now),
+        audit(env, now, who(b) || b.recorded_by, 'reward.add', m.id, `${type} ₱${amount} ${str(b.detail, 120)}${manager ? '' : ' · waiting for approval'}`)
       ]);
-      return reply({ ok: true });
+      return reply({ ok: true, approved: manager });
     }
   }
 
+  if (parts[0] === 'rewards' && parts[1] === 'pending' && method === 'GET') {
+    const rows = await all(env.DB.prepare(`SELECT rw.id,rw.type,rw.detail,rw.amount,rw.given_at,rw.recorded_by,rw.group_id,m.member_no,m.surname,m.middle_name,m.family_name,m.nickname,m.member_no
+      FROM rewards rw JOIN members m ON m.id=rw.member_id WHERE rw.voided=0 AND rw.approved_at IS NULL ORDER BY rw.given_at, rw.id LIMIT 300`));
+    return reply({ rewards: rows.map((r) => ({ id: r.id, type: r.type, detail: r.detail, amount: r.amount, given_at: r.given_at, recorded_by: r.recorded_by,
+      group_name: r.group_id ? (groups.get(r.group_id) || { name: r.group_id }).name : null, member_no: r.member_no, name: displayName(r), nickname: r.nickname })) });
+  }
+  if (parts[0] === 'rewards' && parts[1] && parts[2] === 'approve' && method === 'POST') {
+    if (!manager) return managerOnly();
+    const b = await readJson(req, 5000);
+    const r = await env.DB.prepare('SELECT id,member_id,type,amount,voided,approved_at FROM rewards WHERE id=?').bind(Number(parts[1])).first();
+    if (!r) return bad(reply, 'Reward not found.', 404);
+    if (r.voided) return bad(reply, 'Reward was voided.');
+    if (r.approved_at) return reply({ ok: true, unchanged: true });
+    await env.DB.batch([
+      env.DB.prepare('UPDATE rewards SET approved_by=?,approved_at=? WHERE id=? AND approved_at IS NULL').bind(who(b), now, r.id),
+      audit(env, now, who(b), 'reward.approve', r.member_id, `${r.type} ₱${r.amount}`)
+    ]);
+    return reply({ ok: true });
+  }
   if (parts[0] === 'rewards' && parts[1] && parts[2] === 'void' && method === 'POST') {
+    if (!manager) return managerOnly();
     const b = await readJson(req, 5000);
     const id = Number(parts[1]);
     if (!who(b) || !str(b.reason, 200)) return bad(reply, 'Staff name and reason are required.');

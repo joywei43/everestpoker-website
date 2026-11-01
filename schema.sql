@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS rewards(
  given_at INTEGER NOT NULL,
  recorded_by TEXT NOT NULL,
  approved_by TEXT NOT NULL DEFAULT '',
+ approved_at INTEGER, -- NULL = waiting for a manager; only approved rewards count in cost totals
  voided INTEGER NOT NULL DEFAULT 0,
  void_reason TEXT NOT NULL DEFAULT '',
  created_at INTEGER NOT NULL
@@ -129,9 +130,26 @@ CREATE TABLE IF NOT EXISTS staff(
  pw_hash TEXT NOT NULL,
  salt TEXT NOT NULL,
  iterations INTEGER NOT NULL,
- role TEXT NOT NULL DEFAULT 'admin',
+ role TEXT NOT NULL DEFAULT 'admin' CHECK(role IN ('admin','staff')), -- admin = manager, staff = floor/counter
  active INTEGER NOT NULL DEFAULT 1,
  created_at INTEGER NOT NULL
 );
 -- Which staff member owns each login session (token is the same hash stored in sessions).
-CREATE TABLE IF NOT EXISTS session_users(token TEXT PRIMARY KEY, username TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS session_users(token TEXT PRIMARY KEY, username TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'admin');
+
+-- ===== Member app (phase 2) =====
+-- Members sign in with member number + birthday. Sessions last 30 days.
+CREATE TABLE IF NOT EXISTS member_sessions(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES members(id), expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS member_login_attempts(ip TEXT PRIMARY KEY, started INTEGER NOT NULL, count INTEGER NOT NULL);
+-- Promotions shown in the member app, edited by managers in the console.
+CREATE TABLE IF NOT EXISTS promotions(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ title TEXT NOT NULL,
+ body TEXT NOT NULL DEFAULT '',
+ starts TEXT NOT NULL DEFAULT '',
+ ends TEXT NOT NULL DEFAULT '',
+ active INTEGER NOT NULL DEFAULT 1,
+ sort INTEGER NOT NULL DEFAULT 0,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL
+);

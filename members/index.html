@@ -77,12 +77,14 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 (() => {
 'use strict';
 const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
-const TOKEN_KEY = 'ppm-session', USER_KEY = 'ppm-user';
+const TOKEN_KEY = 'ppm-session', USER_KEY = 'ppm-user', ROLE_KEY = 'ppm-role';
 const TYPES = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', hotel: 'Hotel Stay', transportation: 'Transportation', tournament_ticket: 'Tournament Tickets' };
 const TYPE_CHIP = { free_chip: 'blue', promo_cash: 'green', promo_chip: 'amber', hotel: '', transportation: '', tournament_ticket: 'dark' };
 const root = document.getElementById('root');
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
 let staff = sessionStorage.getItem(USER_KEY) || '';
+let role = sessionStorage.getItem(ROLE_KEY) || 'admin';
+const isManager = () => role !== 'staff';
 let groupsCache = null;
 
 // ---------- helpers ----------
@@ -113,7 +115,7 @@ function flash(el, text, kind = '') { el.innerHTML = text ? `<div class="msg ${k
 // The signed-in account is recorded as the actor by the server; this is only for display and defaults.
 function needStaff() { return staff; }
 async function loadMe() {
-  try { const me = await api('/me'); staff = me.user || ''; sessionStorage.setItem(USER_KEY, staff); renderStaff(); } catch (e) {}
+  try { const me = await api('/me'); const wasManager = isManager(); staff = me.user || ''; role = me.role || 'admin'; sessionStorage.setItem(USER_KEY, staff); sessionStorage.setItem(ROLE_KEY, role); if (wasManager !== isManager()) render(); else renderStaff(); } catch (e) {}
 }
 function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: page || 'members', arg: rest.map(decodeURIComponent).join('/') }; }
 
@@ -129,7 +131,9 @@ function render() {
         ${link('members', 'Members')}
         ${link('groups', 'Player groups')}
         ${link('unmatched', 'Unmatched PPM')}
-        ${link('import', 'Import members')}
+        ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
+        ${link('promotions', 'Promotions')}
+        ${isManager() ? link('import', 'Import members') : ''}
         <a href="../ppm/">PPM tables ↗</a>
       </div>
       <div class="staffbox" id="staffbox"></div>
@@ -138,14 +142,15 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, import: viewImport };
+  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, approvals: viewApprovals, promotions: viewPromotions, import: isManager() ? viewImport : viewMembers };
+  refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
 function renderStaff() {
   const box = document.getElementById('staffbox'); if (!box) return;
-  box.innerHTML = `<small>Signed in as</small><div><b>${esc(staff || '—')}</b></div>
+  box.innerHTML = `<small>Signed in as</small><div><b>${esc(staff || '—')}</b> <span class="small" style="color:var(--gold)">${isManager() ? 'Manager' : 'Staff'}</span></div>
     <button type="button" id="logout">Sign out</button>`;
-  box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; staff = ''; sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USER_KEY); render(); };
+  box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; staff = ''; sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USER_KEY); sessionStorage.removeItem(ROLE_KEY); render(); };
 }
 function renderLogin() {
   root.innerHTML = `<div class="card login"><div style="background:#121212;border-radius:12px;padding:18px;margin:-8px -8px 18px;text-align:center"><img src="logo.png" alt="Everest Poker Room" style="width:160px;height:auto"></div><h1>Everest members</h1><p class="sub">Staff sign in</p>
@@ -157,7 +162,7 @@ function renderLogin() {
     try {
       const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.getElementById('un').value.trim(), password: document.getElementById('pw').value }) });
       const d = await res.json(); if (!res.ok) throw new Error(d.error || 'Sign in failed');
-      token = d.token; staff = d.user || ''; sessionStorage.setItem(TOKEN_KEY, token); sessionStorage.setItem(USER_KEY, staff); render();
+      token = d.token; staff = d.user || ''; role = d.role || 'admin'; sessionStorage.setItem(TOKEN_KEY, token); sessionStorage.setItem(USER_KEY, staff); sessionStorage.setItem(ROLE_KEY, role); render();
     } catch (err) { flash(m, err.message, 'err'); }
   };
 }
@@ -239,7 +244,7 @@ async function viewMember(view, no) {
   const [gs, data] = await Promise.all([groups(), api('/members/' + encodeURIComponent(no))]);
   const m = data.member, s30 = data.stats.last30, sAll = data.stats.all, share = data.stats.group_share;
   const since = Date.now() / 1000 - 30 * 86400;
-  const rw30 = data.rewards.filter((r) => !r.voided && r.given_at >= since);
+  const rw30 = data.rewards.filter((r) => !r.voided && r.approved_at && r.given_at >= since);
   const byType = Object.keys(TYPES).map((t) => ({ t, amt: rw30.filter((r) => r.type === t).reduce((a, r) => a + r.amount, 0) })).filter((x) => x.amt > 0).sort((a, b) => b.amt - a.amt);
   const maxType = Math.max(1, ...byType.map((x) => x.amt));
   view.innerHTML = `<div class="row between"><div class="muted"><a href="#/members">Members</a> / <span class="mono">${esc(m.member_no)}</span></div>
@@ -257,8 +262,8 @@ async function viewMember(view, no) {
         <div class="small" style="font-weight:600">PLAYER GROUP</div>
         <div><div style="font-size:20px;font-weight:700">${m.group_name ? esc(m.group_name) : '<span style="color:var(--amber)">No group</span>'}</div>
           <div class="small muted">${m.group_owner ? (m.group_id === 'inhouse' ? 'In-House · owner ' : 'Host · ') + esc(m.group_owner) : 'Assign a group so this player has an owner.'}</div></div>
-        <form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
-          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button></form>
+        ${isManager() ? `<form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
+          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button></form>` : '<div class="small" style="color:var(--amber)">Only a manager can change the group.</div>'}
         <div class="small muted">New hours go to the new group from now on; past hours stay where they were.</div>
         <div id="gmsg"></div>
       </div>
@@ -268,7 +273,7 @@ async function viewMember(view, no) {
       ${tile('Visit days', s30.days + ' days', 'All time: ' + sAll.days + ' days')}
       ${tile('Play time', hm(s30.secs), s30.sessions + ' sessions · all time ' + hm(sAll.secs))}
       ${tile('Total buy-in', peso(s30.buy_in), 'From PPM')}
-      ${tile('Rewards given', peso(s30.rewards), perHour(s30.rewards, s30.secs) + ' per play hour')}
+      ${tile('Rewards given', peso(s30.rewards), perHour(s30.rewards, s30.secs) + ' per play hour' + (s30.rewards_pending ? ' · ' + peso(s30.rewards_pending) + ' waiting' : ''))}
       ${share ? tile('Share of group hours', share.group_seconds ? Math.round(share.member_seconds / share.group_seconds * 100) + '%' : '—', 'Of ' + esc(m.group_name) + ' · ' + hm(share.group_seconds)) : ''}
     </div>
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM</span></div>
@@ -279,7 +284,7 @@ async function viewMember(view, no) {
       <div class="row between"><h2>Rewards received</h2><span class="chip dark">Staff only</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:20px">
         <div style="flex:1 1 200px;padding:14px 16px;background:#F6F7F9;border-radius:10px"><div class="small muted">Spent on this player · 30 days</div><div style="font-size:26px;font-weight:700">${peso(s30.rewards)}</div>
-          <div class="small">${perHour(s30.rewards, s30.secs)} per play hour</div><div class="small muted" style="margin-top:4px">All time: ${peso(sAll.rewards)}</div></div>
+          <div class="small">${perHour(s30.rewards, s30.secs)} per play hour</div><div class="small muted" style="margin-top:4px">All time: ${peso(sAll.rewards)}</div>${sAll.rewards_pending ? `<div class="small" style="margin-top:4px;color:var(--amber)">${peso(sAll.rewards_pending)} waiting for a manager</div>` : ''}</div>
         <div style="flex:2 1 300px;display:flex;flex-direction:column;gap:8px;justify-content:center">${byType.map((x) => `<div class="row small" style="flex-wrap:nowrap"><span style="width:100px">${TYPES[x.t]}</span><div class="bar"><i style="width:${Math.round(x.amt / maxType * 100)}%"></i></div><b style="width:90px;text-align:right">${peso(x.amt)}</b></div>`).join('') || '<span class="muted small">No rewards in the last 30 days.</span>'}</div>
       </div>
       <form id="rf" class="form" style="background:#F6F7F9;border-radius:10px;padding:14px">
@@ -288,19 +293,19 @@ async function viewMember(view, no) {
         <label class="f">Date<input type="date" name="date" value="${today()}" max="${today()}"></label>
         <label class="f wide">Detail<input type="text" name="detail" maxlength="200" placeholder="e.g. PromoChip code, Midori 1 night, airport transfer"></label>
         <label class="f">Recorded by<input type="text" name="recorded_by" value="${esc(staff)}" required maxlength="60"></label>
-        <label class="f">Approved by<input type="text" name="approved_by"></label>
+        ${isManager() ? '<label class="f">Approved by<input type="text" name="approved_by" value="' + esc(staff) + '" maxlength="60"></label>' : '<div class="small muted" style="align-self:end">A manager will approve this.</div>'}
         <div style="align-self:end"><button class="btn primary">Record reward</button></div>
         <div id="rmsg" style="grid-column:1/-1"></div>
       </form>
       <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Charged to</th><th>Recorded · approved</th><th></th></tr></thead><tbody>
-      ${data.rewards.map((r) => `<tr style="${r.voided ? 'opacity:.55;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small" style="text-decoration:none">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}${r.approved_by ? ' · ' + esc(r.approved_by) : ''}</td><td>${r.voided ? '' : `<button class="btn sm" data-void="${r.id}">Void</button>`}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing recorded yet.</td></tr>'}
+      ${data.rewards.map((r) => `<tr style="${r.voided ? 'opacity:.55;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small" style="text-decoration:none">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}${r.approved_at ? ' · ' + esc(r.approved_by) : (r.voided ? '' : ' · <span class="chip amber">Waiting</span>')}</td><td class="row" style="flex-wrap:nowrap">${!r.voided && !r.approved_at && isManager() ? `<button class="btn sm primary" data-approve="${r.id}">Approve</button>` : ''}${!r.voided && isManager() ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing recorded yet.</td></tr>'}
       </tbody></table></div>
       <p class="small muted" style="margin:0">Chips, hotel stays, transportation and tournament tickets are recorded at their peso value so every type adds up. PromoChip counts as Free Chip. Each reward is charged to the player's group on the date it was given.</p>
     </section>
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
       <section class="card note" style="flex:1 1 320px"><h2>Staff notes</h2><form id="nf" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
         <label class="sr" for="notes">Staff notes</label><textarea id="notes" rows="4" maxlength="4000">${esc(m.staff_notes)}</textarea>
-        <div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Status<select id="status">${['active', 'suspended', 'banned'].map((s) => `<option ${s === m.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button class="btn sm">Save</button><span id="nmsg"></span></div></form></section>
+        <div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Status<select id="status" ${isManager() ? '' : 'disabled title="Manager only"'}>${['active', 'suspended', 'banned'].map((s) => `<option ${s === m.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button class="btn sm">Save</button><span id="nmsg"></span></div></form></section>
       <section class="card" style="flex:1 1 280px"><h2>Group history</h2><div style="margin-top:8px">
         ${data.group_history.map((h) => `<div style="padding:8px 0;border-top:1px solid var(--line2)"><b>${esc(h.group_name || 'No group')}</b> <span class="small muted">from ${dateTime(h.effective_from)}</span><div class="small muted">${esc(h.changed_by)}${h.note ? ' · ' + esc(h.note) : ''}</div></div>`).join('') || '<p class="muted small">Never assigned.</p>'}
       </div></section>
@@ -311,7 +316,7 @@ async function viewMember(view, no) {
     ${memberDialog(gs)}`;
   const reload = () => viewMember(view, no).catch((e) => flash(view, e.message, 'err'));
   view.querySelector('#edit').onclick = () => openMemberDialog(view, m, async (d) => { await api('/members/' + encodeURIComponent(no), 'PUT', { ...d, staff: needStaff() }); reload(); });
-  view.querySelector('#gf').onsubmit = async (e) => {
+  if (view.querySelector('#gf')) view.querySelector('#gf').onsubmit = async (e) => {
     e.preventDefault(); const who = needStaff(); if (!who) return;
     const g = view.querySelector('#gsel').value || null;
     if (g === (m.group_id || null)) return flash(view.querySelector('#gmsg'), 'Already in this group.');
@@ -321,10 +326,13 @@ async function viewMember(view, no) {
   };
   view.querySelector('#rf').onsubmit = async (e) => {
     e.preventDefault(); const f = e.target;
-    const body = { type: f.type.value, amount: Number(f.amount.value), date: f.date.value, detail: f.detail.value, recorded_by: f.recorded_by.value, approved_by: f.approved_by.value };
+    const body = { type: f.type.value, amount: Number(f.amount.value), date: f.date.value, detail: f.detail.value, recorded_by: f.recorded_by.value, approved_by: f.approved_by ? f.approved_by.value : '' };
     if (body.type === 'promo_cash' && !confirm(`Record a cash reward of ${peso(body.amount)} for ${m.name}?`)) return;
     try { await api('/members/' + encodeURIComponent(no) + '/rewards', 'POST', body); reload(); } catch (err) { flash(view.querySelector('#rmsg'), err.message, 'err'); }
   };
+  view.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => {
+    try { await api('/rewards/' + b.dataset.approve + '/approve', 'POST', {}); reload(); } catch (err) { alert(err.message); }
+  });
   view.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => {
     const reason = (prompt('Why is this reward being voided?') || '').trim(); if (!reason) return;
     const who = needStaff(); if (!who) return;
@@ -354,6 +362,7 @@ async function viewGroups(view) {
       ${tile('Total play time', hm(data.total_seconds), data.from + ' → ' + data.to)}
       ${tile('Reward cost', peso(data.total_rewards), perHour(data.total_rewards, data.total_seconds) + ' per play hour')}
       <div class="tile" style="background:var(--note);border-color:var(--note-line)"><div class="k">Members without a group</div><div class="v">${data.unassigned_members}</div><a class="s" href="#/members?group=unassigned">Assign now</a></div>
+      <div class="tile"><div class="k">Rewards waiting for approval</div><div class="v">${data.pending_rewards}</div><a class="s" href="#/approvals">${peso(data.pending_amount)} not counted yet</a></div>
       <div class="tile"><div class="k">PPM names not matched</div><div class="v">${data.unmatched_sessions}</div><a class="s" href="#/unmatched">${hm(data.unmatched_seconds)} not credited · fix</a></div>
     </div>
     <h2>Hours contribution by group</h2>
@@ -383,6 +392,52 @@ async function viewGroups(view) {
     const csv = lines.map((r) => r.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-${current.name}-${from}-to-${to}.csv`; a.click();
   };
+}
+
+// ---------- Rewards waiting for a manager ----------
+async function refreshPending() {
+  try { const n = (await api('/rewards/pending')).rewards.length; const pill = document.getElementById('pendingPill'); if (pill) { pill.textContent = n; pill.hidden = !n; } } catch (e) {}
+}
+async function viewApprovals(view) {
+  const data = await api('/rewards/pending');
+  const total = data.rewards.reduce((a, r) => a + r.amount, 0);
+  view.innerHTML = `<div><h1>Rewards waiting for approval</h1><p class="sub">Rewards recorded by staff count in cost totals only after a manager approves them.${isManager() ? '' : ' A manager will review these.'}</p></div>
+    <div class="grid">${tile('Waiting', String(data.rewards.length), peso(total) + ' in total')}</div>
+    <section class="card"><div class="tbl"><table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Group</th><th>Recorded by</th><th></th></tr></thead><tbody>
+    ${data.rewards.map((r) => `<tr><td>${day(r.given_at)}</td><td><a href="#/member/${encodeURIComponent(r.member_no)}"><b>${esc(r.name)}</b></a><div class="small muted mono">${esc(r.member_no)}</div></td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}</td>
+      <td class="row" style="flex-wrap:nowrap">${isManager() ? `<button class="btn sm primary" data-ok="${r.id}">Approve</button><button class="btn sm" data-no="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Nothing waiting.</td></tr>'}
+    </tbody></table></div></section>`;
+  view.querySelectorAll('[data-ok]').forEach((b) => b.onclick = async () => { try { await api('/rewards/' + b.dataset.ok + '/approve', 'POST', {}); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); } });
+  view.querySelectorAll('[data-no]').forEach((b) => b.onclick = async () => {
+    const reason = (prompt('Why is this reward being voided?') || '').trim(); if (!reason) return;
+    try { await api('/rewards/' + b.dataset.no + '/void', 'POST', { reason }); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); }
+  });
+}
+
+// ---------- Promotions shown in the member app ----------
+async function viewPromotions(view) {
+  const { promotions } = await api('/promotions');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  const live = (p) => p.active && (!p.starts || p.starts <= today) && (!p.ends || p.ends >= today);
+  const form = (p) => `<form class="form" data-id="${p ? p.id : ''}" style="background:#F6F7F9;border-radius:10px;padding:14px">
+      <label class="f wide">Title<input type="text" name="title" maxlength="120" required value="${esc(p ? p.title : '')}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f">Starts<input type="date" name="starts" value="${esc(p ? p.starts : '')}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f">Ends<input type="date" name="ends" value="${esc(p ? p.ends : '')}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f" style="grid-column:1/-1">Details<textarea name="body" rows="2" maxlength="1000" ${isManager() ? '' : 'disabled'}>${esc(p ? p.body : '')}</textarea></label>
+      <label class="f">Order<input type="number" name="sort" value="${p ? p.sort : 0}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:8px;align-self:end"><input type="checkbox" name="active" ${!p || p.active ? 'checked' : ''} ${isManager() ? '' : 'disabled'} style="height:auto"> Show to members</label>
+      ${isManager() ? `<div style="align-self:end"><button class="btn ${p ? '' : 'primary'}">${p ? 'Save' : 'Add promotion'}</button></div>` : ''}
+    </form>`;
+  view.innerHTML = `<div><h1>Promotions</h1><p class="sub">What members see under "Promotions" in the member app. Leave dates empty to show it until you turn it off.${isManager() ? '' : ' Only managers can edit.'}</p></div>
+    <div id="pm"></div>
+    ${isManager() ? `<section class="card"><h2 style="margin-bottom:10px">New promotion</h2>${form(null)}</section>` : ''}
+    ${promotions.map((p) => `<section class="card"><div class="row between" style="margin-bottom:10px"><h2>${esc(p.title)}</h2><span class="chip ${live(p) ? 'green' : ''}">${live(p) ? 'Showing now' : 'Not showing'}</span></div>${form(p)}</section>`).join('') || '<p class="muted">No promotions yet.</p>'}`;
+  view.querySelectorAll('form[data-id]').forEach((f) => f.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = { title: f.title.value, starts: f.starts.value, ends: f.ends.value, body: f.body.value, sort: Number(f.sort.value) || 0, active: f.active.checked };
+    try { await api('/promotions' + (f.dataset.id ? '/' + f.dataset.id : ''), f.dataset.id ? 'PUT' : 'POST', body); viewPromotions(view); }
+    catch (err) { flash(view.querySelector('#pm'), err.message, 'err'); }
+  });
 }
 
 // ---------- Unmatched PPM names ----------

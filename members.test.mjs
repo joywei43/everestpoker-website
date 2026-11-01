@@ -145,4 +145,31 @@ assert.equal((await call('/me', 'GET', null, g.token)).status, 401);
 sql.exec("UPDATE staff SET active=0 WHERE username='Joy'");
 assert.equal((await call('/login', 'POST', { username: 'Joy', password: 'secret-j' })).status, 401, 'disabled account cannot sign in');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts');
+// Two levels: staff record, managers approve and make the big changes.
+sql.exec(await staffSql(['Maria:secret-m:staff']));
+const maria = (await call('/login', 'POST', { username: 'maria', password: 'secret-m' })).body;
+assert.equal(maria.role, 'staff'); assert.equal((await call('/me', 'GET', null, maria.token)).body.role, 'staff');
+const boss = (await call('/login', 'POST', { username: 'ADMIN01', password: 'secret-admin' })).body;
+assert.equal(boss.role, 'admin');
+const before = (await call('/members/EV-000001', 'GET', null, boss.token)).body.stats.all.rewards;
+r = await call('/members/EV-000001/rewards', 'POST', { type: 'hotel', amount: 4000, detail: 'Midori 1 night', recorded_by: 'Maria' }, maria.token);
+assert.equal(r.status, 200); assert.equal(r.body.approved, false);
+chen = (await call('/members/EV-000001', 'GET', null, boss.token)).body;
+assert.equal(chen.stats.all.rewards, before, 'pending reward not in cost yet'); assert.equal(chen.stats.all.rewards_pending, 4000);
+const pend = (await call('/rewards/pending', 'GET', null, maria.token)).body.rewards;
+assert.equal(pend.length, 1); assert.equal(pend[0].member_no, 'EV-000001');
+assert.equal((await call(`/rewards/${pend[0].id}/approve`, 'POST', {}, maria.token)).status, 403);
+assert.equal((await call(`/rewards/${pend[0].id}/void`, 'POST', { reason: 'x' }, maria.token)).status, 403);
+assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'dee' }, maria.token)).status, 403);
+assert.equal((await call('/members/import', 'POST', { rows: [] }, maria.token)).status, 403);
+assert.equal((await call('/members/EV-000001', 'PUT', { status: 'banned' }, maria.token)).status, 403);
+assert.equal((await call('/members/EV-000001', 'PUT', { staff_notes: 'Seat 9 today', status: 'active' }, maria.token)).status, 200, 'staff can edit notes');
+assert.equal((await call('/members', 'POST', { nickname: 'Walk-in Ana' }, maria.token)).status, 200, 'staff can add members');
+assert.equal((await call(`/rewards/${pend[0].id}/approve`, 'POST', {}, boss.token)).status, 200);
+chen = (await call('/members/EV-000001', 'GET', null, boss.token)).body;
+assert.equal(chen.stats.all.rewards, before + 4000); assert.equal(chen.stats.all.rewards_pending, 0);
+assert.equal(chen.rewards.find((x) => x.id === pend[0].id).approved_by, 'ADMIN01');
+r = await call('/members/EV-000001/rewards', 'POST', { type: 'free_chip', amount: 1000, recorded_by: 'ADMIN01' }, boss.token);
+assert.equal(r.body.approved, true, 'manager entries are approved at once');
+
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval');

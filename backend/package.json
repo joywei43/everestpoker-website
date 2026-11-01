@@ -1,1 +1,1 @@
-{"name":"everest-waiting-api","private":true,"type":"module","scripts":{"deploy":"wrangler deploy","test":"node test.mjs && node ppm.test.mjs && node members.test.mjs"},"devDependencies":{"wrangler":"^4"}}
+{"name":"everest-waiting-api","private":true,"type":"module","scripts":{"deploy":"wrangler deploy","test":"node test.mjs && node ppm.test.mjs && node members.test.mjs && node member-app.test.mjs"},"devDependencies":{"wrangler":"^4"}}
