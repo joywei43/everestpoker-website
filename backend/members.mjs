@@ -209,8 +209,11 @@ function pickFields(b) {
 }
 
 export async function handleMembersApi(req, env, path, now, reply, user, role = 'admin') {
+  // master (set in wrangler.toml MASTER_USERS) > admin (manager) > staff.
   const manager = role !== 'staff';
+  const master = role === 'master';
   const managerOnly = () => bad(reply, 'Manager only.', 403);
+  const masterOnly = () => bad(reply, 'Only the master account can do this.', 403);
   // The signed-in staff account is the actor in every log entry; the typed name is only a fallback for old sessions.
   const who = (b) => str(user, 60) || str(b && b.staff, 60);
   const url = new URL(req.url);
@@ -303,7 +306,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     return reply({ ok: true, member_no: created.member_no });
   }
   if (parts[0] === 'members' && parts[1] === 'import' && method === 'POST') {
-    if (!manager) return managerOnly();
+    if (!master) return masterOnly();
     const b = await readJson(req, 1000000);
     const rows = Array.isArray(b.rows) ? b.rows.slice(0, 100) : [];
     const actor = who(b) || 'import';
@@ -397,7 +400,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const b = await readJson(req);
       const fields = pickFields(b);
       if ('staff_notes' in b) fields.staff_notes = str(b.staff_notes, 4000);
-      if ('status' in b && b.status !== m.status) { if (!manager) return managerOnly(); if (!STATUSES.includes(b.status)) return bad(reply, 'Unknown status.'); fields.status = b.status; }
+      if ('status' in b && b.status !== m.status) { if (!master) return masterOnly(); if (!STATUSES.includes(b.status)) return bad(reply, 'Unknown status.'); fields.status = b.status; }
       const keys = Object.keys(fields);
       if (!keys.length) return bad(reply, 'Nothing to update.');
       const changed = keys.filter((k) => fields[k] !== m[k]);
@@ -409,7 +412,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     }
 
     if (parts[2] === 'group' && method === 'POST') {
-      if (!manager) return managerOnly();
+      if (!master) return masterOnly();
       const b = await readJson(req, 5000);
       const groupId = b.group_id ? str(b.group_id, 30) : null;
       if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
@@ -473,7 +476,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     return reply({ ok: true });
   }
   if (parts[0] === 'rewards' && parts[1] && parts[2] === 'void' && method === 'POST') {
-    if (!manager) return managerOnly();
+    if (!master) return masterOnly();
     const b = await readJson(req, 5000);
     const id = Number(parts[1]);
     if (!who(b) || !str(b.reason, 200)) return bad(reply, 'Staff name and reason are required.');

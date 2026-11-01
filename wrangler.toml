@@ -5,6 +5,8 @@ workers_dev = true
 
 [vars]
 ALLOWED_ORIGINS = "https://everestpokerroom.com,https://www.everestpokerroom.com"
+# Master accounts (comma separated). Only these can change groups, void rewards, import, suspend members and manage staff accounts.
+MASTER_USERS = "JOY"
 
 [[d1_databases]]
 binding = "DB"

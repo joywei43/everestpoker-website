@@ -12,8 +12,9 @@ const bad = (reply, msg, status = 400) => reply({ error: msg }, status);
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const ROLES = ['admin', 'staff'];
 
-export async function handleStaff(req, env, path, now, reply, user, role) {
-  if (role === 'staff') return bad(reply, 'Manager only.', 403);
+export async function handleStaff(req, env, path, now, reply, user, role, isMaster = () => false) {
+  // Only the master account manages staff accounts.
+  if (role !== 'master') return bad(reply, 'Only the master account can manage staff accounts.', 403);
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
   const text = await req.text(); if (text.length > 4000) return bad(reply, 'Too large', 413);
   const b = text ? JSON.parse(text) : {};
@@ -21,7 +22,7 @@ export async function handleStaff(req, env, path, now, reply, user, role) {
 
   if (parts.length === 1 && req.method === 'GET') {
     const rows = (await env.DB.prepare('SELECT username,display_name,role,active,created_at FROM staff ORDER BY active DESC, display_name COLLATE NOCASE').all()).results || [];
-    return reply({ staff: rows, me: user });
+    return reply({ staff: rows.map((r) => ({ ...r, role: isMaster(r.username) ? 'master' : r.role })), me: user });
   }
   if (parts.length === 1 && req.method === 'POST') {
     const name = clean(b.username, 60), password = typeof b.password === 'string' ? b.password : '';
@@ -36,9 +37,23 @@ export async function handleStaff(req, env, path, now, reply, user, role) {
     ]);
     return reply({ ok: true });
   }
+  if (parts.length === 3 && parts[2] === 'delete' && req.method === 'POST') {
+    const target = await env.DB.prepare('SELECT username FROM staff WHERE username=?').bind(parts[1]).first();
+    if (!target) return bad(reply, 'Account not found.', 404);
+    if (isMaster(target.username)) return bad(reply, 'The master account cannot be deleted.');
+    // Past log entries keep the person's name; only the sign-in is removed.
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM sessions WHERE token IN (SELECT token FROM session_users WHERE username=?)').bind(target.username),
+      env.DB.prepare('DELETE FROM session_users WHERE username=?').bind(target.username),
+      env.DB.prepare('DELETE FROM staff WHERE username=?').bind(target.username),
+      log('staff.delete', target.username)
+    ]);
+    return reply({ ok: true });
+  }
   if (parts.length === 2 && req.method === 'PUT') {
     const target = await env.DB.prepare('SELECT username,role,active FROM staff WHERE username=?').bind(parts[1]).first();
     if (!target) return bad(reply, 'Account not found.', 404);
+    if (isMaster(target.username) && ('role' in b || 'active' in b)) return bad(reply, 'The master account is set in the system settings and cannot be changed here.');
     const self = clean(user, 60).toLowerCase() === target.username.toLowerCase();
     const sets = [], args = [], changes = [];
     if ('role' in b) {

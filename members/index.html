@@ -86,6 +86,7 @@ let token = sessionStorage.getItem(TOKEN_KEY) || '';
 let staff = sessionStorage.getItem(USER_KEY) || '';
 let role = sessionStorage.getItem(ROLE_KEY) || 'admin';
 const isManager = () => role !== 'staff';
+const isMaster = () => role === 'master';
 let groupsCache = null;
 
 // ---------- helpers ----------
@@ -116,7 +117,7 @@ function flash(el, text, kind = '') { el.innerHTML = text ? `<div class="msg ${k
 // The signed-in account is recorded as the actor by the server; this is only for display and defaults.
 function needStaff() { return staff; }
 async function loadMe() {
-  try { const me = await api('/me'); const wasManager = isManager(); staff = me.user || ''; role = me.role || 'admin'; sessionStorage.setItem(USER_KEY, staff); sessionStorage.setItem(ROLE_KEY, role); if (wasManager !== isManager()) render(); else renderStaff(); } catch (e) {}
+  try { const me = await api('/me'); const wasRole = role; staff = me.user || ''; role = me.role || 'admin'; sessionStorage.setItem(USER_KEY, staff); sessionStorage.setItem(ROLE_KEY, role); if (wasRole !== role) render(); else renderStaff(); } catch (e) {}
 }
 function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: page || 'members', arg: rest.map(decodeURIComponent).join('/') }; }
 
@@ -134,8 +135,8 @@ function render() {
         ${link('unmatched', 'Unmatched PPM')}
         ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
         ${link('promotions', 'Promotions')}
-        ${isManager() ? link('import', 'Import members') : ''}
-        ${isManager() ? link('staff', 'Staff accounts') : ''}
+        ${isMaster() ? link('import', 'Import members') : ''}
+        ${isMaster() ? link('staff', 'Staff accounts') : ''}
         <a href="../ppm/">PPM tables ↗</a>
       </div>
       <div class="staffbox" id="staffbox"></div>
@@ -144,13 +145,13 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, approvals: viewApprovals, promotions: viewPromotions, staff: isManager() ? viewStaff : viewMembers, import: isManager() ? viewImport : viewMembers };
+  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, approvals: viewApprovals, promotions: viewPromotions, staff: isMaster() ? viewStaff : viewMembers, import: isMaster() ? viewImport : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
 function renderStaff() {
   const box = document.getElementById('staffbox'); if (!box) return;
-  box.innerHTML = `<small>Signed in as</small><div><b>${esc(staff || '—')}</b> <span class="small" style="color:var(--gold)">${isManager() ? 'Manager' : 'Staff'}</span></div>
+  box.innerHTML = `<small>Signed in as</small><div><b>${esc(staff || '—')}</b> <span class="small" style="color:var(--gold)">${isMaster() ? 'Master' : isManager() ? 'Manager' : 'Staff'}</span></div>
     <button type="button" id="logout">Sign out</button>`;
   box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; staff = ''; sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USER_KEY); sessionStorage.removeItem(ROLE_KEY); render(); };
 }
@@ -270,8 +271,8 @@ async function viewMember(view, no) {
         <div class="small" style="font-weight:600">PLAYER GROUP</div>
         <div><div style="font-size:20px;font-weight:700">${m.group_name ? esc(m.group_name) : '<span style="color:var(--amber)">No group</span>'}</div>
           <div class="small muted">${m.group_owner ? (m.group_id === 'inhouse' ? 'In-House · owner ' : 'Host · ') + esc(m.group_owner) : 'Assign a group so this player has an owner.'}</div></div>
-        ${isManager() ? `<form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
-          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button></form>` : '<div class="small" style="color:var(--amber)">Only a manager can change the group.</div>'}
+        ${isMaster() ? `<form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
+          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button></form>` : '<div class="small" style="color:var(--amber)">Only the master account can change the group.</div>'}
         <div class="small muted">New hours go to the new group from now on; past hours stay where they were.</div>
         <div id="gmsg"></div>
       </div>
@@ -306,14 +307,14 @@ async function viewMember(view, no) {
         <div id="rmsg" style="grid-column:1/-1"></div>
       </form>
       <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Charged to</th><th>Recorded · approved</th><th></th></tr></thead><tbody>
-      ${data.rewards.map((r) => `<tr style="${r.voided ? 'opacity:.55;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small" style="text-decoration:none">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}${r.approved_at ? ' · ' + esc(r.approved_by) : (r.voided ? '' : ' · <span class="chip amber">Waiting</span>')}</td><td class="row" style="flex-wrap:nowrap">${!r.voided && !r.approved_at && isManager() ? `<button class="btn sm primary" data-approve="${r.id}">Approve</button>` : ''}${!r.voided && isManager() ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing recorded yet.</td></tr>'}
+      ${data.rewards.map((r) => `<tr style="${r.voided ? 'opacity:.55;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small" style="text-decoration:none">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}${r.approved_at ? ' · ' + esc(r.approved_by) : (r.voided ? '' : ' · <span class="chip amber">Waiting</span>')}</td><td class="row" style="flex-wrap:nowrap">${!r.voided && !r.approved_at && isManager() ? `<button class="btn sm primary" data-approve="${r.id}">Approve</button>` : ''}${!r.voided && isMaster() ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing recorded yet.</td></tr>'}
       </tbody></table></div>
       <p class="small muted" style="margin:0">Chips, hotel stays, transportation and tournament tickets are recorded at their peso value so every type adds up. PromoChip counts as Free Chip. Each reward is charged to the player's group on the date it was given.</p>
     </section>
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
       <section class="card note" style="flex:1 1 320px"><h2>Staff notes</h2><form id="nf" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
         <label class="sr" for="notes">Staff notes</label><textarea id="notes" rows="4" maxlength="4000">${esc(m.staff_notes)}</textarea>
-        <div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Status<select id="status" ${isManager() ? '' : 'disabled title="Manager only"'}>${['active', 'suspended', 'banned'].map((s) => `<option ${s === m.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button class="btn sm">Save</button><span id="nmsg"></span></div></form></section>
+        <div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Status<select id="status" ${isMaster() ? '' : 'disabled title="Master account only"'}>${['active', 'suspended', 'banned'].map((s) => `<option ${s === m.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button class="btn sm">Save</button><span id="nmsg"></span></div></form></section>
       <section class="card" style="flex:1 1 280px"><h2>Group history</h2><div style="margin-top:8px">
         ${data.group_history.map((h) => `<div style="padding:8px 0;border-top:1px solid var(--line2)"><b>${esc(h.group_name || 'No group')}</b> <span class="small muted">from ${dateTime(h.effective_from)}</span><div class="small muted">${esc(h.changed_by)}${h.note ? ' · ' + esc(h.note) : ''}</div></div>`).join('') || '<p class="muted small">Never assigned.</p>'}
       </div></section>
@@ -436,7 +437,7 @@ async function viewApprovals(view) {
     <div class="grid">${tile('Waiting', String(data.rewards.length), peso(total) + ' in total')}</div>
     <section class="card"><div class="tbl"><table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Group</th><th>Recorded by</th><th></th></tr></thead><tbody>
     ${data.rewards.map((r) => `<tr><td>${day(r.given_at)}</td><td><a href="#/member/${encodeURIComponent(r.member_no)}"><b>${esc(r.name)}</b></a><div class="small muted mono">${esc(r.member_no)}</div></td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}</td>
-      <td class="row" style="flex-wrap:nowrap">${isManager() ? `<button class="btn sm primary" data-ok="${r.id}">Approve</button><button class="btn sm" data-no="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Nothing waiting.</td></tr>'}
+      <td class="row" style="flex-wrap:nowrap">${isManager() ? `<button class="btn sm primary" data-ok="${r.id}">Approve</button>` : ''}${isMaster() ? `<button class="btn sm" data-no="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Nothing waiting.</td></tr>'}
     </tbody></table></div></section>`;
   view.querySelectorAll('[data-ok]').forEach((b) => b.onclick = async () => { try { await api('/rewards/' + b.dataset.ok + '/approve', 'POST', {}); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); } });
   view.querySelectorAll('[data-no]').forEach((b) => b.onclick = async () => {
@@ -448,7 +449,7 @@ async function viewApprovals(view) {
 // ---------- Staff accounts (managers) ----------
 async function viewStaff(view) {
   const { staff: list } = await api('/staff');
-  view.innerHTML = `<div><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account to the console, PPM and the waiting list. Managers approve rewards, change groups, void, import and manage accounts.</p></div>
+  view.innerHTML = `<div><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account to the console, PPM and the waiting list. <b>Master</b>: everything, including group changes, voids, imports, suspensions and these accounts. <b>Manager</b>: approve rewards and edit promotions. <b>Staff</b>: look up, add members, record rewards.</p></div>
     <div id="sm"></div>
     <section class="card"><h2 style="margin-bottom:10px">New account</h2>
       <form id="nf2" class="form"><label class="f">Username<input type="text" name="username" required maxlength="60" autocomplete="off"></label>
@@ -457,9 +458,9 @@ async function viewStaff(view) {
         <div style="align-self:end"><button class="btn primary">Create account</button></div></form></section>
     <section class="card"><div class="tbl"><table><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>
     ${list.map((a, i) => `<tr><td><b>${esc(a.display_name)}</b>${a.display_name.toLowerCase() === staff.toLowerCase() ? ' <span class="small muted">(you)</span>' : ''}</td>
-      <td><select data-role="${i}"><option value="staff" ${a.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Manager</option></select></td>
+      <td>${a.role === 'master' ? '<span class="chip" style="background:var(--gold);color:#1B1406">Master</span>' : `<select data-role="${i}"><option value="staff" ${a.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Manager</option></select>`}</td>
       <td>${a.active ? '<span class="chip green">Active</span>' : '<span class="chip red">Disabled</span>'}</td><td class="muted">${day(a.created_at)}</td>
-      <td class="row" style="flex-wrap:nowrap"><button class="btn sm" data-pw="${i}">Reset password</button><button class="btn sm ${a.active ? 'danger' : ''}" data-act="${i}">${a.active ? 'Disable' : 'Enable'}</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No accounts yet.</td></tr>'}
+      <td class="row" style="flex-wrap:nowrap"><button class="btn sm" data-pw="${i}">Reset password</button>${a.role === 'master' ? '' : `<button class="btn sm ${a.active ? 'danger' : ''}" data-act="${i}">${a.active ? 'Disable' : 'Enable'}</button><button class="btn sm danger" data-del="${i}">Delete</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No accounts yet.</td></tr>'}
     </tbody></table></div></section>`;
   const msg = view.querySelector('#sm');
   const put = async (a, body, done) => { try { await api('/staff/' + encodeURIComponent(a.username), 'PUT', body); flash(msg, done, 'ok'); setTimeout(() => viewStaff(view), 700); } catch (err) { flash(msg, err.message, 'err'); } };
@@ -470,6 +471,11 @@ async function viewStaff(view) {
   };
   view.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = () => put(list[sel.dataset.role], { role: sel.value }, 'Role updated.'));
   view.querySelectorAll('[data-pw]').forEach((b) => b.onclick = () => { const a = list[b.dataset.pw]; const pw = prompt(`New password for ${a.display_name} (at least 6 characters):`); if (pw) put(a, { password: pw }, `Password reset for ${a.display_name}. They are signed out everywhere.`); });
+  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    const a = list[b.dataset.del];
+    if (!confirm(`Delete the account ${a.display_name}? They can no longer sign in. Their name stays in past records.`)) return;
+    try { await api('/staff/' + encodeURIComponent(a.username) + '/delete', 'POST', {}); flash(msg, `Deleted ${a.display_name}.`, 'ok'); setTimeout(() => viewStaff(view), 700); } catch (err) { flash(msg, err.message, 'err'); }
+  });
   view.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => { const a = list[b.dataset.act]; if (a.active && !confirm(`Disable ${a.display_name}? They are signed out at once.`)) return; put(a, { active: !a.active }, a.active ? 'Account disabled.' : 'Account enabled.'); });
 }
 

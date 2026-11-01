@@ -13,7 +13,7 @@ const stmt = (q) => { let args = []; return {
   async run() { const r = sql.prepare(q).run(...args); return { meta: { changes: Number(r.changes) } }; }
 }; };
 const DB = { prepare: stmt, async batch(list) { sql.exec('BEGIN'); try { const out = []; for (const s of list) out.push(await s.run()); sql.exec('COMMIT'); return out; } catch (e) { sql.exec('ROLLBACK'); throw e; } } };
-const env = { DB, ADMIN_PASSWORD: 'test' };
+const env = { DB, ADMIN_PASSWORD: 'test', MASTER_USERS: 'Boss' };
 let ip = '1.1.1.1';
 const call = async (path, method = 'GET', data, token) => {
   const res = await worker.fetch(new Request('https://api.test' + path, { method, headers: { Origin: 'https://everestpokerroom.com', 'CF-Connecting-IP': ip, ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(data ? { body: JSON.stringify(data) } : {}) }), env);

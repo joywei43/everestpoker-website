@@ -14,7 +14,7 @@ const stmt = (q) => { let args = []; return {
   async run() { const r = sql.prepare(q).run(...args); return { meta: { changes: Number(r.changes) } }; }
 }; };
 const DB = { prepare: stmt, async batch(list) { sql.exec('BEGIN'); try { const out = []; for (const s of list) out.push(await s.run()); sql.exec('COMMIT'); return out; } catch (e) { sql.exec('ROLLBACK'); throw e; } } };
-const env = { DB, ADMIN_PASSWORD: 'test' };
+const env = { DB, ADMIN_PASSWORD: 'test', MASTER_USERS: 'admin01' };
 const call = async (path, method = 'GET', data, token) => {
   const res = await worker.fetch(new Request('https://api.test' + path, { method, headers: { Origin: 'https://everestpokerroom.com', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(data ? { body: JSON.stringify(data) } : {}) }), env);
   return { status: res.status, body: await res.json() };
@@ -137,9 +137,15 @@ assert.equal((await call('/login', 'POST', { username: 'admin01', password: 'sec
 const g = (await call('/login', 'POST', { username: 'geraldine', password: 'secret-g' })).body;
 assert.equal(g.user, 'Geraldine');
 assert.equal((await call('/me', 'GET', null, g.token)).body.user, 'Geraldine');
-assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'hee', staff: 'Someone else' }, g.token)).status, 200);
+assert.equal((await call('/members/EV-000001', 'PUT', { staff_notes: 'Regular on Fridays', staff: 'Someone else' }, g.token)).status, 200);
 chen = (await call('/members/EV-000001', 'GET', null, g.token)).body;
-assert.equal(chen.audit[0].actor, 'Geraldine'); assert.equal(chen.group_history[0].changed_by, 'Geraldine');
+assert.equal(chen.audit[0].actor, 'Geraldine', 'log shows the signed-in person, not a typed name');
+// Managers approve and edit promotions; group changes, voids, imports, suspensions and accounts are master only.
+assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'dee' }, g.token)).status, 403);
+assert.equal((await call('/members/import', 'POST', { rows: [] }, g.token)).status, 403);
+assert.equal((await call('/members/EV-000001', 'PUT', { status: 'suspended' }, g.token)).status, 403);
+assert.equal((await call('/staff', 'GET', null, g.token)).status, 403);
+assert.equal((await call('/me', 'GET', null, token)).body.role, 'master');
 assert.equal((await call('/logout', 'POST', {}, g.token)).status, 200);
 assert.equal((await call('/me', 'GET', null, g.token)).status, 401);
 sql.exec("UPDATE staff SET active=0 WHERE username='Joy'");
@@ -150,7 +156,7 @@ sql.exec(await staffSql(['Maria:secret-m:staff']));
 const maria = (await call('/login', 'POST', { username: 'maria', password: 'secret-m' })).body;
 assert.equal(maria.role, 'staff'); assert.equal((await call('/me', 'GET', null, maria.token)).body.role, 'staff');
 const boss = (await call('/login', 'POST', { username: 'ADMIN01', password: 'secret-admin' })).body;
-assert.equal(boss.role, 'admin');
+assert.equal(boss.role, 'master');
 const before = (await call('/members/EV-000001', 'GET', null, boss.token)).body.stats.all.rewards;
 r = await call('/members/EV-000001/rewards', 'POST', { type: 'hotel', amount: 4000, detail: 'Midori 1 night', recorded_by: 'Maria' }, maria.token);
 assert.equal(r.status, 200); assert.equal(r.body.approved, false);
@@ -200,5 +206,17 @@ assert.equal((await call('/staff/Joy', 'PUT', { active: true, password: 'new-joy
 assert.equal((await call('/login', 'POST', { username: 'joy', password: 'new-joy-pass' })).status, 200);
 const staffList = (await call('/staff', 'GET', null, boss.token)).body.staff;
 assert.ok(staffList.length >= 5 && !JSON.stringify(staffList).includes('pw_hash'));
+assert.equal(staffList.find((x) => x.username === 'ADMIN01').role, 'master');
+assert.equal((await call('/staff/ADMIN01', 'PUT', { role: 'staff' }, boss.token)).status, 400, 'master is fixed in settings');
+assert.equal((await call('/staff/ADMIN01/delete', 'POST', {}, boss.token)).status, 400, 'master cannot be deleted');
+assert.equal((await call('/staff/Rina/delete', 'POST', {}, maria.token)).status, 403);
+assert.equal((await call('/staff/Rina/delete', 'POST', {}, boss.token)).status, 200);
+assert.ok(!(await call('/staff', 'GET', null, boss.token)).body.staff.some((x) => x.username === 'Rina'));
+assert.equal((await call('/login', 'POST', { username: 'Rina', password: 'rina-pass' })).status, 401);
+const geraldine = (await call('/login', 'POST', { username: 'Geraldine', password: 'secret-g' })).body;
+r = await call('/members/EV-000001/rewards', 'POST', { type: 'hotel', amount: 100, recorded_by: 'Maria' }, maria.token);
+const pid = (await call('/rewards/pending', 'GET', null, geraldine.token)).body.rewards[0].id;
+assert.equal((await call(`/rewards/${pid}/void`, 'POST', { reason: 'x' }, geraldine.token)).status, 403, 'managers cannot void');
+assert.equal((await call(`/rewards/${pid}/approve`, 'POST', {}, geraldine.token)).status, 200, 'managers approve');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management');
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff');
