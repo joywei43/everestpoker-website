@@ -86,7 +86,8 @@ export async function handleMemberApp(req, env, path, now, reply, ipHash) {
     const token = Array.from(crypto.getRandomValues(new Uint8Array(32))).map((x) => x.toString(16).padStart(2, '0')).join('');
     await env.DB.batch([
       env.DB.prepare('DELETE FROM member_sessions WHERE expires<?').bind(now),
-      env.DB.prepare('DELETE FROM member_login_attempts WHERE started<?').bind(now - 900),
+      // Only failed tries count: everyone on the room Wi-Fi shares one address.
+      env.DB.prepare('DELETE FROM member_login_attempts WHERE started<? OR ip=?').bind(now - 900, ipHash),
       env.DB.prepare('INSERT INTO member_sessions(token,member_id,expires) VALUES(?,?,?)').bind(await sha256(token), m.id, now + SESSION_DAYS * DAY)
     ]);
     return reply({ token, expires: now + SESSION_DAYS * DAY });
@@ -108,11 +109,17 @@ export async function handleMemberApp(req, env, path, now, reply, ipHash) {
     const sessions = await all(env.DB.prepare('SELECT play_date,game_type,blinds,active_seconds FROM play_sessions WHERE member_id=? ORDER BY start_at DESC LIMIT 30').bind(m.id));
     const room = await env.DB.prepare('SELECT data FROM room WHERE id=1').first();
     return reply({
-      member: { member_no: m.member_no, name: [m.surname, m.middle_name, m.family_name].filter(Boolean).join(' ') || shortName(m), nickname: m.nickname, language: m.language },
+      member: { member_no: m.member_no, name: [m.surname, m.middle_name, m.family_name].filter(Boolean).join(' ') || shortName(m), nickname: m.nickname, language: m.language,
+        has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) },
       stats: { last30: s30, all: sAll },
       sessions,
       waitlist: room ? myQueue(JSON.parse(room.data), m.member_no) : []
     });
+  }
+
+  if (path === '/member/photo' && method === 'GET') {
+    const ph = await env.DB.prepare('SELECT data FROM member_photos WHERE member_id=?').bind(m.id).first();
+    return ph ? reply({ data: ph.data }) : bad(reply, 'No photo.', 404);
   }
 
   if (path === '/member/waitlist' && method === 'POST') {

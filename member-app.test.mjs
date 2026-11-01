@@ -85,6 +85,8 @@ assert.deepEqual(room.promotions.map((p) => p.title), ['Daily Raffle']); assert.
 // Logout and brute-force limit.
 assert.equal((await call('/member/logout', 'POST', {}, wei)).status, 200);
 assert.equal((await call('/member/me', 'GET', null, wei)).status, 401);
+ip = '5.5.5.5';
+for (let i = 0; i < 15; i++) assert.equal((await call('/member/login', 'POST', { member_no: 'EV-000001', birthday: '1990-05-05' })).status, 200, 'shared venue Wi-Fi: successful logins never lock out');
 ip = '9.9.9.9';
 let last;
 for (let i = 0; i < 11; i++) last = await call('/member/login', 'POST', { member_no: 'EV-000001', birthday: '2000-01-0' + (i % 9) });

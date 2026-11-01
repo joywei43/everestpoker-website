@@ -172,4 +172,33 @@ assert.equal(chen.rewards.find((x) => x.id === pend[0].id).approved_by, 'ADMIN01
 r = await call('/members/EV-000001/rewards', 'POST', { type: 'free_chip', amount: 1000, recorded_by: 'ADMIN01' }, boss.token);
 assert.equal(r.body.approved, true, 'manager entries are approved at once');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval');
+// Photos: staff upload a small image, it shows on the profile and in the member's own app.
+const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+assert.equal((await call('/members/EV-000001/photo', 'PUT', { data: 'data:text/html;base64,PHNjcmlwdD4=' }, maria.token)).status, 400);
+assert.equal((await call('/members/EV-000001/photo', 'PUT', { data: 'data:image/png;base64,' + 'A'.repeat(700000) }, maria.token)).status, 413);
+assert.equal((await call('/members/EV-000001/photo', 'PUT', { data: png }, maria.token)).status, 200);
+assert.equal((await call('/members/EV-000001', 'GET', null, maria.token)).body.member.has_photo, true);
+assert.equal((await call('/members/EV-000001/photo', 'GET', null, maria.token)).body.data, png);
+assert.equal((await call('/members?q=EV-000001', 'GET', null, maria.token)).body.members[0].has_photo, true);
+assert.equal((await call('/members/EV-000001/photo/remove', 'POST', {}, maria.token)).status, 200);
+assert.equal((await call('/members/EV-000001/photo', 'GET', null, maria.token)).status, 404);
+
+// Staff accounts from the console: managers only; new accounts sign in; disabling signs out.
+assert.equal((await call('/staff', 'GET', null, maria.token)).status, 403);
+assert.equal((await call('/staff', 'POST', { username: 'Rina', password: '123', role: 'staff' }, boss.token)).status, 400);
+assert.equal((await call('/staff', 'POST', { username: 'Rina', password: 'rina-pass', role: 'staff' }, boss.token)).status, 200);
+assert.equal((await call('/staff', 'POST', { username: 'rina', password: 'rina-pass' }, boss.token)).status, 409);
+const rina = (await call('/login', 'POST', { username: 'Rina', password: 'rina-pass' })).body;
+assert.equal(rina.role, 'staff');
+assert.equal((await call('/staff/Rina', 'PUT', { role: 'admin' }, boss.token)).status, 200);
+assert.equal((await call('/me', 'GET', null, rina.token)).body.role, 'admin', 'role change applies at once');
+assert.equal((await call('/staff/Rina', 'PUT', { active: false }, boss.token)).status, 200);
+assert.equal((await call('/me', 'GET', null, rina.token)).status, 401, 'disabled account is signed out');
+assert.equal((await call('/login', 'POST', { username: 'Rina', password: 'rina-pass' })).status, 401);
+assert.equal((await call('/staff/ADMIN01', 'PUT', { active: false }, boss.token)).status, 400, 'cannot disable yourself');
+assert.equal((await call('/staff/Joy', 'PUT', { active: true, password: 'new-joy-pass' }, boss.token)).status, 200);
+assert.equal((await call('/login', 'POST', { username: 'joy', password: 'new-joy-pass' })).status, 200);
+const staffList = (await call('/staff', 'GET', null, boss.token)).body.staff;
+assert.ok(staffList.length >= 5 && !JSON.stringify(staffList).includes('pw_hash'));
+
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management');

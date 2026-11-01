@@ -28,6 +28,9 @@ const likeEscape = (s) => s.replace(/[\\%_]/g, (c) => '\\' + c);
 const chunks = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
 const marks = (n) => Array(n).fill('?').join(',');
 const all = async (stmt) => (await stmt.all()).results || [];
+// A photo is a data URL of a small image; the console resizes to 320×320 JPEG (~30 KB) before sending.
+export const PHOTO_MAX = 600000;
+export const validPhoto = (d) => typeof d === 'string' && d.length <= PHOTO_MAX && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(d);
 function ageOn(birthday, now) {
   if (!isDate(birthday)) return null;
   const [y, m, d] = birthday.split('-').map(Number);
@@ -48,7 +51,7 @@ function publicMember(m, groups) {
     email: m.email, phone: m.phone, whatsapp: m.whatsapp, telegram: m.telegram, line: m.line,
     referral_id: m.referral_id, language: m.language, status: m.status, staff_notes: m.staff_notes,
     group_id: m.group_id, group_name: g ? g.name : null, group_owner: g ? g.owner : null,
-    source: m.source, created_at: m.created_at, updated_at: m.updated_at
+    source: m.source, created_at: m.created_at, updated_at: m.updated_at, has_photo: !!m.has_photo
   };
 }
 const audit = (env, now, actor, action, memberId, detail) =>
@@ -284,7 +287,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (STATUSES.includes(status)) { where.push('status=?'); args.push(status); }
     const sqlWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
     const order = q ? "ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, member_no" : 'ORDER BY member_no';
-    const rows = await all(env.DB.prepare(`SELECT * FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, q] : []), limit, offset));
+    const rows = await all(env.DB.prepare(`SELECT members.*, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=members.id) AS has_photo FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, q] : []), limit, offset));
     const total = await env.DB.prepare(`SELECT COUNT(*) n FROM members ${sqlWhere}`).bind(...args).first();
     return reply({ members: rows.map((m) => publicMember(m, groups)), total: total.n });
   }
@@ -359,13 +362,35 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const log = await all(env.DB.prepare('SELECT at,actor,action,detail FROM audit_log WHERE member_id=? ORDER BY at DESC, id DESC LIMIT 50').bind(m.id));
       const gname = (id) => (id ? (groups.get(id) || { name: id }).name : null);
       return reply({
-        member: publicMember(m, groups),
+        member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups),
         stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share },
         sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id) })),
         rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
         group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),
         audit: log
       });
+    }
+
+    if (parts[2] === 'photo' && parts.length === 3 && method === 'GET') {
+      const ph = await env.DB.prepare('SELECT data,updated_at,updated_by FROM member_photos WHERE member_id=?').bind(m.id).first();
+      return ph ? reply(ph) : bad(reply, 'No photo.', 404);
+    }
+    if (parts[2] === 'photo' && parts.length === 3 && method === 'PUT') {
+      const b = await readJson(req, PHOTO_MAX + 1000);
+      if (!validPhoto(b.data)) return bad(reply, 'Photo must be a JPEG, PNG or WebP image under 400 KB.');
+      await env.DB.batch([
+        env.DB.prepare('INSERT INTO member_photos(member_id,data,updated_at,updated_by) VALUES(?,?,?,?) ON CONFLICT(member_id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at,updated_by=excluded.updated_by').bind(m.id, b.data, now, who(b)),
+        audit(env, now, who(b), 'member.photo', m.id, 'Photo updated')
+      ]);
+      return reply({ ok: true });
+    }
+    if (parts[2] === 'photo' && parts[3] === 'remove' && method === 'POST') {
+      const b = await readJson(req, 2000);
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM member_photos WHERE member_id=?').bind(m.id),
+        audit(env, now, who(b), 'member.photo', m.id, 'Photo removed')
+      ]);
+      return reply({ ok: true });
     }
 
     if (parts.length === 2 && method === 'PUT') {

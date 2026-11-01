@@ -66,6 +66,7 @@ td.num,th.num{text-align:right}
 .ac li button{width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:6px;cursor:pointer}.ac li button:hover,.ac li button:focus{background:var(--blue-l)}
 dialog{border:0;border-radius:14px;padding:0;max-width:720px;width:calc(100% - 32px)}dialog::backdrop{background:rgba(15,27,45,.45)}
 dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
+.ph{width:112px;height:112px;border-radius:50%;background:#F3E7C8;color:#5E410C;border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;overflow:hidden;flex:none}.ph img{width:100%;height:100%;object-fit:cover}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (min-width:700px){.wide{grid-column:span 2}}
 @media (max-width:640px){main{padding:16px}nav.side{gap:12px}.navlinks{flex-direction:row;flex-wrap:wrap}.staffbox{margin-top:0}}
@@ -134,6 +135,7 @@ function render() {
         ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
         ${link('promotions', 'Promotions')}
         ${isManager() ? link('import', 'Import members') : ''}
+        ${isManager() ? link('staff', 'Staff accounts') : ''}
         <a href="../ppm/">PPM tables ↗</a>
       </div>
       <div class="staffbox" id="staffbox"></div>
@@ -142,7 +144,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, approvals: viewApprovals, promotions: viewPromotions, import: isManager() ? viewImport : viewMembers };
+  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, approvals: viewApprovals, promotions: viewPromotions, staff: isManager() ? viewStaff : viewMembers, import: isManager() ? viewImport : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -250,6 +252,12 @@ async function viewMember(view, no) {
   view.innerHTML = `<div class="row between"><div class="muted"><a href="#/members">Members</a> / <span class="mono">${esc(m.member_no)}</span></div>
       <div class="row"><button class="btn" id="edit">Edit profile</button></div></div>
     <section class="card" style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:none">
+        <div class="ph" id="ph" role="img" aria-label="Member photo">${esc((m.nickname || m.name || '?').trim().slice(0, 2).toUpperCase())}</div>
+        <label class="btn sm" style="cursor:pointer">${m.has_photo ? 'Change photo' : 'Add photo'}<input type="file" id="phIn" accept="image/*" class="sr"></label>
+        ${m.has_photo ? '<button type="button" class="btn sm" id="phRm">Remove</button>' : ''}
+        <div id="phMsg" class="small"></div>
+      </div>
       <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:8px">
         <div class="row" style="align-items:baseline"><h1>${esc(m.name)}</h1>${m.nickname ? `<span class="muted">“${esc(m.nickname)}”</span>` : ''}</div>
         <div class="row">${statusChip(m.status)}${m.language ? `<span class="chip">Language: ${esc(m.language)}</span>` : ''}${m.nationality ? `<span class="chip">${esc(m.nationality)}</span>` : ''}</div>
@@ -315,6 +323,15 @@ async function viewMember(view, no) {
     </div>
     ${memberDialog(gs)}`;
   const reload = () => viewMember(view, no).catch((e) => flash(view, e.message, 'err'));
+  if (m.has_photo) api('/members/' + encodeURIComponent(no) + '/photo').then((ph) => { const img = new Image(); img.alt = ''; img.src = ph.data; const box = view.querySelector('#ph'); box.textContent = ''; box.appendChild(img); }).catch(() => {});
+  view.querySelector('#phIn').onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const msg = view.querySelector('#phMsg'); msg.textContent = 'Uploading…';
+    try { await api('/members/' + encodeURIComponent(no) + '/photo', 'PUT', { data: await squarePhoto(file) }); reload(); }
+    catch (err) { msg.textContent = err.message; msg.style.color = 'var(--red)'; }
+  };
+  const rm = view.querySelector('#phRm');
+  if (rm) rm.onclick = async () => { if (!confirm('Remove this photo?')) return; try { await api('/members/' + encodeURIComponent(no) + '/photo/remove', 'POST', {}); reload(); } catch (err) { alert(err.message); } };
   view.querySelector('#edit').onclick = () => openMemberDialog(view, m, async (d) => { await api('/members/' + encodeURIComponent(no), 'PUT', { ...d, staff: needStaff() }); reload(); });
   if (view.querySelector('#gf')) view.querySelector('#gf').onsubmit = async (e) => {
     e.preventDefault(); const who = needStaff(); if (!who) return;
@@ -343,6 +360,20 @@ async function viewMember(view, no) {
     try { await api('/members/' + encodeURIComponent(no), 'PUT', { staff_notes: view.querySelector('#notes').value, status: view.querySelector('#status').value, staff: needStaff() }); reload(); }
     catch (err) { flash(view.querySelector('#nmsg'), err.message, 'err'); }
   };
+}
+// Center-crop and shrink a phone photo to 320×320 JPEG (~30 KB) before upload.
+function squarePhoto(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight), size = 320, c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url); resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This file is not a photo the browser can read.')); };
+    img.src = url;
+  });
 }
 const tile = (k, v, s) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
 
@@ -412,6 +443,34 @@ async function viewApprovals(view) {
     const reason = (prompt('Why is this reward being voided?') || '').trim(); if (!reason) return;
     try { await api('/rewards/' + b.dataset.no + '/void', 'POST', { reason }); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); }
   });
+}
+
+// ---------- Staff accounts (managers) ----------
+async function viewStaff(view) {
+  const { staff: list } = await api('/staff');
+  view.innerHTML = `<div><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account to the console, PPM and the waiting list. Managers approve rewards, change groups, void, import and manage accounts.</p></div>
+    <div id="sm"></div>
+    <section class="card"><h2 style="margin-bottom:10px">New account</h2>
+      <form id="nf2" class="form"><label class="f">Username<input type="text" name="username" required maxlength="60" autocomplete="off"></label>
+        <label class="f">Password<input type="text" name="password" required minlength="6" maxlength="200" autocomplete="new-password"></label>
+        <label class="f">Role<select name="role"><option value="staff">Staff</option><option value="admin">Manager</option></select></label>
+        <div style="align-self:end"><button class="btn primary">Create account</button></div></form></section>
+    <section class="card"><div class="tbl"><table><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>
+    ${list.map((a, i) => `<tr><td><b>${esc(a.display_name)}</b>${a.display_name.toLowerCase() === staff.toLowerCase() ? ' <span class="small muted">(you)</span>' : ''}</td>
+      <td><select data-role="${i}"><option value="staff" ${a.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Manager</option></select></td>
+      <td>${a.active ? '<span class="chip green">Active</span>' : '<span class="chip red">Disabled</span>'}</td><td class="muted">${day(a.created_at)}</td>
+      <td class="row" style="flex-wrap:nowrap"><button class="btn sm" data-pw="${i}">Reset password</button><button class="btn sm ${a.active ? 'danger' : ''}" data-act="${i}">${a.active ? 'Disable' : 'Enable'}</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No accounts yet.</td></tr>'}
+    </tbody></table></div></section>`;
+  const msg = view.querySelector('#sm');
+  const put = async (a, body, done) => { try { await api('/staff/' + encodeURIComponent(a.username), 'PUT', body); flash(msg, done, 'ok'); setTimeout(() => viewStaff(view), 700); } catch (err) { flash(msg, err.message, 'err'); } };
+  view.querySelector('#nf2').onsubmit = async (e) => {
+    e.preventDefault(); const f = e.target;
+    try { await api('/staff', 'POST', { username: f.username.value.trim(), password: f.password.value, role: f.role.value }); flash(msg, `Created ${f.username.value.trim()}.`, 'ok'); setTimeout(() => viewStaff(view), 700); }
+    catch (err) { flash(msg, err.message, 'err'); }
+  };
+  view.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = () => put(list[sel.dataset.role], { role: sel.value }, 'Role updated.'));
+  view.querySelectorAll('[data-pw]').forEach((b) => b.onclick = () => { const a = list[b.dataset.pw]; const pw = prompt(`New password for ${a.display_name} (at least 6 characters):`); if (pw) put(a, { password: pw }, `Password reset for ${a.display_name}. They are signed out everywhere.`); });
+  view.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => { const a = list[b.dataset.act]; if (a.active && !confirm(`Disable ${a.display_name}? They are signed out at once.`)) return; put(a, { active: !a.active }, a.active ? 'Account disabled.' : 'Account enabled.'); });
 }
 
 // ---------- Promotions shown in the member app ----------

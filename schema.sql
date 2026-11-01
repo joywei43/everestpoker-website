@@ -153,3 +153,6 @@ CREATE TABLE IF NOT EXISTS promotions(
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL
 );
+
+-- Member photos (small JPEG, resized in the browser before upload). Taken by staff at the counter.
+CREATE TABLE IF NOT EXISTS member_photos(member_id INTEGER PRIMARY KEY REFERENCES members(id), data TEXT NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '');

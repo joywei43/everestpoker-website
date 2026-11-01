@@ -36,7 +36,8 @@ input,select.in{height:48px;border:1px solid #CFCAC0;border-radius:12px;padding:
 .msg{border-radius:12px;padding:10px 12px;font-size:14px}.msg.err{background:var(--red-l);color:var(--red)}.msg.ok{background:var(--green-l);color:var(--green)}
 .memcard{background:var(--ink);color:#fff;border-radius:18px;padding:18px;display:flex;gap:16px;align-items:center;position:relative;overflow:hidden}
 .memcard svg.bgm{position:absolute;right:-24px;bottom:-14px;opacity:.5}
-.avatar{width:72px;height:72px;border-radius:50%;background:var(--gold-l);color:#5E410C;border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex:none;position:relative}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.avatar{overflow:hidden;width:72px;height:72px;border-radius:50%;background:var(--gold-l);color:#5E410C;border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex:none;position:relative}
 .seats{display:flex;gap:5px}.seats i{width:16px;height:16px;border-radius:50%;border:2px solid #9A9488;display:block}.seats i.on{background:var(--ink);border-color:var(--ink)}
 .list>div{padding:11px 0;border-top:1px solid #EFECE6}.list>div:first-child{border-top:0}
 .waitcard{border:2px solid var(--gold)}
@@ -84,7 +85,7 @@ const T = {
 };
 let lang = localStorage.getItem(LANG_KEY) || ({ zh: 'zh', ja: 'ja', ko: 'ko' }[(navigator.language || 'en').slice(0, 2)] || 'en');
 let token = localStorage.getItem(KEY) || '';
-let timer = null, flashMsg = null;
+let timer = null, flashMsg = null, photo = null;
 const t = (k, ...a) => { const v = (T[lang] || T.en)[k] ?? T.en[k]; return typeof v === 'function' ? v(...a) : v; };
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const dur = (s) => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `${h} ${t('h')} ${String(m).padStart(2, '0')} ${t('m')}`; };
@@ -168,6 +169,7 @@ async function renderHome() {
     <section class="card"><h2 style="margin-bottom:6px">${t('promos')}</h2>
       <div class="list">${room.promotions.map((p) => `<div><b>${esc(p.title)}</b>${p.body ? `<div class="small muted" style="white-space:pre-line">${esc(p.body)}</div>` : ''}</div>`).join('') || `<div class="muted small">${t('noPromos')}</div>`}</div></section>`;
   flashMsg = null;
+  if (m.has_photo) (photo ? Promise.resolve({ data: photo }) : api('/member/photo')).then((ph) => { photo = ph.data; const a = main.querySelector('.avatar'); if (a) { const img = new Image(); img.alt = ''; img.src = ph.data; a.textContent = ''; a.appendChild(img); } }).catch(() => {});
   const leave = document.getElementById('leave');
   if (leave) leave.onclick = async () => { try { await api('/member/waitlist/leave', 'POST', {}); renderHome(); } catch (e) { flashMsg = { kind: 'err', text: t('error') }; renderHome(); } };
   const jf = document.getElementById('jf');
@@ -176,7 +178,7 @@ async function renderHome() {
 }
 
 langSel.onchange = () => { lang = langSel.value; localStorage.setItem(LANG_KEY, lang); token ? renderHome() : renderLogin(); };
-logoutBtn.onclick = async () => { try { await api('/member/logout', 'POST', {}); } catch (e) {} token = ''; localStorage.removeItem(KEY); renderLogin(); };
+logoutBtn.onclick = async () => { try { await api('/member/logout', 'POST', {}); } catch (e) {} token = ''; photo = null; localStorage.removeItem(KEY); renderLogin(); };
 token ? renderHome() : renderLogin();
 })();
 </script>
