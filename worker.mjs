@@ -1,6 +1,7 @@
 import { isMemberApi, handleMembersApi, handleRegister, ingestPpm } from './members.mjs';
 const enc = new TextEncoder();
 async function digest(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode(value)))).map(v=>v.toString(16).padStart(2,'0')).join(''); }
+async function pbkdf2(password,saltHex,iterations){const key=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:new Uint8Array(saltHex.match(/../g).map(h=>parseInt(h,16))),iterations},key,256);return Array.from(new Uint8Array(bits)).map(v=>v.toString(16).padStart(2,'0')).join('');}
 async function equal(a,b){const x=await digest(a),y=await digest(b);let d=0;for(let i=0;i<x.length;i++)d|=x.charCodeAt(i)^y.charCodeAt(i);return d===0;}
 const blinds=['25 / 50','50 / 50','50 / 100','100 / 100','100 / 200'], types=['NLH','PLO','Others'];
 export const initial=()=>({queue:[],counters:Object.fromEntries(types.flatMap(t=>blinds.map(b=>[b+' '+t,1]))),occupied:Array.from({length:4},()=>Array(9).fill(0)),games:['50 / 100','50 / 100','100 / 200','25 / 50'],tableTypes:['NLH','NLH','NLH','NLH'],calls:{},count:'4'});
@@ -32,10 +33,17 @@ export default {async fetch(req,env){
   const attempt=await env.DB.prepare('INSERT INTO attempts (ip,started,count) VALUES (?,?,1) ON CONFLICT(ip) DO UPDATE SET count=CASE WHEN started<? THEN 1 ELSE count+1 END,started=CASE WHEN started<? THEN ? ELSE started END RETURNING count').bind(ip,now,now-900,now-900,now).first();
   if(attempt.count>10)return reply({error:'Too many attempts. Try again in 15 minutes.'},429);
   const body=await req.text();if(body.length>2048)return reply({error:'Too large'},413);const input=JSON.parse(body);
-  if(input.username!=='admin01'||typeof input.password!=='string'||!await equal(input.password,env.ADMIN_PASSWORD))return reply({error:'帳號或密碼不正確'},401);
-  const bytes=crypto.getRandomValues(new Uint8Array(32));const token=Array.from(bytes).map(x=>x.toString(16).padStart(2,'0')).join('');
-  await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM attempts WHERE started<?').bind(now-900),env.DB.prepare('INSERT INTO sessions(token,expires) VALUES(?,?)').bind(await digest(token),now+28800)]);
-  return reply({token,expires:now+28800});
+  const username=typeof input.username==='string'?input.username.trim():'';
+  if(!username||username.length>60||typeof input.password!=='string'||input.password.length>200)return reply({error:'帳號或密碼不正確'},401);
+  // Staff accounts live in D1. admin01 + ADMIN_PASSWORD keeps working only until an admin01 staff row exists.
+  const staff=await env.DB.prepare('SELECT username,display_name,pw_hash,salt,iterations,active FROM staff WHERE username=?').bind(username).first();
+  let user=null;
+  if(staff){if(staff.active&&await equal(await pbkdf2(input.password,staff.salt,staff.iterations),staff.pw_hash))user=staff.display_name;}
+  else if(username.toLowerCase()==='admin01'&&env.ADMIN_PASSWORD&&await equal(input.password,env.ADMIN_PASSWORD))user='admin01';
+  if(!user)return reply({error:'帳號或密碼不正確'},401);
+  const bytes=crypto.getRandomValues(new Uint8Array(32));const token=Array.from(bytes).map(x=>x.toString(16).padStart(2,'0')).join('');const hashed=await digest(token);
+  await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM session_users WHERE token NOT IN (SELECT token FROM sessions)'),env.DB.prepare('DELETE FROM attempts WHERE started<?').bind(now-900),env.DB.prepare('INSERT INTO sessions(token,expires) VALUES(?,?)').bind(hashed,now+28800),env.DB.prepare('INSERT OR REPLACE INTO session_users(token,username) VALUES(?,?)').bind(hashed,user)]);
+  return reply({token,expires:now+28800,user});
  }
  if(path==='/register'&&req.method==='POST'){
   if(Number(req.headers.get('content-length'))>5000)return reply({error:'Too large'},413);
@@ -44,11 +52,13 @@ export default {async fetch(req,env){
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});
  }
- if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||isMemberApi(path)){
+ if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||path==='/me'||isMemberApi(path)){
   const bearer=req.headers.get('Authorization')||'';if(!/^Bearer [a-f0-9]{64}$/.test(bearer))return reply({error:'Login required'},401);
   const hashed=await digest(bearer.slice(7));const session=await env.DB.prepare('SELECT expires FROM sessions WHERE token=?').bind(hashed).first();if(!session||session.expires<=now)return reply({error:'Session expired'},401);
-  if(path==='/logout'){await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(hashed).run();return reply({ok:true});}
-  if(isMemberApi(path)){const res=await handleMembersApi(req,env,path,now,reply);return res||reply({error:'Not found'},404);}
+  if(path==='/logout'){await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(hashed),env.DB.prepare('DELETE FROM session_users WHERE token=?').bind(hashed)]);return reply({ok:true});}
+  const owner=await env.DB.prepare('SELECT username FROM session_users WHERE token=?').bind(hashed).first();const user=owner?owner.username:null;
+  if(path==='/me')return reply({user});
+  if(isMemberApi(path)){const res=await handleMembersApi(req,env,path,now,reply,user);return res||reply({error:'Not found'},404);}
   if(path==='/ppm'){
    const row=await env.DB.prepare('SELECT version,data FROM ppm WHERE id=1').first();
    if(req.method==='GET')return reply({version:row.version,tables:JSON.parse(row.data)});

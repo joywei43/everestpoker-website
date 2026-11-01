@@ -120,3 +120,18 @@ CREATE TABLE IF NOT EXISTS audit_log(
 CREATE INDEX IF NOT EXISTS audit_member ON audit_log(member_id,at);
 
 CREATE TABLE IF NOT EXISTS register_attempts(ip TEXT PRIMARY KEY,started INTEGER NOT NULL,count INTEGER NOT NULL);
+
+-- Staff accounts. Passwords are stored as salted PBKDF2-SHA256 hashes, never in plain text.
+-- Create or reset accounts with: node create-staff.mjs "Name:password" ... > staff-accounts.sql  (do not commit that file)
+CREATE TABLE IF NOT EXISTS staff(
+ username TEXT PRIMARY KEY COLLATE NOCASE,
+ display_name TEXT NOT NULL,
+ pw_hash TEXT NOT NULL,
+ salt TEXT NOT NULL,
+ iterations INTEGER NOT NULL,
+ role TEXT NOT NULL DEFAULT 'admin',
+ active INTEGER NOT NULL DEFAULT 1,
+ created_at INTEGER NOT NULL
+);
+-- Which staff member owns each login session (token is the same hash stored in sessions).
+CREATE TABLE IF NOT EXISTS session_users(token TEXT PRIMARY KEY, username TEXT NOT NULL);

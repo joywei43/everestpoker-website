@@ -205,7 +205,9 @@ function pickFields(b) {
   return out;
 }
 
-export async function handleMembersApi(req, env, path, now, reply) {
+export async function handleMembersApi(req, env, path, now, reply, user) {
+  // The signed-in staff account is the actor in every log entry; the typed name is only a fallback for old sessions.
+  const who = (b) => str(user, 60) || str(b && b.staff, 60);
   const url = new URL(req.url);
   const method = req.method;
   const groups = await loadGroups(env);
@@ -290,13 +292,13 @@ export async function handleMembersApi(req, env, path, now, reply) {
     if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
     const wanted = str(b.member_no, 30);
     if (wanted && await memberByNo(env, wanted)) return bad(reply, 'Member number already used.', 409);
-    const created = await createMember(env, now, fields, groupId, 'staff', b.staff, wanted || null);
+    const created = await createMember(env, now, fields, groupId, 'staff', who(b), wanted || null);
     return reply({ ok: true, member_no: created.member_no });
   }
   if (parts[0] === 'members' && parts[1] === 'import' && method === 'POST') {
     const b = await readJson(req, 1000000);
     const rows = Array.isArray(b.rows) ? b.rows.slice(0, 100) : [];
-    const actor = str(b.staff, 60) || 'import';
+    const actor = who(b) || 'import';
     const result = { created: 0, skipped: 0, errors: [] };
     const nos = rows.map((r) => str(r.member_no, 30)).filter(Boolean);
     const passports = rows.map((r) => str(r.passport_id, 40)).filter(Boolean);
@@ -371,7 +373,7 @@ export async function handleMembersApi(req, env, path, now, reply) {
       const changed = keys.filter((k) => fields[k] !== m[k]);
       await env.DB.batch([
         env.DB.prepare(`UPDATE members SET ${keys.map((k) => k + '=?').join(',')},updated_at=? WHERE id=?`).bind(...keys.map((k) => fields[k]), now, m.id),
-        audit(env, now, b.staff, 'member.update', m.id, changed.join(', '))
+        audit(env, now, who(b), 'member.update', m.id, changed.join(', '))
       ]);
       return reply({ ok: true });
     }
@@ -380,7 +382,7 @@ export async function handleMembersApi(req, env, path, now, reply) {
       const b = await readJson(req, 5000);
       const groupId = b.group_id ? str(b.group_id, 30) : null;
       if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
-      if (!str(b.staff, 60)) return bad(reply, 'Staff name is required.');
+      if (!who(b)) return bad(reply, 'Staff name is required.');
       if (groupId === m.group_id) return reply({ ok: true, unchanged: true });
       const firstAssignment = !(await env.DB.prepare('SELECT 1 x FROM member_group_history WHERE member_id=? LIMIT 1').bind(m.id).first());
       // Effective now: past hours and rewards stay with the old group, new ones go to the new group.
@@ -391,8 +393,8 @@ export async function handleMembersApi(req, env, path, now, reply) {
           env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=? AND group_id IS NULL').bind(groupId, m.id)
         ] : []),
         env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
-        env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, now, str(b.staff, 60), str(b.note, 200), now),
-        audit(env, now, b.staff, 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'}${b.note ? ' · ' + str(b.note, 200) : ''}`)
+        env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, now, who(b), str(b.note, 200), now),
+        audit(env, now, who(b), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'}${b.note ? ' · ' + str(b.note, 200) : ''}`)
       ]);
       return reply({ ok: true });
     }
@@ -412,7 +414,7 @@ export async function handleMembersApi(req, env, path, now, reply) {
       await env.DB.batch([
         env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
           .bind(m.id, groupId, type, str(b.detail, 200), amount, givenAt, str(b.recorded_by, 60), str(b.approved_by, 60), now),
-        audit(env, now, b.recorded_by, 'reward.add', m.id, `${type} ₱${amount} ${str(b.detail, 120)}`)
+        audit(env, now, who(b) || b.recorded_by, 'reward.add', m.id, `${type} ₱${amount} ${str(b.detail, 120)}`)
       ]);
       return reply({ ok: true });
     }
@@ -421,13 +423,13 @@ export async function handleMembersApi(req, env, path, now, reply) {
   if (parts[0] === 'rewards' && parts[1] && parts[2] === 'void' && method === 'POST') {
     const b = await readJson(req, 5000);
     const id = Number(parts[1]);
-    if (!str(b.staff, 60) || !str(b.reason, 200)) return bad(reply, 'Staff name and reason are required.');
+    if (!who(b) || !str(b.reason, 200)) return bad(reply, 'Staff name and reason are required.');
     const r = await env.DB.prepare('SELECT id,member_id,type,amount,voided FROM rewards WHERE id=?').bind(id).first();
     if (!r) return bad(reply, 'Reward not found.', 404);
     if (r.voided) return reply({ ok: true, unchanged: true });
     await env.DB.batch([
       env.DB.prepare('UPDATE rewards SET voided=1,void_reason=? WHERE id=?').bind(str(b.reason, 200), id),
-      audit(env, now, b.staff, 'reward.void', r.member_id, `${r.type} ₱${r.amount} · ${str(b.reason, 200)}`)
+      audit(env, now, who(b), 'reward.void', r.member_id, `${r.type} ₱${r.amount} · ${str(b.reason, 200)}`)
     ]);
     return reply({ ok: true });
   }
@@ -439,7 +441,7 @@ export async function handleMembersApi(req, env, path, now, reply) {
   }
   if (parts[0] === 'sessions' && parts[1] === 'link' && method === 'POST') {
     const b = await readJson(req, 5000);
-    const ref = str(b.member_ref, 60), staff = str(b.staff, 60);
+    const ref = str(b.member_ref, 60), staff = who(b);
     if (!ref || !staff) return bad(reply, 'PPM name and staff name are required.');
     const m = await memberByNo(env, str(b.member_no, 30));
     if (!m) return bad(reply, 'Member not found.', 404);

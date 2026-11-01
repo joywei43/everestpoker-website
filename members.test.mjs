@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import worker from './worker.mjs';
+import { staffSql } from './create-staff.mjs';
 
 // In-memory D1 stand-in built on node:sqlite.
 const sql = new DatabaseSync(':memory:');
@@ -66,7 +67,6 @@ ppm = await call('/ppm', 'PUT', { version: 1, tables }, token);
 assert.equal((await call('/members/EV-000001', 'GET', null, token)).body.sessions.length, 1);
 
 // Change group: past hours stay with Hee, later hours go to JOY.
-assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'joy' }, token)).status, 400, 'staff name required');
 assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'joy', staff: 'K. Lim', note: 'Host request' }, token)).status, 200);
 const later = Date.now() + 60e3;
 tables[0].sessions.push({ date: 'x', tableId: 1, tableName: 'T1', seatId: 4, memberId: 'EV-000001', startTime: manila(later), endTime: manila(later + 3600e3), activeSeconds: 3000, restSeconds: 600, buyInAmount: 10000, transferNote: null });
@@ -126,4 +126,23 @@ const hits = (await call('/members?q=wei&limit=8', 'GET', null, token)).body.mem
 assert.equal(hits[0].member_no, 'EV-000001');
 assert.equal((await call('/members/EV-999999', 'GET', null, token)).status, 404);
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search');
+
+// Staff accounts: each person signs in with their own name; the log records who did what.
+assert.equal((await call('/me', 'GET', null, token)).body.user, 'admin01');
+sql.exec(await staffSql(['ADMIN01:secret-admin', 'Geraldine:secret-g', 'Joy:secret-j']));
+assert.ok(!JSON.stringify(sql.prepare('SELECT * FROM staff').all()).includes('secret-g'), 'no plain-text passwords');
+assert.equal((await call('/login', 'POST', { username: 'admin01', password: 'test' })).status, 401, 'old shared password stops once ADMIN01 exists');
+assert.equal((await call('/login', 'POST', { username: 'Geraldine', password: 'wrong' })).status, 401);
+assert.equal((await call('/login', 'POST', { username: 'admin01', password: 'secret-admin' })).status, 200, 'usernames are not case sensitive');
+const g = (await call('/login', 'POST', { username: 'geraldine', password: 'secret-g' })).body;
+assert.equal(g.user, 'Geraldine');
+assert.equal((await call('/me', 'GET', null, g.token)).body.user, 'Geraldine');
+assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'hee', staff: 'Someone else' }, g.token)).status, 200);
+chen = (await call('/members/EV-000001', 'GET', null, g.token)).body;
+assert.equal(chen.audit[0].actor, 'Geraldine'); assert.equal(chen.group_history[0].changed_by, 'Geraldine');
+assert.equal((await call('/logout', 'POST', {}, g.token)).status, 200);
+assert.equal((await call('/me', 'GET', null, g.token)).status, 401);
+sql.exec("UPDATE staff SET active=0 WHERE username='Joy'");
+assert.equal((await call('/login', 'POST', { username: 'Joy', password: 'secret-j' })).status, 401, 'disabled account cannot sign in');
+
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts');

@@ -77,12 +77,12 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 (() => {
 'use strict';
 const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
-const TOKEN_KEY = 'ppm-session', STAFF_KEY = 'everest-staff-name';
+const TOKEN_KEY = 'ppm-session', USER_KEY = 'ppm-user';
 const TYPES = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', hotel: 'Hotel Stay', transportation: 'Transportation', tournament_ticket: 'Tournament Tickets' };
 const TYPE_CHIP = { free_chip: 'blue', promo_cash: 'green', promo_chip: 'amber', hotel: '', transportation: '', tournament_ticket: 'dark' };
 const root = document.getElementById('root');
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
-let staff = localStorage.getItem(STAFF_KEY) || '';
+let staff = sessionStorage.getItem(USER_KEY) || '';
 let groupsCache = null;
 
 // ---------- helpers ----------
@@ -110,11 +110,10 @@ async function api(path, method = 'GET', body) {
 async function groups() { if (!groupsCache) groupsCache = (await api('/groups')).groups; return groupsCache; }
 const groupOptions = (gs, selected, extra = '') => extra + gs.map((g) => `<option value="${esc(g.id)}" ${g.id === selected ? 'selected' : ''}>${esc(g.name)}${g.kind === 'inhouse' ? ' (Marketing)' : ''}</option>`).join('');
 function flash(el, text, kind = '') { el.innerHTML = text ? `<div class="msg ${kind}" role="status">${esc(text)}</div>` : ''; }
-function needStaff() {
-  if (staff) return staff;
-  const name = (prompt('Your name (saved on this device, shown in the audit log):') || '').trim();
-  if (name) { staff = name.slice(0, 60); localStorage.setItem(STAFF_KEY, staff); renderStaff(); }
-  return staff;
+// The signed-in account is recorded as the actor by the server; this is only for display and defaults.
+function needStaff() { return staff; }
+async function loadMe() {
+  try { const me = await api('/me'); staff = me.user || ''; sessionStorage.setItem(USER_KEY, staff); renderStaff(); } catch (e) {}
 }
 function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: page || 'members', arg: rest.map(decodeURIComponent).join('/') }; }
 
@@ -144,21 +143,21 @@ function render() {
 }
 function renderStaff() {
   const box = document.getElementById('staffbox'); if (!box) return;
-  box.innerHTML = `<small>Staff on this device</small><div><b>${esc(staff || 'Not set')}</b></div>
-    <button type="button" id="setStaff">${staff ? 'Change name' : 'Set name'}</button> <button type="button" id="logout">Sign out</button>`;
-  box.querySelector('#setStaff').onclick = () => { staff = ''; needStaff(); };
-  box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; sessionStorage.removeItem(TOKEN_KEY); render(); };
+  box.innerHTML = `<small>Signed in as</small><div><b>${esc(staff || '—')}</b></div>
+    <button type="button" id="logout">Sign out</button>`;
+  box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; staff = ''; sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USER_KEY); render(); };
 }
 function renderLogin() {
-  root.innerHTML = `<div class="card login"><div style="background:#121212;border-radius:12px;padding:18px;margin:-8px -8px 18px;text-align:center"><img src="logo.png" alt="Everest Poker Room" style="width:160px;height:auto"></div><h1>Everest members</h1><p class="sub">Staff sign in · admin01</p>
-    <form id="lf" class="row" style="margin-top:16px"><label class="f" style="flex:1">Password<input type="password" id="pw" autocomplete="current-password" required></label>
-    <button class="btn primary" style="align-self:flex-end">Sign in</button></form><div id="lm" style="margin-top:12px"></div></div>`;
+  root.innerHTML = `<div class="card login"><div style="background:#121212;border-radius:12px;padding:18px;margin:-8px -8px 18px;text-align:center"><img src="logo.png" alt="Everest Poker Room" style="width:160px;height:auto"></div><h1>Everest members</h1><p class="sub">Staff sign in</p>
+    <form id="lf" style="margin-top:16px;display:flex;flex-direction:column;gap:12px"><label class="f">Username<input type="text" id="un" autocomplete="username" required maxlength="60" autocapitalize="off" spellcheck="false"></label>
+    <label class="f">Password<input type="password" id="pw" autocomplete="current-password" required maxlength="200"></label>
+    <button class="btn primary">Sign in</button></form><div id="lm" style="margin-top:12px"></div></div>`;
   document.getElementById('lf').onsubmit = async (e) => {
     e.preventDefault(); const m = document.getElementById('lm');
     try {
-      const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'admin01', password: document.getElementById('pw').value }) });
+      const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.getElementById('un').value.trim(), password: document.getElementById('pw').value }) });
       const d = await res.json(); if (!res.ok) throw new Error(d.error || 'Sign in failed');
-      token = d.token; sessionStorage.setItem(TOKEN_KEY, token); needStaff(); render();
+      token = d.token; staff = d.user || ''; sessionStorage.setItem(TOKEN_KEY, token); sessionStorage.setItem(USER_KEY, staff); render();
     } catch (err) { flash(m, err.message, 'err'); }
   };
 }
@@ -461,7 +460,7 @@ async function viewImport(view) {
 
 window.addEventListener('hashchange', render);
 render();
-if (token && !staff) setTimeout(needStaff, 300);
+if (token) loadMe();
 })();
 </script>
 </body>
