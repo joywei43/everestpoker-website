@@ -1,0 +1,456 @@
+// Everest member system — staff API (phase 1).
+// Members, player groups, group history, PPM play time and rewards.
+// All routes here run after the staff session check in worker.mjs, except /register.
+
+const TZ_OFFSET = 8 * 3600; // Philippines, UTC+8. PPM writes local wall-clock times.
+const DAY = 86400;
+const REWARD_TYPES = ['free_chip', 'promo_cash', 'promo_chip', 'hotel', 'transportation', 'tournament_ticket'];
+const STATUSES = ['active', 'suspended', 'banned'];
+const PROFILE_FIELDS = ['surname', 'middle_name', 'family_name', 'nickname', 'nationality', 'birthday', 'passport_id',
+  'email', 'phone', 'whatsapp', 'telegram', 'line', 'referral_id', 'language'];
+const LIMITS = { surname: 80, middle_name: 80, family_name: 80, nickname: 60, nationality: 60, birthday: 10, passport_id: 40,
+  email: 120, phone: 40, whatsapp: 40, telegram: 60, line: 60, referral_id: 60, language: 20 };
+
+// ---------- small helpers ----------
+export const str = (v, max = 200) => (typeof v === 'string' || typeof v === 'number') ? String(v).trim().slice(0, max) : '';
+const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
+// 'YYYY-MM-DD' (Manila) -> unix seconds at local midnight
+export const dayStart = (s) => Math.floor(Date.parse(s + 'T00:00:00Z') / 1000) - TZ_OFFSET;
+// unix seconds -> 'YYYY-MM-DD' in Manila
+export const localDate = (t) => new Date((t + TZ_OFFSET) * 1000).toISOString().slice(0, 10);
+// PPM 'YYYY-MM-DD HH:MM:SS' (Manila wall clock) -> unix seconds
+export function ppmTime(text) {
+  if (typeof text !== 'string' || !/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) return null;
+  const ms = Date.parse(text.replace(' ', 'T') + 'Z');
+  return Number.isNaN(ms) ? null : Math.floor(ms / 1000) - TZ_OFFSET;
+}
+const likeEscape = (s) => s.replace(/[\\%_]/g, (c) => '\\' + c);
+const chunks = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+const marks = (n) => Array(n).fill('?').join(',');
+const all = async (stmt) => (await stmt.all()).results || [];
+function ageOn(birthday, now) {
+  if (!isDate(birthday)) return null;
+  const [y, m, d] = birthday.split('-').map(Number);
+  const today = new Date((now + TZ_OFFSET) * 1000);
+  let age = today.getUTCFullYear() - y;
+  if (today.getUTCMonth() + 1 < m || (today.getUTCMonth() + 1 === m && today.getUTCDate() < d)) age--;
+  return age;
+}
+function displayName(m) {
+  return [m.surname, m.middle_name, m.family_name].filter(Boolean).join(' ') || m.nickname || m.member_no;
+}
+function publicMember(m, groups) {
+  const g = m.group_id ? groups.get(m.group_id) : null;
+  return {
+    member_no: m.member_no, name: displayName(m), surname: m.surname, middle_name: m.middle_name, family_name: m.family_name,
+    nickname: m.nickname, nationality: m.nationality, birthday: m.birthday,
+    passport_last4: m.passport_id ? m.passport_id.slice(-4) : '',
+    email: m.email, phone: m.phone, whatsapp: m.whatsapp, telegram: m.telegram, line: m.line,
+    referral_id: m.referral_id, language: m.language, status: m.status, staff_notes: m.staff_notes,
+    group_id: m.group_id, group_name: g ? g.name : null, group_owner: g ? g.owner : null,
+    source: m.source, created_at: m.created_at, updated_at: m.updated_at
+  };
+}
+const audit = (env, now, actor, action, memberId, detail) =>
+  env.DB.prepare('INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,?,?,?)')
+    .bind(now, str(actor, 60), action, memberId ?? null, str(detail, 500));
+
+async function loadGroups(env) {
+  const rows = await all(env.DB.prepare('SELECT id,name,kind,owner,sort,active FROM member_groups ORDER BY sort,name'));
+  return new Map(rows.map((g) => [g.id, g]));
+}
+async function memberByNo(env, no) {
+  return env.DB.prepare('SELECT * FROM members WHERE member_no=? COLLATE NOCASE').bind(no).first();
+}
+async function nextMemberNumber(env) {
+  const row = await env.DB.prepare("SELECT MAX(CAST(SUBSTR(member_no,4) AS INTEGER)) AS n FROM members WHERE member_no LIKE 'EV-%'").first();
+  return (row && row.n ? row.n : 0) + 1;
+}
+const formatNo = (n) => 'EV-' + String(n).padStart(6, '0');
+
+// Group in force for a member at a given time, from history rows sorted by effective_from.
+// Before a member's first assignment, play counts for that first group (the player was already that host's guest).
+// Later changes only move hours from the change onward.
+function groupAtFrom(history, memberId, t) {
+  let g, first;
+  for (const h of history) {
+    if (h.member_id !== memberId) continue;
+    if (first === undefined) first = h.group_id;
+    if (h.effective_from <= t) g = h.group_id;
+  }
+  return g !== undefined ? g : (first !== undefined ? first : null);
+}
+async function groupAt(env, memberId, t) {
+  const history = await all(env.DB.prepare('SELECT member_id,group_id,effective_from FROM member_group_history WHERE member_id=? ORDER BY effective_from, id').bind(memberId));
+  return groupAtFrom(history, memberId, t);
+}
+
+// ---------- PPM -> play_sessions ----------
+// Called after every successful PPM save. Only sessions not seen before are written, so it is cheap and repeatable.
+export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)) {
+  const found = [];
+  for (const t of tables || []) {
+    for (const s of Array.isArray(t.sessions) ? t.sessions : []) {
+      const ref = str(s && s.memberId, 60);
+      const start = ppmTime(s && s.startTime), end = ppmTime(s && s.endTime);
+      if (!ref || start === null || end === null) continue;
+      const key = [t.name || t.id, s.seatId, ref, s.startTime, s.endTime].join('|').slice(0, 200);
+      found.push({ key, ref, start, end, s, t });
+    }
+  }
+  if (!found.length) return { inserted: 0 };
+  const seen = new Set();
+  for (const part of chunks(found.map((f) => f.key), 90)) {
+    const rows = await all(env.DB.prepare(`SELECT session_key FROM play_sessions WHERE session_key IN (${marks(part.length)})`).bind(...part));
+    rows.forEach((r) => seen.add(r.session_key));
+  }
+  const fresh = [];
+  for (const f of found) { if (!seen.has(f.key)) { seen.add(f.key); fresh.push(f); } }
+  fresh.splice(400);
+  if (!fresh.length) return { inserted: 0 };
+
+  // Match PPM text to members: exact member number first, then a unique nickname.
+  const refs = [...new Set(fresh.map((f) => f.ref.toLowerCase()))];
+  const byNo = new Map(), byNick = new Map();
+  for (const part of chunks(refs, 45)) {
+    const rows = await all(env.DB.prepare(`SELECT id,member_no,nickname FROM members WHERE lower(member_no) IN (${marks(part.length)}) OR lower(nickname) IN (${marks(part.length)})`).bind(...part, ...part));
+    for (const r of rows) {
+      byNo.set(r.member_no.toLowerCase(), r.id);
+      if (r.nickname) { const k = r.nickname.toLowerCase(); byNick.set(k, byNick.has(k) ? -1 : r.id); }
+    }
+  }
+  const memberOf = (ref) => { const k = ref.toLowerCase(); if (byNo.has(k)) return byNo.get(k); const n = byNick.get(k); return n && n > 0 ? n : null; };
+  const ids = [...new Set(fresh.map((f) => memberOf(f.ref)).filter(Boolean))];
+  let history = [];
+  for (const part of chunks(ids, 90)) {
+    history = history.concat(await all(env.DB.prepare(`SELECT member_id,group_id,effective_from FROM member_group_history WHERE member_id IN (${marks(part.length)}) ORDER BY effective_from, id`).bind(...part)));
+  }
+  history.sort((a, b) => a.effective_from - b.effective_from);
+
+  const stmts = fresh.map((f) => {
+    const memberId = memberOf(f.ref);
+    const groupId = memberId ? groupAtFrom(history, memberId, f.start) : null; // group at seat-in time
+    const active = Math.max(0, Math.floor(Number(f.s.activeSeconds) || 0));
+    const rest = Math.max(0, Math.floor(Number(f.s.restSeconds) || 0));
+    const buyIn = Number.isSafeInteger(f.s.buyInAmount) && f.s.buyInAmount >= 0 ? f.s.buyInAmount : null;
+    return env.DB.prepare(`INSERT OR IGNORE INTO play_sessions(session_key,member_id,member_ref,group_id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,buy_in,transfer_note,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(f.key, memberId, f.ref, groupId, localDate(f.start), str(f.t.name, 10), Number(f.s.seatId) || 0,
+      str(f.t.gameType, 10), str(f.t.blinds, 20), f.start, f.end, active, rest, buyIn, f.s.transferNote ? str(f.s.transferNote, 120) : null, now);
+  });
+  for (const part of chunks(stmts, 50)) await env.DB.batch(part);
+  return { inserted: stmts.length };
+}
+
+// ---------- request handling ----------
+async function readJson(req, max = 200000) {
+  const text = await req.text();
+  if (text.length > max) { const e = new Error('Too large'); e.status = 413; throw e; }
+  return text ? JSON.parse(text) : {};
+}
+const bad = (reply, msg, status = 400) => reply({ error: msg }, status);
+function range(url, now) {
+  const to = url.searchParams.get('to'), from = url.searchParams.get('from');
+  const end = to && isDate(to) ? dayStart(to) + DAY : dayStart(localDate(now)) + DAY;
+  const start = from && isDate(from) ? dayStart(from) : end - 30 * DAY;
+  return { start, end, from: localDate(start), to: localDate(end - 1) };
+}
+
+export const isMemberApi = (path) => /^\/(members|groups|rewards|sessions)(\/|$)/.test(path) || path === '/ppm/sync';
+
+// Public self-registration (replaces the Google Sheet form). Rate limited per IP.
+export async function handleRegister(req, env, now, reply, ipHash) {
+  const attempt = await env.DB.prepare('INSERT INTO register_attempts(ip,started,count) VALUES(?,?,1) ON CONFLICT(ip) DO UPDATE SET count=CASE WHEN started<? THEN 1 ELSE count+1 END,started=CASE WHEN started<? THEN ? ELSE started END RETURNING count')
+    .bind(ipHash, now, now - 3600, now - 3600, now).first();
+  if (attempt.count > 5) return bad(reply, 'Too many registrations. Try again later.', 429);
+  const b = await readJson(req, 5000);
+  if (!b.agreedTerms || !b.agreedAge || !b.agreedPolicy) return bad(reply, 'Please accept the terms.');
+  const m = {
+    surname: str(b.surname, 80), middle_name: str(b.middleName, 80), family_name: str(b.familyName, 80), nickname: str(b.nickName, 60),
+    nationality: str(b.nationality, 60), birthday: str(b.birthday, 10), passport_id: str(b.passportId, 40), email: str(b.email, 120),
+    phone: str(b.phone, 40), whatsapp: str(b.whatsapp, 40), telegram: str(b.telegram, 60), line: str(b.line, 60),
+    referral_id: str(b.referralId, 60), language: str(b.language, 20)
+  };
+  if (!m.surname && !m.family_name) return bad(reply, 'Name is required.');
+  const age = ageOn(m.birthday, now);
+  if (age === null) return bad(reply, 'Birthday is required.');
+  if (age < 21) return bad(reply, 'Members must be 21 or older.');
+  const created = await createMember(env, now, m, null, 'register-form', 'register-form');
+  return reply({ ok: true, member_no: created.member_no });
+}
+
+async function createMember(env, now, fields, groupId, source, actor, wantedNo) {
+  let n = wantedNo ? null : await nextMemberNumber(env);
+  for (let tries = 0; tries < 5; tries++) {
+    const no = wantedNo || formatNo(n + tries);
+    const cols = PROFILE_FIELDS.filter((k) => fields[k]);
+    try {
+      const results = await env.DB.batch([
+        env.DB.prepare(`INSERT INTO members(member_no,${cols.concat(['group_id', 'source', 'created_at', 'updated_at']).join(',')}) VALUES(?,${marks(cols.length + 4)})`)
+          .bind(no, ...cols.map((k) => fields[k]), groupId, source, now, now),
+        ...(groupId ? [env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) SELECT id,?,?,?,?,? FROM members WHERE member_no=?')
+          .bind(groupId, now, str(actor, 60), 'Initial group', now, no)] : []),
+        env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) SELECT ?,?,'member.create',id,? FROM members WHERE member_no=?").bind(now, str(actor, 60), source, no)
+      ]);
+      return { member_no: no, results };
+    } catch (e) {
+      if (wantedNo || !/UNIQUE/i.test(String(e && e.message))) throw e;
+    }
+  }
+  throw new Error('Could not allocate a member number');
+}
+
+function pickFields(b) {
+  const out = {};
+  for (const k of PROFILE_FIELDS) if (k in b) out[k] = str(b[k], LIMITS[k]);
+  return out;
+}
+
+export async function handleMembersApi(req, env, path, now, reply) {
+  const url = new URL(req.url);
+  const method = req.method;
+  const groups = await loadGroups(env);
+  const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
+
+  // ----- PPM back-fill -----
+  if (path === '/ppm/sync' && method === 'POST') {
+    const row = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
+    return reply(await ingestPpm(env, row ? JSON.parse(row.data) : [], now));
+  }
+
+  // ----- groups -----
+  if (parts[0] === 'groups' && parts.length === 1 && method === 'GET') {
+    const counts = await all(env.DB.prepare("SELECT group_id,COUNT(*) n FROM members WHERE status='active' GROUP BY group_id"));
+    const byGroup = new Map(counts.map((c) => [c.group_id, c.n]));
+    return reply({ groups: [...groups.values()].map((g) => ({ ...g, members: byGroup.get(g.id) || 0 })), unassigned: byGroup.get(null) || 0 });
+  }
+  if (parts[0] === 'groups' && parts[1] === 'summary' && method === 'GET') {
+    const r = range(url, now);
+    const play = await all(env.DB.prepare(`SELECT ps.group_id, ps.member_id, SUM(ps.active_seconds) secs, COUNT(*) sessions, COUNT(DISTINCT ps.play_date) days, MAX(ps.start_at) last,
+        m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.group_id AS current_group
+      FROM play_sessions ps JOIN members m ON m.id=ps.member_id
+      WHERE ps.start_at>=? AND ps.start_at<? GROUP BY ps.group_id, ps.member_id`).bind(r.start, r.end));
+    const rw = await all(env.DB.prepare(`SELECT rw.group_id, rw.member_id, SUM(rw.amount) amt, m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.group_id AS current_group
+      FROM rewards rw JOIN members m ON m.id=rw.member_id
+      WHERE rw.voided=0 AND rw.given_at>=? AND rw.given_at<? GROUP BY rw.group_id, rw.member_id`).bind(r.start, r.end));
+    const unassigned = await env.DB.prepare("SELECT COUNT(*) n FROM members WHERE group_id IS NULL AND status='active'").first();
+    const unmatched = await env.DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(active_seconds),0) secs FROM play_sessions WHERE member_id IS NULL AND start_at>=? AND start_at<?').bind(r.start, r.end).first();
+    const buckets = new Map();
+    const bucket = (gid) => {
+      const key = gid || '';
+      if (!buckets.has(key)) {
+        const g = gid ? groups.get(gid) : null;
+        buckets.set(key, { id: gid, name: g ? g.name : 'No group', kind: g ? g.kind : 'none', owner: g ? g.owner : '', seconds: 0, rewards: 0, players: new Map() });
+      }
+      return buckets.get(key);
+    };
+    const player = (b, row) => {
+      if (!b.players.has(row.member_id)) {
+        const cg = row.current_group;
+        b.players.set(row.member_id, { member_no: row.member_no, name: displayName(row), nickname: row.nickname, seconds: 0, sessions: 0, days: 0, last: null, rewards: 0,
+          moved_to: cg !== row.group_id ? (cg ? (groups.get(cg) || {}).name || cg : 'No group') : null });
+      }
+      return b.players.get(row.member_id);
+    };
+    for (const g of groups.values()) bucket(g.id);
+    for (const row of play) { const b = bucket(row.group_id); const p = player(b, row); p.seconds += row.secs; p.sessions += row.sessions; p.days += row.days; p.last = row.last; b.seconds += row.secs; }
+    for (const row of rw) { const b = bucket(row.group_id); const p = player(b, row); p.rewards += row.amt; b.rewards += row.amt; }
+    const list = [...buckets.values()].map((b) => ({ ...b, players: [...b.players.values()].sort((x, y) => y.seconds - x.seconds), player_count: b.players.size }));
+    list.sort((a, b) => ((groups.get(a.id) || { sort: 99 }).sort - (groups.get(b.id) || { sort: 99 }).sort));
+    return reply({ from: r.from, to: r.to, groups: list, total_seconds: list.reduce((s, b) => s + b.seconds, 0), total_rewards: list.reduce((s, b) => s + b.rewards, 0),
+      unassigned_members: unassigned.n, unmatched_sessions: unmatched.n, unmatched_seconds: unmatched.secs });
+  }
+
+  // ----- members list / search -----
+  if (parts[0] === 'members' && parts.length === 1 && method === 'GET') {
+    const q = str(url.searchParams.get('q'), 60);
+    const group = str(url.searchParams.get('group'), 30);
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
+    const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+    const where = [], args = [];
+    if (q) {
+      const like = '%' + likeEscape(q) + '%', pre = likeEscape(q) + '%';
+      where.push("(member_no LIKE ? ESCAPE '\\' OR nickname LIKE ? ESCAPE '\\' OR surname LIKE ? ESCAPE '\\' OR family_name LIKE ? ESCAPE '\\' OR telegram LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')");
+      args.push(pre, like, like, like, like, like);
+    }
+    if (group === 'unassigned') where.push('group_id IS NULL');
+    else if (group) { where.push('group_id=?'); args.push(group); }
+    const status = str(url.searchParams.get('status'), 20);
+    if (STATUSES.includes(status)) { where.push('status=?'); args.push(status); }
+    const sqlWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    const order = q ? "ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, member_no" : 'ORDER BY member_no';
+    const rows = await all(env.DB.prepare(`SELECT * FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, q] : []), limit, offset));
+    const total = await env.DB.prepare(`SELECT COUNT(*) n FROM members ${sqlWhere}`).bind(...args).first();
+    return reply({ members: rows.map((m) => publicMember(m, groups)), total: total.n });
+  }
+  if (parts[0] === 'members' && parts.length === 1 && method === 'POST') {
+    const b = await readJson(req);
+    const fields = pickFields(b);
+    if (!fields.surname && !fields.family_name && !fields.nickname) return bad(reply, 'Name or nickname is required.');
+    const groupId = b.group_id ? str(b.group_id, 30) : null;
+    if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
+    const wanted = str(b.member_no, 30);
+    if (wanted && await memberByNo(env, wanted)) return bad(reply, 'Member number already used.', 409);
+    const created = await createMember(env, now, fields, groupId, 'staff', b.staff, wanted || null);
+    return reply({ ok: true, member_no: created.member_no });
+  }
+  if (parts[0] === 'members' && parts[1] === 'import' && method === 'POST') {
+    const b = await readJson(req, 1000000);
+    const rows = Array.isArray(b.rows) ? b.rows.slice(0, 100) : [];
+    const actor = str(b.staff, 60) || 'import';
+    const result = { created: 0, skipped: 0, errors: [] };
+    const nos = rows.map((r) => str(r.member_no, 30)).filter(Boolean);
+    const passports = rows.map((r) => str(r.passport_id, 40)).filter(Boolean);
+    const existingNos = new Set(), existingPassports = new Set();
+    if (nos.length) (await all(env.DB.prepare(`SELECT lower(member_no) n FROM members WHERE lower(member_no) IN (${marks(nos.length)})`).bind(...nos.map((n) => n.toLowerCase())))).forEach((r) => existingNos.add(r.n));
+    if (passports.length) (await all(env.DB.prepare(`SELECT passport_id p FROM members WHERE passport_id IN (${marks(passports.length)})`).bind(...passports))).forEach((r) => existingPassports.add(r.p));
+    let next = await nextMemberNumber(env);
+    const stmts = [];
+    rows.forEach((row, i) => {
+      const fields = pickFields(row);
+      let no = str(row.member_no, 30);
+      if (!fields.surname && !fields.family_name && !fields.nickname) { result.errors.push({ row: i, error: 'No name' }); return; }
+      if (no && existingNos.has(no.toLowerCase())) { result.skipped++; return; }
+      if (!no && fields.passport_id && existingPassports.has(fields.passport_id)) { result.skipped++; return; }
+      const groupText = str(row.group, 30).toLowerCase();
+      const group = groupText ? [...groups.values()].find((g) => g.id === groupText || g.name.toLowerCase() === groupText) : null;
+      if (groupText && !group) result.errors.push({ row: i, error: 'Unknown group "' + row.group + '" — imported without group' });
+      if (!no) no = formatNo(next++);
+      existingNos.add(no.toLowerCase()); if (fields.passport_id) existingPassports.add(fields.passport_id);
+      const cols = PROFILE_FIELDS.filter((k) => fields[k]);
+      const created = isDate(str(row.created, 10)) ? dayStart(str(row.created, 10)) : now;
+      stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO members(member_no,${cols.concat(['group_id', 'source', 'created_at', 'updated_at']).join(',')}) VALUES(?,${marks(cols.length + 4)})`)
+        .bind(no, ...cols.map((k) => fields[k]), group ? group.id : null, 'import', created, now));
+      if (group) stmts.push(env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) SELECT id,?,?,?,?,? FROM members WHERE member_no=?').bind(group.id, now, actor, 'Imported', now, no));
+      result.created++;
+    });
+    if (stmts.length) {
+      stmts.push(audit(env, now, actor, 'member.import', null, `${result.created} created, ${result.skipped} skipped`));
+      await env.DB.batch(stmts);
+    }
+    return reply(result);
+  }
+
+  // ----- one member -----
+  if (parts[0] === 'members' && parts[1]) {
+    const m = await memberByNo(env, parts[1]);
+    if (!m) return bad(reply, 'Member not found.', 404);
+
+    if (parts.length === 2 && method === 'GET') {
+      const t30 = now - 30 * DAY;
+      const stat = (since) => env.DB.prepare('SELECT COUNT(*) sessions, COUNT(DISTINCT play_date) days, COALESCE(SUM(active_seconds),0) secs, COALESCE(SUM(buy_in),0) buy_in FROM play_sessions WHERE member_id=? AND start_at>=?').bind(m.id, since).first();
+      const rwSum = (since) => env.DB.prepare('SELECT COALESCE(SUM(amount),0) amt FROM rewards WHERE member_id=? AND voided=0 AND given_at>=?').bind(m.id, since).first();
+      const [s30, sAll, r30, rAll] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0)]);
+      let share = null;
+      if (m.group_id) {
+        const g = await env.DB.prepare('SELECT COALESCE(SUM(active_seconds),0) secs FROM play_sessions WHERE group_id=? AND start_at>=?').bind(m.group_id, t30).first();
+        const mine = await env.DB.prepare('SELECT COALESCE(SUM(active_seconds),0) secs FROM play_sessions WHERE group_id=? AND member_id=? AND start_at>=?').bind(m.group_id, m.id, t30).first();
+        share = { group_seconds: g.secs, member_seconds: mine.secs };
+      }
+      const sessions = await all(env.DB.prepare('SELECT id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,buy_in,transfer_note,group_id FROM play_sessions WHERE member_id=? ORDER BY start_at DESC LIMIT 200').bind(m.id));
+      const rewards = await all(env.DB.prepare('SELECT id,type,detail,amount,given_at,recorded_by,approved_by,voided,void_reason,group_id FROM rewards WHERE member_id=? ORDER BY given_at DESC, id DESC LIMIT 500').bind(m.id));
+      const history = await all(env.DB.prepare('SELECT group_id,effective_from,changed_by,note FROM member_group_history WHERE member_id=? ORDER BY effective_from DESC, id DESC').bind(m.id));
+      const log = await all(env.DB.prepare('SELECT at,actor,action,detail FROM audit_log WHERE member_id=? ORDER BY at DESC, id DESC LIMIT 50').bind(m.id));
+      const gname = (id) => (id ? (groups.get(id) || { name: id }).name : null);
+      return reply({
+        member: publicMember(m, groups),
+        stats: { last30: { ...s30, rewards: r30.amt }, all: { ...sAll, rewards: rAll.amt }, group_share: share },
+        sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id) })),
+        rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
+        group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),
+        audit: log
+      });
+    }
+
+    if (parts.length === 2 && method === 'PUT') {
+      const b = await readJson(req);
+      const fields = pickFields(b);
+      if ('staff_notes' in b) fields.staff_notes = str(b.staff_notes, 4000);
+      if ('status' in b) { if (!STATUSES.includes(b.status)) return bad(reply, 'Unknown status.'); fields.status = b.status; }
+      const keys = Object.keys(fields);
+      if (!keys.length) return bad(reply, 'Nothing to update.');
+      const changed = keys.filter((k) => fields[k] !== m[k]);
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE members SET ${keys.map((k) => k + '=?').join(',')},updated_at=? WHERE id=?`).bind(...keys.map((k) => fields[k]), now, m.id),
+        audit(env, now, b.staff, 'member.update', m.id, changed.join(', '))
+      ]);
+      return reply({ ok: true });
+    }
+
+    if (parts[2] === 'group' && method === 'POST') {
+      const b = await readJson(req, 5000);
+      const groupId = b.group_id ? str(b.group_id, 30) : null;
+      if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
+      if (!str(b.staff, 60)) return bad(reply, 'Staff name is required.');
+      if (groupId === m.group_id) return reply({ ok: true, unchanged: true });
+      const firstAssignment = !(await env.DB.prepare('SELECT 1 x FROM member_group_history WHERE member_id=? LIMIT 1').bind(m.id).first());
+      // Effective now: past hours and rewards stay with the old group, new ones go to the new group.
+      // A member's very first group also takes the play and rewards recorded before anyone assigned one.
+      await env.DB.batch([
+        ...(firstAssignment && groupId ? [
+          env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=? AND group_id IS NULL').bind(groupId, m.id),
+          env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=? AND group_id IS NULL').bind(groupId, m.id)
+        ] : []),
+        env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
+        env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, now, str(b.staff, 60), str(b.note, 200), now),
+        audit(env, now, b.staff, 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'}${b.note ? ' · ' + str(b.note, 200) : ''}`)
+      ]);
+      return reply({ ok: true });
+    }
+
+    if (parts[2] === 'rewards' && method === 'POST') {
+      const b = await readJson(req, 5000);
+      const type = str(b.type, 20);
+      const amount = Number(b.amount);
+      if (!REWARD_TYPES.includes(type)) return bad(reply, 'Unknown reward type.');
+      if (!Number.isSafeInteger(amount) || amount < 0 || amount > 100000000) return bad(reply, 'Amount must be a whole number of pesos.');
+      if (!str(b.recorded_by, 60)) return bad(reply, 'Recorded by is required.');
+      const date = str(b.date, 10);
+      if (date && !isDate(date)) return bad(reply, 'Invalid date.');
+      const givenAt = date && date !== localDate(now) ? dayStart(date) + 12 * 3600 : now;
+      if (givenAt > now + DAY) return bad(reply, 'Date is in the future.');
+      const groupId = await groupAt(env, m.id, givenAt);
+      await env.DB.batch([
+        env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
+          .bind(m.id, groupId, type, str(b.detail, 200), amount, givenAt, str(b.recorded_by, 60), str(b.approved_by, 60), now),
+        audit(env, now, b.recorded_by, 'reward.add', m.id, `${type} ₱${amount} ${str(b.detail, 120)}`)
+      ]);
+      return reply({ ok: true });
+    }
+  }
+
+  if (parts[0] === 'rewards' && parts[1] && parts[2] === 'void' && method === 'POST') {
+    const b = await readJson(req, 5000);
+    const id = Number(parts[1]);
+    if (!str(b.staff, 60) || !str(b.reason, 200)) return bad(reply, 'Staff name and reason are required.');
+    const r = await env.DB.prepare('SELECT id,member_id,type,amount,voided FROM rewards WHERE id=?').bind(id).first();
+    if (!r) return bad(reply, 'Reward not found.', 404);
+    if (r.voided) return reply({ ok: true, unchanged: true });
+    await env.DB.batch([
+      env.DB.prepare('UPDATE rewards SET voided=1,void_reason=? WHERE id=?').bind(str(b.reason, 200), id),
+      audit(env, now, b.staff, 'reward.void', r.member_id, `${r.type} ₱${r.amount} · ${str(b.reason, 200)}`)
+    ]);
+    return reply({ ok: true });
+  }
+
+  // ----- PPM sessions that did not match a member -----
+  if (parts[0] === 'sessions' && parts[1] === 'unmatched' && method === 'GET') {
+    const rows = await all(env.DB.prepare('SELECT member_ref, COUNT(*) sessions, SUM(active_seconds) secs, MIN(start_at) first, MAX(start_at) last FROM play_sessions WHERE member_id IS NULL GROUP BY member_ref ORDER BY last DESC LIMIT 300'));
+    return reply({ refs: rows });
+  }
+  if (parts[0] === 'sessions' && parts[1] === 'link' && method === 'POST') {
+    const b = await readJson(req, 5000);
+    const ref = str(b.member_ref, 60), staff = str(b.staff, 60);
+    if (!ref || !staff) return bad(reply, 'PPM name and staff name are required.');
+    const m = await memberByNo(env, str(b.member_no, 30));
+    if (!m) return bad(reply, 'Member not found.', 404);
+    const rows = await all(env.DB.prepare('SELECT id,start_at FROM play_sessions WHERE member_id IS NULL AND member_ref=?').bind(ref));
+    if (!rows.length) return reply({ ok: true, linked: 0 });
+    const history = await all(env.DB.prepare('SELECT member_id,group_id,effective_from FROM member_group_history WHERE member_id=? ORDER BY effective_from, id').bind(m.id));
+    const stmts = rows.map((r) => env.DB.prepare('UPDATE play_sessions SET member_id=?,group_id=? WHERE id=? AND member_id IS NULL').bind(m.id, groupAtFrom(history, m.id, r.start_at), r.id));
+    stmts.push(audit(env, now, staff, 'sessions.link', m.id, `"${ref}" · ${rows.length} sessions`));
+    for (const part of chunks(stmts, 50)) await env.DB.batch(part);
+    return reply({ ok: true, linked: rows.length });
+  }
+
+  return null;
+}

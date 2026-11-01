@@ -1,3 +1,4 @@
+import { isMemberApi, handleMembersApi, handleRegister, ingestPpm } from './members.mjs';
 const enc = new TextEncoder();
 async function digest(value) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode(value)))).map(v=>v.toString(16).padStart(2,'0')).join(''); }
 async function equal(a,b){const x=await digest(a),y=await digest(b);let d=0;for(let i=0;i<x.length;i++)d|=x.charCodeAt(i)^y.charCodeAt(i);return d===0;}
@@ -36,13 +37,18 @@ export default {async fetch(req,env){
   await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM attempts WHERE started<?').bind(now-900),env.DB.prepare('INSERT INTO sessions(token,expires) VALUES(?,?)').bind(await digest(token),now+28800)]);
   return reply({token,expires:now+28800});
  }
+ if(path==='/register'&&req.method==='POST'){
+  if(Number(req.headers.get('content-length'))>5000)return reply({error:'Too large'},413);
+  return handleRegister(req,env,now,reply,await digest('reg:'+(req.headers.get('CF-Connecting-IP')||'unknown')));
+ }
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});
  }
- if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))){
+ if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||isMemberApi(path)){
   const bearer=req.headers.get('Authorization')||'';if(!/^Bearer [a-f0-9]{64}$/.test(bearer))return reply({error:'Login required'},401);
   const hashed=await digest(bearer.slice(7));const session=await env.DB.prepare('SELECT expires FROM sessions WHERE token=?').bind(hashed).first();if(!session||session.expires<=now)return reply({error:'Session expired'},401);
   if(path==='/logout'){await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(hashed).run();return reply({ok:true});}
+  if(isMemberApi(path)){const res=await handleMembersApi(req,env,path,now,reply);return res||reply({error:'Not found'},404);}
   if(path==='/ppm'){
    const row=await env.DB.prepare('SELECT version,data FROM ppm WHERE id=1').first();
    if(req.method==='GET')return reply({version:row.version,tables:JSON.parse(row.data)});
@@ -59,6 +65,8 @@ export default {async fetch(req,env){
     env.DB.prepare('UPDATE room SET version=version+1,data=? WHERE id=1 AND changes()=1').bind(JSON.stringify(state))
    ]);
    if(!results[0].meta.changes)return reply({error:'Another staff member updated the room. Reload and retry.'},409);
+   // Copy finished seat sessions into member play time. Never blocks the PPM save; missed rows are picked up on the next save.
+   try{await ingestPpm(env,ts,now);}catch(e){}
    return reply({version:body.version+1,tables:ts});
   }
   if(Number(req.headers.get('content-length'))>100000)return reply({error:'Too large'},413);
@@ -71,6 +79,6 @@ export default {async fetch(req,env){
   return reply({version:result.version});
  }
  return reply({error:'Not found'},404);
- }catch(e){return reply({error:e instanceof SyntaxError?'Invalid JSON':'Service error'},e instanceof SyntaxError?400:500);}
+ }catch(e){if(e&&e.status===413)return reply({error:'Too large'},413);return reply({error:e instanceof SyntaxError?'Invalid JSON':'Service error'},e instanceof SyntaxError?400:500);}
 }};
 
