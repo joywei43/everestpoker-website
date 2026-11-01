@@ -1,0 +1,40 @@
+# Builds PPM (joywei43/everwin-ppm-system, main branch) and publishes it to /ppm/ on this site.
+# Runs when this file changes, or by hand: Actions → Build PPM → Run workflow.
+name: Build PPM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build-ppm.yml']
+
+permissions:
+  contents: write
+
+concurrency: build-ppm
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: joywei43/everwin-ppm-system
+          ref: main
+          path: ppm-src
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install, test and build PPM
+        working-directory: ppm-src
+        run: npm ci && npm test && npm run build
+      - name: Replace /ppm/ with the new build
+        run: |
+          rm -rf ppm && cp -r ppm-src/dist ppm && rm -rf ppm-src
+          git config user.name "github-actions[bot]"
+          git config user.email "41898281+github-actions[bot]@users.noreply.github.com"
+          git add -A ppm
+          if git diff --cached --quiet; then echo "PPM build unchanged"; exit 0; fi
+          git commit -m "Publish PPM build from everwin-ppm-system@$(git -C . rev-parse --short HEAD)"
+          git push
