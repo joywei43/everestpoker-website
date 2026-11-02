@@ -394,4 +394,8 @@ sql.exec("UPDATE members SET nationality='台灣' WHERE member_no='EV-444444'");
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan', 'old rows cleaned on deploy');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number');
+{ // Remark on a new member is saved to the staff notes.
+  const no = (await call('/members', 'POST', { nickname: 'Hyun', staff_notes: 'Prefers Table 3' }, boss.token)).body.member_no;
+  assert.equal((await call('/members/' + no, 'GET', null, boss.token)).body.member.staff_notes, 'Prefers Table 3');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create');

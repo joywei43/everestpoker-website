@@ -427,6 +427,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       await env.DB.prepare('DELETE FROM member_number_history WHERE old_no=? COLLATE NOCASE').bind(wanted).run();
     }
     const created = await createMember(env, now, fields, groupId, 'staff', who(b), wanted || null);
+    const remark = str(b.staff_notes, 4000);
+    if (remark) await env.DB.prepare('UPDATE members SET staff_notes=? WHERE member_no=?').bind(remark, created.member_no).run();
     return reply({ ok: true, member_no: created.member_no });
   }
   if (parts[0] === 'members' && parts[1] === 'import' && method === 'POST') {

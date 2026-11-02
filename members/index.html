@@ -233,13 +233,14 @@ function memberDialog(gs) {
   return `<dialog id="md"><form method="dialog" id="mf"><h2 id="mdTitle">New member</h2>
     <div class="form">${FIELDS.map(([k, label, type]) => k === 'nationality' ? natField() : `<label class="f">${label}<input type="${type || 'text'}" name="${k}" maxlength="120"></label>`).join('')}
       <label class="f" id="mdGroup">Group<select name="group_id"><option value="">No group yet</option>${groupOptions(gs)}</select></label>
-      <label class="f" id="mdNo">Member no. (optional)<span class="evno"><span aria-hidden="true">EV-</span><input type="text" name="member_no" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6 digits" aria-label="Member number, 6 digits after EV-"></span></label></div>
+      <label class="f" id="mdNo">Member no. (optional)<span class="evno"><span aria-hidden="true">EV-</span><input type="text" name="member_no" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6 digits" aria-label="Member number, 6 digits after EV-"></span></label>
+      <label class="f" id="mdRemark" style="grid-column:1/-1">Remark<textarea name="staff_notes" rows="3" maxlength="4000" placeholder="Anything the team should know, e.g. prefers Table 3, came with Kevin"></textarea></label></div>
     <div id="mdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save" id="mdSave">Save</button></div></form></dialog>`;
 }
 function openMemberDialog(view, member, save) {
   const d = view.querySelector('#md'), f = view.querySelector('#mf');
   f.reset(); view.querySelector('#mdTitle').textContent = member ? 'Edit profile' : 'New member';
-  view.querySelector('#mdGroup').hidden = !!member; view.querySelector('#mdNo').hidden = !!member;
+  view.querySelector('#mdGroup').hidden = !!member; view.querySelector('#mdNo').hidden = !!member; view.querySelector('#mdRemark').hidden = !!member;
   if (member) FIELDS.forEach(([k]) => { if (k !== 'passport_id') f.elements[k].value = member[k] || ''; });
   // New member: fill in the smallest free number; if staff leave it as is, the server assigns it (safe if two people add at once).
   let suggested = '';
@@ -258,6 +259,7 @@ function openMemberDialog(view, member, save) {
     FIELDS.forEach(([k]) => { const v = f.elements[k].value.trim(); if (!member || k !== 'passport_id' || v) data[k] = v; });
     if (f.elements.nat_sel.value !== 'other') data.nationality = f.elements.nat_sel.value;
     if (!member) {
+      data.staff_notes = f.elements.staff_notes.value.trim();
       data.group_id = f.elements.group_id.value || null;
       const digits = f.elements.member_no.value.replace(/\D/g, '');
       if (f.elements.member_no.value.trim() && digits.length !== 6) { flash(view.querySelector('#mdMsg'), 'Member number must be exactly 6 digits, e.g. 444444.', 'err'); return; }
@@ -350,8 +352,8 @@ async function viewMember(view, no) {
       <p class="small muted" style="margin:0">Chips, hotel stays, transportation and tournament tickets are recorded at their peso value so every type adds up. PromoChip counts as Free Chip. Each reward is charged to the player's group on the date it was given.</p>
     </section>
     <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
-      <section class="card note" style="flex:1 1 320px"><h2>Staff notes</h2><form id="nf" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-        <label class="sr" for="notes">Staff notes</label><textarea id="notes" rows="4" maxlength="4000">${esc(m.staff_notes)}</textarea>
+      <section class="card note" style="flex:1 1 320px"><h2>Remark</h2><form id="nf" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+        <label class="sr" for="notes">Remark</label><textarea id="notes" rows="4" maxlength="4000">${esc(m.staff_notes)}</textarea>
         <div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Status<select id="status" ${isMaster() ? '' : 'disabled title="Master account only"'}>${['active', 'suspended', 'banned'].map((s) => `<option ${s === m.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button class="btn sm">Save</button><span id="nmsg"></span></div></form></section>
       <section class="card" style="flex:1 1 280px"><h2>Group history</h2><div style="margin-top:8px">
         ${data.group_history.map((h) => `<div style="padding:8px 0;border-top:1px solid var(--line2)"><b>${esc(h.group_name || 'No group')}</b> <span class="small muted">from ${dateTime(h.effective_from)}</span><div class="small muted">${esc(h.changed_by)}${h.note ? ' · ' + esc(h.note) : ''}</div></div>`).join('') || '<p class="muted small">Never assigned.</p>'}
