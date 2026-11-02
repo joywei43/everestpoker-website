@@ -1,6 +1,6 @@
 // Everest member app API (phase 2). Members sign in with member number + birthday.
 // Members only ever see their own name, play time and waitlist place — never buy-ins, groups, rewards or staff notes.
-import { str, localDate } from './members.mjs';
+import { str, localDate, normNo } from './members.mjs';
 
 const DAY = 86400;
 const SESSION_DAYS = 30;
@@ -79,7 +79,7 @@ export async function handleMemberApp(req, env, path, now, reply, ipHash) {
       .bind(ipHash, now, now - 900, now - 900, now).first();
     if (attempt.count > 10) return bad(reply, 'too_many', 429);
     const b = await readJson(req);
-    const no = str(b.member_no, 30), birthday = str(b.birthday, 10);
+    const no = b.member_no ? normNo(b.member_no) : '', birthday = str(b.birthday, 10);
     const m = no ? await env.DB.prepare('SELECT id,member_no,birthday,status FROM members WHERE member_no=? COLLATE NOCASE').bind(no).first() : null;
     if (!m || !m.birthday || m.birthday !== birthday) return bad(reply, 'wrong', 401);
     if (m.status !== 'active') return bad(reply, 'inactive', 403);

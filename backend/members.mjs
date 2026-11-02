@@ -62,11 +62,17 @@ async function loadGroups(env) {
   const rows = await all(env.DB.prepare('SELECT id,name,kind,owner,sort,active FROM member_groups ORDER BY sort,name'));
   return new Map(rows.map((g) => [g.id, g]));
 }
+// Staff type just the six digits: 444444 or ev444444 → EV-444444. Anything else (e.g. VIP-007) is kept as typed.
+export function normNo(v) {
+  const s = str(v, 30).toUpperCase();
+  const m = /^(?:EV-?)?(\d{1,6})$/.exec(s);
+  return m ? 'EV-' + m[1].padStart(6, '0') : s;
+}
 async function memberByNo(env, no) {
-  return env.DB.prepare('SELECT * FROM members WHERE member_no=? COLLATE NOCASE').bind(no).first();
+  return env.DB.prepare('SELECT * FROM members WHERE member_no=? COLLATE NOCASE').bind(normNo(no)).first();
 }
 async function memberByOldNo(env, no) {
-  return env.DB.prepare('SELECT m.* FROM member_number_history h JOIN members m ON m.id=h.member_id WHERE h.old_no=? COLLATE NOCASE').bind(no).first();
+  return env.DB.prepare('SELECT m.* FROM member_number_history h JOIN members m ON m.id=h.member_id WHERE h.old_no=? COLLATE NOCASE').bind(normNo(no)).first();
 }
 async function nextMemberNumber(env) {
   const row = await env.DB.prepare("SELECT MAX(n) AS n FROM (SELECT CAST(SUBSTR(member_no,4) AS INTEGER) n FROM members WHERE member_no LIKE 'EV-%' UNION ALL SELECT CAST(SUBSTR(old_no,4) AS INTEGER) FROM member_number_history WHERE old_no LIKE 'EV-%')").first();
@@ -116,7 +122,7 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
   if (!fresh.length) return { inserted: 0 };
 
   // Match PPM text to members: exact member number first, then a unique nickname.
-  const refs = [...new Set(fresh.map((f) => f.ref.toLowerCase()))];
+  const refs = [...new Set(fresh.flatMap((f) => [f.ref.toLowerCase(), normNo(f.ref).toLowerCase()]))];
   const byNo = new Map(), byNick = new Map();
   for (const part of chunks(refs, 45)) {
     const rows = await all(env.DB.prepare(`SELECT id,member_no,nickname FROM members WHERE lower(member_no) IN (${marks(part.length)}) OR lower(nickname) IN (${marks(part.length)})`).bind(...part, ...part));
@@ -129,7 +135,7 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
     const rows = await all(env.DB.prepare(`SELECT old_no,member_id FROM member_number_history WHERE lower(old_no) IN (${marks(part.length)})`).bind(...part));
     for (const r of rows) if (!byNo.has(r.old_no.toLowerCase())) byNo.set(r.old_no.toLowerCase(), r.member_id);
   }
-  const memberOf = (ref) => { const k = ref.toLowerCase(); if (byNo.has(k)) return byNo.get(k); const n = byNick.get(k); return n && n > 0 ? n : null; };
+  const memberOf = (ref) => { const k = ref.toLowerCase(), n6 = normNo(ref).toLowerCase(); if (byNo.has(k)) return byNo.get(k); if (byNo.has(n6)) return byNo.get(n6); const n = byNick.get(k); return n && n > 0 ? n : null; };
   const ids = [...new Set(fresh.map((f) => memberOf(f.ref)).filter(Boolean))];
   let history = [];
   for (const part of chunks(ids, 90)) {
@@ -288,16 +294,17 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const where = [], args = [];
     if (q) {
       const like = '%' + likeEscape(q) + '%', pre = likeEscape(q) + '%';
-      where.push("(member_no LIKE ? ESCAPE '\\' OR nickname LIKE ? ESCAPE '\\' OR surname LIKE ? ESCAPE '\\' OR family_name LIKE ? ESCAPE '\\' OR telegram LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')");
-      args.push(pre, like, like, like, like, like);
+      const digits = /^\d{1,6}$/.test(q) ? 'EV-' + likeEscape(q) + '%' : pre;
+      where.push("(member_no LIKE ? ESCAPE '\\' OR member_no LIKE ? ESCAPE '\\' OR nickname LIKE ? ESCAPE '\\' OR surname LIKE ? ESCAPE '\\' OR family_name LIKE ? ESCAPE '\\' OR telegram LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')");
+      args.push(pre, digits, like, like, like, like, like);
     }
     if (group === 'unassigned') where.push('group_id IS NULL');
     else if (group) { where.push('group_id=?'); args.push(group); }
     const status = str(url.searchParams.get('status'), 20);
     if (STATUSES.includes(status)) { where.push('status=?'); args.push(status); }
     const sqlWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
-    const order = q ? "ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, member_no" : 'ORDER BY member_no';
-    const rows = await all(env.DB.prepare(`SELECT members.*, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=members.id) AS has_photo FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, q] : []), limit, offset));
+    const order = q ? "ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, member_no" : 'ORDER BY member_no';
+    const rows = await all(env.DB.prepare(`SELECT members.*, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=members.id) AS has_photo FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, normNo(q), q] : []), limit, offset));
     const total = await env.DB.prepare(`SELECT COUNT(*) n FROM members ${sqlWhere}`).bind(...args).first();
     return reply({ members: rows.map((m) => publicMember(m, groups)), total: total.n });
   }
@@ -307,7 +314,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (!fields.surname && !fields.family_name && !fields.nickname) return bad(reply, 'Name or nickname is required.');
     const groupId = b.group_id ? str(b.group_id, 30) : null;
     if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
-    const wanted = str(b.member_no, 30);
+    const wanted = b.member_no ? normNo(b.member_no) : '';
     if (wanted && (await memberByNo(env, wanted) || await memberByOldNo(env, wanted))) return bad(reply, 'Member number already used.', 409);
     const created = await createMember(env, now, fields, groupId, 'staff', who(b), wanted || null);
     return reply({ ok: true, member_no: created.member_no });
@@ -318,7 +325,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const rows = Array.isArray(b.rows) ? b.rows.slice(0, 100) : [];
     const actor = who(b) || 'import';
     const result = { created: 0, skipped: 0, errors: [] };
-    const nos = rows.map((r) => str(r.member_no, 30)).filter(Boolean);
+    const nos = rows.map((r) => (r.member_no ? normNo(r.member_no) : '')).filter(Boolean);
     const passports = rows.map((r) => str(r.passport_id, 40)).filter(Boolean);
     const existingNos = new Set(), existingPassports = new Set();
     if (nos.length) (await all(env.DB.prepare(`SELECT lower(member_no) n FROM members WHERE lower(member_no) IN (${marks(nos.length)})`).bind(...nos.map((n) => n.toLowerCase())))).forEach((r) => existingNos.add(r.n));
@@ -327,7 +334,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const stmts = [];
     rows.forEach((row, i) => {
       const fields = pickFields(row);
-      let no = str(row.member_no, 30);
+      let no = row.member_no ? normNo(row.member_no) : '';
       if (!fields.surname && !fields.family_name && !fields.nickname) { result.errors.push({ row: i, error: 'No name' }); return; }
       if (no && existingNos.has(no.toLowerCase())) { result.skipped++; return; }
       if (!no && fields.passport_id && existingPassports.has(fields.passport_id)) { result.skipped++; return; }
@@ -387,7 +394,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (parts[2] === 'number' && method === 'POST') {
       if (!master) return masterOnly();
       const b = await readJson(req, 2000);
-      const next = str(b.member_no, 30).toUpperCase();
+      const next = normNo(b.member_no);
       if (!/^[A-Z0-9][A-Z0-9-]{1,29}$/.test(next)) return bad(reply, 'Member number: 2–30 letters, numbers or dashes.');
       if (next === m.member_no.toUpperCase()) return reply({ ok: true, unchanged: true, member_no: m.member_no });
       const taken = await env.DB.prepare('SELECT 1 x FROM members WHERE member_no=? COLLATE NOCASE AND id<>? UNION SELECT 1 FROM member_number_history WHERE old_no=? COLLATE NOCASE AND member_id<>?').bind(next, m.id, next, m.id).first();

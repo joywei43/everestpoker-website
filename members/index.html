@@ -67,6 +67,7 @@ td.num,th.num{text-align:right}
 dialog{border:0;border-radius:14px;padding:0;max-width:720px;width:calc(100% - 32px)}dialog::backdrop{background:rgba(15,27,45,.45)}
 dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 .ph{width:112px;height:112px;border-radius:50%;background:#F3E7C8;color:#5E410C;border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;overflow:hidden;flex:none}.ph img{width:100%;height:100%;object-fit:cover}
+.evno{display:flex;align-items:center;border:1px solid #CDD5DF;border-radius:8px;background:#fff;overflow:hidden}.evno>span{padding:0 4px 0 10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);font-weight:500}.evno input{border:0!important;flex:1;font-family:'IBM Plex Mono',monospace;padding-left:0!important}.evno:focus-within{outline:2px solid var(--blue);outline-offset:1px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (min-width:700px){.wide{grid-column:span 2}}
 @media (max-width:640px){main{padding:16px}nav.side{gap:12px}.navlinks{flex-direction:row;flex-wrap:wrap}.staffbox{margin-top:0}}
@@ -224,7 +225,7 @@ function memberDialog(gs) {
   return `<dialog id="md"><form method="dialog" id="mf"><h2 id="mdTitle">New member</h2>
     <div class="form">${FIELDS.map(([k, label, type]) => `<label class="f">${label}<input type="${type || 'text'}" name="${k}" maxlength="120"></label>`).join('')}
       <label class="f" id="mdGroup">Group<select name="group_id"><option value="">No group yet</option>${groupOptions(gs)}</select></label>
-      <label class="f" id="mdNo">Member no. (optional)<input type="text" name="member_no" placeholder="Auto: EV-000123"></label></div>
+      <label class="f" id="mdNo">Member no. (optional)<span class="evno"><span aria-hidden="true">EV-</span><input type="text" name="member_no" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6 digits, blank = next number" aria-label="Member number, 6 digits after EV-"></span></label></div>
     <div id="mdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save" id="mdSave">Save</button></div></form></dialog>`;
 }
 function openMemberDialog(view, member, save) {
@@ -237,7 +238,12 @@ function openMemberDialog(view, member, save) {
   view.querySelector('#mdSave').onclick = async (e) => {
     e.preventDefault(); const data = {};
     FIELDS.forEach(([k]) => { const v = f.elements[k].value.trim(); if (!member || k !== 'passport_id' || v) data[k] = v; });
-    if (!member) { data.group_id = f.elements.group_id.value || null; data.member_no = f.elements.member_no.value.trim(); }
+    if (!member) {
+      data.group_id = f.elements.group_id.value || null;
+      const digits = f.elements.member_no.value.replace(/\D/g, '');
+      if (f.elements.member_no.value.trim() && digits.length !== 6) { flash(view.querySelector('#mdMsg'), 'Member number must be exactly 6 digits, e.g. 444444.', 'err'); return; }
+      data.member_no = digits;
+    }
     try { await save(data); d.close(); } catch (err) { flash(view.querySelector('#mdMsg'), err.message, 'err'); }
   };
   d.showModal();
@@ -286,7 +292,6 @@ async function viewMember(view, no) {
       ${tile('Play time', hm(s30.secs), s30.sessions + ' sessions · all time ' + hm(sAll.secs))}
       ${tile('Total buy-in', peso(s30.buy_in), 'From PPM')}
       ${tile('Rewards given', peso(s30.rewards), perHour(s30.rewards, s30.secs) + ' per play hour' + (s30.rewards_pending ? ' · ' + peso(s30.rewards_pending) + ' waiting' : ''))}
-      ${share ? tile('Share of group hours', share.group_seconds ? Math.round(share.member_seconds / share.group_seconds * 100) + '%' : '—', 'Of ' + esc(m.group_name) + ' · ' + hm(share.group_seconds)) : ''}
     </div>
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM</span></div>
       <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th>Group</th></tr></thead><tbody>
@@ -338,7 +343,7 @@ async function viewMember(view, no) {
   if (rm) rm.onclick = async () => { if (!confirm('Remove this photo?')) return; try { await api('/members/' + encodeURIComponent(no) + '/photo/remove', 'POST', {}); reload(); } catch (err) { alert(err.message); } };
   const renum = view.querySelector('#renum');
   if (renum) renum.onclick = async () => {
-    const next = (prompt(`New member number for ${m.name} (now ${m.member_no}).\nGame records, rewards and photo stay with this member. The old number still works in PPM.`, m.member_no) || '').trim();
+    const next = (prompt(`New member number for ${m.name} (now ${m.member_no}).\nType 6 digits — EV- is added automatically.\nGame records, rewards and photo stay with this member. The old number still works in PPM.`, m.member_no) || '').trim();
     if (!next || next.toUpperCase() === m.member_no.toUpperCase()) return;
     try { const r = await api('/members/' + encodeURIComponent(no) + '/number', 'POST', { member_no: next }); location.hash = '#/member/' + encodeURIComponent(r.member_no); }
     catch (err) { alert(err.message); }
@@ -522,7 +527,7 @@ async function viewUnmatched(view) {
     <div id="um"></div>
     <section class="card"><div class="tbl"><table><thead><tr><th>Typed in PPM</th><th class="num">Sessions</th><th class="num">Play time</th><th>Last seen</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
     ${data.refs.map((r, i) => `<tr><td><b>${esc(r.member_ref)}</b></td><td class="num">${r.sessions}</td><td class="num">${hm(r.secs)}</td><td class="muted">${day(r.last)}</td>
-      <td><form class="row" data-i="${i}" style="flex-wrap:nowrap"><div class="ac" style="flex:1"><label class="sr" for="u${i}">Member</label><input type="text" id="u${i}" placeholder="Member no. or nickname" style="width:100%"></div><button class="btn sm">Link</button></form></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Everything typed in PPM matches a member.</td></tr>'}
+      <td><form class="row" data-i="${i}" style="flex-wrap:nowrap"><div class="ac" style="flex:1"><label class="sr" for="u${i}">Member</label><input type="text" id="u${i}" inputmode="numeric" placeholder="6-digit member no., e.g. 444444" style="width:100%"></div><button class="btn sm">Link</button></form></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Everything typed in PPM matches a member.</td></tr>'}
     </tbody></table></div></section>`;
   view.querySelectorAll('form[data-i]').forEach((f) => {
     const input = f.querySelector('input'); memberPicker(input);

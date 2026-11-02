@@ -235,4 +235,17 @@ assert.equal((await call('/members', 'POST', { nickname: 'Copycat', member_no: '
 const fresh = (await call('/members', 'POST', { nickname: 'Fresh' }, boss.token)).body.member_no;
 assert.notEqual(fresh, 'EV-000002');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change');
+// Six digits are enough: EV- is added automatically everywhere.
+r = await call('/members', 'POST', { nickname: 'Six', member_no: '444444' }, boss.token);
+assert.equal(r.body.member_no, 'EV-444444');
+assert.equal((await call('/members', 'POST', { nickname: 'Dup', member_no: 'ev444444' }, boss.token)).status, 409);
+assert.equal((await call('/members/444444', 'GET', null, boss.token)).body.member.nickname, 'Six');
+assert.equal((await call('/members?q=444444', 'GET', null, boss.token)).body.members[0].member_no, 'EV-444444');
+const t2 = structuredClone(tables); t2[0].sessions = [{ seatId: 5, memberId: 'Bob 6', startTime: '2026-10-30 20:00:00', endTime: '2026-10-30 22:00:00', activeSeconds: 7200, restSeconds: 0, buyInAmount: 1000 },
+  { seatId: 6, memberId: '444444', startTime: '2026-10-30 20:00:00', endTime: '2026-10-30 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 1000 }];
+const ppmNow = (await call('/ppm', 'GET', null, boss.token)).body;
+assert.equal((await call('/ppm', 'PUT', { version: ppmNow.version, tables: t2 }, boss.token)).status, 200);
+assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, 3600, 'PPM seat typed as six digits matches');
+assert.equal((await call('/sessions/link', 'POST', { member_ref: 'Bob 6', member_no: '444444' }, boss.token)).body.linked, 1, 'unmatched names link by six digits');
+
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers');
