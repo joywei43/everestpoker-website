@@ -190,3 +190,6 @@ CREATE TABLE IF NOT EXISTS session_results(session_id INTEGER PRIMARY KEY REFERE
 -- When each PPM table was running (opened or resumed → stopped or paused), for operating hours.
 CREATE TABLE IF NOT EXISTS table_runs(run_key TEXT PRIMARY KEY, table_name TEXT NOT NULL, opened_at INTEGER NOT NULL, closed_at INTEGER, game_type TEXT NOT NULL DEFAULT '', blinds TEXT NOT NULL DEFAULT '');
 CREATE INDEX IF NOT EXISTS table_runs_open ON table_runs(opened_at);
+
+-- Operation Report: per business day, entered by managers. Amounts in pesos; NULL = not entered yet.
+CREATE TABLE IF NOT EXISTS daily_reports(day TEXT PRIMARY KEY, revenue INTEGER, bbj_in INTEGER, bbj_out INTEGER, note TEXT NOT NULL DEFAULT '', updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);

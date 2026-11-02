@@ -1,1 +1,872 @@
-<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/ppm/"><title>PPM Staff Login</title><a href="/ppm/">Open PPM staff login</a>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="favicon.png">
+<title>Everest Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<script src="../waiting-list/config.js"></script>
+<style>
+:root{--ink:#121212;--ink2:#1D1C1A;--ink3:#2C2719;--gold:#D1A647;--gold-d:#BF9339;--bg:#EEF1F5;--card:#FFFFFF;--line:#DDE3EA;--line2:#EEF1F5;--text:#1B2430;--muted:#5B6675;--blue:#1F5FA8;--blue-d:#16467D;--blue-l:#E3EDF9;--green:#1E6B43;--green-l:#DFF3E7;--red:#B42318;--red-l:#FDECEA;--amber:#6B4A00;--amber-l:#FFF1D1;--note:#FFF8E6;--note-line:#EBD9A6}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 'IBM Plex Sans','Noto Sans TC',system-ui,sans-serif}
+a{color:var(--blue)}a:hover{color:var(--blue-d)}
+button,input,select,textarea{font:inherit;color:inherit}
+.mono{font-family:'IBM Plex Mono',monospace}
+.app{display:flex;flex-wrap:wrap;min-height:100vh}
+nav.side{flex:1 1 220px;max-width:100%;background:var(--ink);color:#E6ECF3;padding:20px 14px;display:flex;flex-direction:column;gap:22px}
+.brand{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:4px 8px}.brand img{width:132px;height:auto}
+.brand b{letter-spacing:.2em;font-size:14px;color:var(--gold)}.brand small{display:block;font-size:12px;color:#A8A29A}
+.navlinks{display:flex;flex-direction:column;gap:3px}
+.navlinks a{color:#D8D2C8;text-decoration:none;padding:10px 12px;border-radius:8px;display:flex;justify-content:space-between;align-items:center}
+.navlinks a[aria-current=page]{background:var(--ink3);color:var(--gold);font-weight:600}
+.navlinks a:hover{background:#24221E;color:#fff}
+.pill{background:#2C4363;color:#fff;border-radius:999px;padding:0 8px;font-size:12px;line-height:20px}
+.staffbox{margin-top:auto;padding:12px;border-radius:10px;background:var(--ink2);font-size:13px}
+.staffbox small{color:#A8A29A;display:block}
+.staffbox button{margin-top:8px;background:none;border:1px solid #4A443A;color:#D8D2C8;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px}
+main{flex:999 1 560px;min-width:0;padding:24px 28px 48px;display:flex;flex-direction:column;gap:18px}
+h1{margin:0;font-size:24px}h2{margin:0;font-size:17px}
+.sub{color:var(--muted);margin:4px 0 0}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.between{justify-content:space-between}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.card.note{background:var(--note);border-color:var(--note-line)}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile .k{font-size:13px;color:var(--muted)}.tile .v{font-size:24px;font-weight:700;margin-top:2px}.tile .s{font-size:12px;color:var(--muted)}
+.btn{height:38px;padding:0 14px;border-radius:8px;border:1px solid #CDD5DF;background:#fff;cursor:pointer;font-weight:500;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--text)}
+.btn:hover{border-color:#9AA7B6}
+.btn.primary{background:var(--gold);border-color:var(--gold);color:#1B1406;font-weight:600}.btn.primary:hover{background:var(--gold-d);border-color:var(--gold-d)}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn.sm{height:32px;padding:0 10px;font-size:13px}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+input[type=text],input[type=search],input[type=number],input[type=date],input[type=password],input[type=email],select,textarea{height:38px;border:1px solid #CDD5DF;border-radius:8px;padding:0 10px;background:#fff;min-width:0}
+textarea{height:auto;padding:8px 10px;resize:vertical;width:100%}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:#3A4554}
+.form{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:600;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px;border-bottom:1px solid var(--line2);vertical-align:top}
+tr.click{cursor:pointer}tr.click:hover td{background:#F6F8FB}
+td.num,th.num{text-align:right;white-space:nowrap}
+.chip{display:inline-block;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;background:var(--bg);color:#3A4554;white-space:nowrap}
+.chip.green{background:var(--green-l);color:var(--green)}.chip.red{background:var(--red-l);color:var(--red)}.chip.amber{background:var(--amber-l);color:var(--amber)}.chip.blue{background:var(--blue-l);color:#1F4F8A}.chip.dark{background:#2A3442;color:#fff}
+.muted{color:var(--muted)}.small{font-size:12px}
+.bar{height:8px;border-radius:999px;background:#E4E9EF;overflow:hidden;flex:1}.bar>i{display:block;height:100%;background:var(--blue);border-radius:999px}
+.gcard{text-align:left;background:#fff;border:2px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;display:flex;flex-direction:column;gap:8px}
+.gcard[aria-pressed=true]{border-color:var(--blue)}
+.msg{padding:10px 14px;border-radius:10px;background:var(--blue-l);color:#1F4F8A}.msg.err{background:var(--red-l);color:var(--red)}.msg.ok{background:var(--green-l);color:var(--green)}
+.login{max-width:380px;margin:12vh auto;padding:28px}
+.ac{position:relative}.ac ul{position:absolute;z-index:5;left:0;right:0;top:100%;margin:4px 0 0;padding:4px;list-style:none;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(15,27,45,.12);max-height:260px;overflow:auto}
+.ac li button{width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:6px;cursor:pointer}.ac li button:hover,.ac li button:focus{background:var(--blue-l)}
+dialog{border:0;border-radius:14px;padding:0;max-width:720px;width:calc(100% - 32px)}dialog::backdrop{background:rgba(15,27,45,.45)}
+dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
+.ph{width:112px;height:112px;border-radius:50%;background:#F3E7C8;color:#5E410C;border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;overflow:hidden;flex:none}.ph img{width:100%;height:100%;object-fit:cover}
+.evno{display:flex;align-items:center;border:1px solid #CDD5DF;border-radius:8px;background:#fff;overflow:hidden}.evno>span{padding:0 4px 0 10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);font-weight:500}.evno input{border:0!important;flex:1;font-family:'IBM Plex Mono',monospace;padding-left:0!important}.evno:focus-within{outline:2px solid var(--blue);outline-offset:1px}
+.seg{display:inline-flex;background:#fff;border:1px solid #CDD5DF;border-radius:10px;padding:3px;gap:2px}.seg button{height:34px;padding:0 14px;border:0;border-radius:8px;background:transparent;font-weight:600;cursor:pointer;color:#3A4554}.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+.linkbtn{background:none;border:0;padding:0;color:var(--blue);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline dotted}
+.st{width:14px;height:14px;border-radius:50%;border:2px solid #9AA7B6;display:block}.st.on{background:var(--ink);border-color:var(--ink)}.st.rest{background:#E2B04A;border-color:#E2B04A}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (min-width:700px){.wide{grid-column:span 2}}
+@media (max-width:640px){main{padding:16px}nav.side{gap:12px}.navlinks{flex-direction:row;flex-wrap:wrap}.staffbox{margin-top:0}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(() => {
+'use strict';
+const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
+const TOKEN_KEY = 'ppm-session', USER_KEY = 'ppm-user', ROLE_KEY = 'ppm-role';
+const TYPES = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', hotel: 'Hotel Stay', transportation: 'Transportation', tournament_ticket: 'Tournament Tickets' };
+const TYPE_CHIP = { free_chip: 'blue', promo_cash: 'green', promo_chip: 'amber', hotel: '', transportation: '', tournament_ticket: 'dark' };
+const root = document.getElementById('root');
+let token = sessionStorage.getItem(TOKEN_KEY) || '';
+let staff = sessionStorage.getItem(USER_KEY) || '';
+let role = sessionStorage.getItem(ROLE_KEY) || 'admin';
+const isManager = () => role !== 'staff';
+const isMaster = () => role === 'master';
+let groupsCache = null;
+
+// ---------- helpers ----------
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const peso = (n) => '₱' + Math.round(Number(n) || 0).toLocaleString('en-US');
+const hm = (s) => { s = Math.max(0, Math.round(Number(s) || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h + 'h ' + String(m).padStart(2, '0') + 'm'; };
+const hhmm = (s) => { s = Math.max(0, Math.round(Number(s) || 0)); return String(Math.floor(s / 3600)).padStart(2, '0') + ':' + String(Math.floor((s % 3600) / 60)).padStart(2, '0'); };
+const fmt = (t, opts) => t ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', ...opts }).format(new Date(t * 1000)) : '—';
+const day = (t) => fmt(t, { day: 'numeric', month: 'short', year: 'numeric' });
+const time = (t) => fmt(t, { hour: '2-digit', minute: '2-digit', hour12: false });
+const dateTime = (t) => fmt(t, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+const daysAgo = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(Date.now() - n * 864e5));
+const perHour = (amount, secs) => secs > 0 ? peso(amount / (secs / 3600)) : '—';
+const statusChip = (s) => `<span class="chip ${s === 'active' ? 'green' : s === 'suspended' ? 'amber' : 'red'}">${esc(s)}</span>`;
+const groupChip = (name) => name ? `<span class="chip blue">${esc(name)}</span>` : '<span class="chip amber">No group</span>';
+
+async function api(path, method = 'GET', body) {
+  const res = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  let data = {}; try { data = await res.json(); } catch (e) {}
+  if (res.status === 401) { token = ''; sessionStorage.removeItem(TOKEN_KEY); render(); throw new Error('Please sign in again.'); }
+  if (res.status === 301 && data.moved_to) { const e = new Error('moved'); e.movedTo = data.moved_to; throw e; }
+  if (!res.ok) { const e = new Error(data.error || 'Request failed (' + res.status + ')'); e.code = data.code; e.data = data; throw e; }
+  return data;
+}
+async function groups() { if (!groupsCache) groupsCache = (await api('/groups')).groups; return groupsCache; }
+const groupOptions = (gs, selected, extra = '') => extra + gs.map((g) => `<option value="${esc(g.id)}" ${g.id === selected ? 'selected' : ''}>${esc(g.name)}${g.kind === 'inhouse' ? ' (Marketing)' : ''}</option>`).join('');
+function flash(el, text, kind = '') { el.innerHTML = text ? `<div class="msg ${kind}" role="status">${esc(text)}</div>` : ''; }
+// The signed-in account is recorded as the actor by the server; this is only for display and defaults.
+function needStaff() { return staff; }
+async function loadMe() {
+  try { const me = await api('/me'); const wasRole = role; staff = me.user || ''; role = me.role || 'admin'; sessionStorage.setItem(USER_KEY, staff); sessionStorage.setItem(ROLE_KEY, role); if (wasRole !== role) render(); else renderStaff(); } catch (e) {}
+}
+// Old addresses (from /members/) still work.
+const ALIASES = { operation: 'liveoperation', groups: 'playergroups', unmatched: 'unmatchedppm', staff: 'staffaccounts', import: 'importmembers', report: 'operationreport' };
+function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: ALIASES[page] || page || (isManager() ? 'liveoperation' : 'members'), arg: rest.map(decodeURIComponent).join('/') }; }
+
+// ---------- shell ----------
+function render() {
+  if (!token) return renderLogin();
+  const { page } = parseHash();
+  const link = (p, label, extra = '') => `<a href="#/${p}" ${page === p || (p === 'members' && page === 'member') ? 'aria-current="page"' : ''}>${label}${extra}</a>`;
+  root.innerHTML = `<div class="app">
+    <nav class="side" aria-label="Main">
+      <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Admin console</small></div></div>
+      <div class="navlinks">
+        ${isManager() ? link('liveoperation', 'Live Operation') : ''}
+        ${isManager() ? link('operationreport', 'Operation Report') : ''}
+        ${link('members', 'Members')}
+        ${link('playergroups', 'Player groups')}
+        ${link('unmatchedppm', 'Unmatched PPM')}
+        ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
+        ${link('promotions', 'Promotions')}
+        ${isMaster() ? link('importmembers', 'Import members') : ''}
+        ${isMaster() ? link('staffaccounts', 'Staff accounts') : ''}
+        <a href="../ppm/">PPM tables ↗</a>
+      </div>
+      <div class="staffbox" id="staffbox"></div>
+    </nav>
+    <main id="view" tabindex="-1"></main>
+  </div>`;
+  renderStaff();
+  const view = document.getElementById('view');
+  const pages = { members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isMaster() ? viewImport : viewMembers };
+  refreshPending();
+  (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
+}
+function renderStaff() {
+  const box = document.getElementById('staffbox'); if (!box) return;
+  box.innerHTML = `<small>Signed in as</small><div><b>${esc(staff || '—')}</b> <span class="small" style="color:var(--gold)">${isMaster() ? 'Master' : isManager() ? 'Manager' : 'Staff'}</span></div>
+    <button type="button" id="logout">Sign out</button>`;
+  box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; staff = ''; sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USER_KEY); sessionStorage.removeItem(ROLE_KEY); render(); };
+}
+function renderLogin() {
+  root.innerHTML = `<div class="card login"><div style="background:#121212;border-radius:12px;padding:18px;margin:-8px -8px 18px;text-align:center"><img src="logo.png" alt="Everest Poker Room" style="width:160px;height:auto"></div><h1>Everest members</h1><p class="sub">Staff sign in</p>
+    <form id="lf" style="margin-top:16px;display:flex;flex-direction:column;gap:12px"><label class="f">Username<input type="text" id="un" autocomplete="username" required maxlength="60" autocapitalize="off" spellcheck="false"></label>
+    <label class="f">Password<input type="password" id="pw" autocomplete="current-password" required maxlength="200"></label>
+    <button class="btn primary">Sign in</button></form><div id="lm" style="margin-top:12px"></div></div>`;
+  document.getElementById('lf').onsubmit = async (e) => {
+    e.preventDefault(); const m = document.getElementById('lm');
+    try {
+      const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: document.getElementById('un').value.trim(), password: document.getElementById('pw').value }) });
+      const d = await res.json(); if (!res.ok) throw new Error(d.error || 'Sign in failed');
+      token = d.token; staff = d.user || ''; role = d.role || 'admin'; sessionStorage.setItem(TOKEN_KEY, token); sessionStorage.setItem(USER_KEY, staff); sessionStorage.setItem(ROLE_KEY, role); render();
+    } catch (err) { flash(m, err.message, 'err'); }
+  };
+}
+
+// ---------- member search box (used on several pages) ----------
+function memberPicker(input, onPick) {
+  const wrap = input.parentElement; const list = document.createElement('ul'); list.hidden = true; wrap.appendChild(list);
+  let timer, seq = 0;
+  input.setAttribute('autocomplete', 'off');
+  input.addEventListener('input', () => {
+    clearTimeout(timer); const q = input.value.trim(); if (!q) { list.hidden = true; return; }
+    timer = setTimeout(async () => {
+      const mine = ++seq; let res; try { res = await api('/members?limit=8&q=' + encodeURIComponent(q)); } catch (e) { return; }
+      if (mine !== seq) return;
+      list.innerHTML = res.members.map((m) => `<li><button type="button" data-no="${esc(m.member_no)}"><span class="mono">${esc(m.member_no)}</span> · ${esc(m.nick_label || m.nickname || m.name)} <span class="muted small">${esc(m.name)}${m.group_name ? ' · ' + esc(m.group_name) : ''}</span></button></li>`).join('') || '<li class="muted small" style="padding:8px">No member found</li>';
+      list.hidden = false;
+      list.querySelectorAll('button').forEach((b) => b.onclick = () => { input.value = b.dataset.no; list.hidden = true; onPick && onPick(b.dataset.no); });
+    }, 200);
+  });
+  input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; }, 150));
+}
+
+// ---------- Members list ----------
+async function viewMembers(view) {
+  const gs = await groups();
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  view.innerHTML = `<div class="row between"><div><h1>Members</h1><p class="sub">Search by member number, nickname, name, phone or Telegram.</p></div>
+    <button class="btn primary" id="newBtn">New member</button></div>
+    <div class="card"><form class="row" id="sf">
+      <label class="sr" for="q">Search</label><input type="search" id="q" placeholder="EV-000123, nickname, name…" style="flex:1 1 240px" value="${esc(params.get('q') || '')}">
+      <label class="sr" for="g">Group</label><select id="g"><option value="">All groups</option>${groupOptions(gs, params.get('group'))}<option value="unassigned" ${params.get('group') === 'unassigned' ? 'selected' : ''}>No group</option></select>
+      <button class="btn">Search</button></form>
+      <div id="list" style="margin-top:12px"></div></div>
+    ${memberDialog(gs)}`;
+  let offset = 0, rows = [];
+  const load = async (more) => {
+    if (!more) { offset = 0; rows = []; }
+    const q = view.querySelector('#q').value.trim(), g = view.querySelector('#g').value;
+    const res = await api(`/members?limit=50&offset=${offset}&q=${encodeURIComponent(q)}&group=${encodeURIComponent(g)}`);
+    rows = rows.concat(res.members); offset += res.members.length;
+    view.querySelector('#list').innerHTML = `<p class="muted small">${res.total} member${res.total === 1 ? '' : 's'}</p><div class="tbl"><table><thead><tr><th>Member no.</th><th>Name</th><th>Nickname</th><th>Group</th><th>Status</th><th>Telegram</th><th>Phone</th></tr></thead><tbody>
+      ${rows.map((m) => `<tr class="click" data-no="${esc(m.member_no)}" tabindex="0"><td class="mono">${esc(m.member_no)}</td><td><b>${esc(m.name)}</b></td><td>${esc(m.nick_label || m.nickname)}</td><td>${groupChip(m.group_name)}</td><td>${statusChip(m.status)}</td><td>${esc(m.telegram)}</td><td>${esc(m.phone)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No members yet. Import the Google Sheet or add one.</td></tr>'}
+      </tbody></table></div>${offset < res.total ? '<button class="btn" id="more" style="margin-top:10px">Load more</button>' : ''}`;
+    view.querySelectorAll('tr.click').forEach((tr) => { const go = () => location.hash = '#/member/' + encodeURIComponent(tr.dataset.no); tr.onclick = go; tr.onkeydown = (e) => { if (e.key === 'Enter') go(); }; });
+    const moreBtn = view.querySelector('#more'); if (moreBtn) moreBtn.onclick = () => load(true);
+  };
+  view.querySelector('#sf').onsubmit = (e) => { e.preventDefault(); load(false); };
+  view.querySelector('#newBtn').onclick = () => openMemberDialog(view, null, async (data) => {
+    let res;
+    try { res = await api('/members', 'POST', { ...data, staff: needStaff() }); }
+    catch (err) {
+      if (err.code !== 'possible_duplicate') throw err;
+      const list = err.data.matches.map((x) => `• ${x.member_no}  ${x.nickname || x.name}${x.nationality ? ' (' + x.nationality + ')' : ''} — same ${x.why.join(', ')}`).join('\n');
+      if (!confirm(`This player may already be a member:\n\n${list}\n\nOK = create a new member anyway\nCancel = go back (search the existing member instead)`)) throw new Error('Not created. Check the existing member above first.');
+      res = await api('/members', 'POST', { ...data, staff: needStaff(), confirm_duplicate: true });
+    }
+    location.hash = '#/member/' + encodeURIComponent(res.member_no);
+  });
+  await load(false);
+}
+const NATIONALITIES = ['Taiwan', 'Philippines', 'South Korea', 'Japan', 'Hong Kong', 'Macau', 'China', 'Singapore', 'Thailand', 'Indonesia', 'Malaysia', 'Vietnam', 'India', 'United States', 'Canada', 'Australia', 'United Kingdom'];
+const natField = () => `<label class="f">Nationality<select name="nat_sel"><option value="">—</option>${NATIONALITIES.map((n) => `<option>${n}</option>`).join('')}<option value="other">Other…</option></select>
+  <input type="text" name="nationality" maxlength="60" placeholder="Type the country" hidden></label>`;
+const FIELDS = [['surname', 'Surname'], ['middle_name', 'Middle name'], ['family_name', 'Family name'], ['nickname', 'Nickname'], ['nationality', 'Nationality'], ['birthday', 'Birthday', 'date'], ['passport_id', 'Passport / ID'], ['email', 'Email', 'email'], ['phone', 'Phone'], ['whatsapp', 'WhatsApp'], ['telegram', 'Telegram'], ['line', 'LINE'], ['referral_id', 'Referral ID'], ['language', 'Language']];
+function memberDialog(gs) {
+  return `<dialog id="md"><form method="dialog" id="mf"><h2 id="mdTitle">New member</h2>
+    <div class="form">${FIELDS.map(([k, label, type]) => k === 'nationality' ? natField() : `<label class="f">${label}<input type="${type || 'text'}" name="${k}" maxlength="120"></label>`).join('')}
+      <label class="f" id="mdGroup">Group<select name="group_id"><option value="">No group yet</option>${groupOptions(gs)}</select></label>
+      <label class="f" id="mdNo">Member no. (optional)<span class="evno"><span aria-hidden="true">EV-</span><input type="text" name="member_no" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6 digits" aria-label="Member number, 6 digits after EV-"></span></label>
+      <label class="f" id="mdRemark" style="grid-column:1/-1">Remark<textarea name="staff_notes" rows="3" maxlength="4000" placeholder="Anything the team should know, e.g. prefers Table 3, came with Kevin"></textarea></label></div>
+    <div id="mdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save" id="mdSave">Save</button></div></form></dialog>`;
+}
+function openMemberDialog(view, member, save) {
+  const d = view.querySelector('#md'), f = view.querySelector('#mf');
+  f.reset(); view.querySelector('#mdTitle').textContent = member ? 'Edit profile' : 'New member';
+  view.querySelector('#mdGroup').hidden = !!member; view.querySelector('#mdNo').hidden = !!member; view.querySelector('#mdRemark').hidden = !!member;
+  if (member) FIELDS.forEach(([k]) => { if (k !== 'passport_id') f.elements[k].value = member[k] || ''; });
+  // New member: fill in the smallest free number; if staff leave it as is, the server assigns it (safe if two people add at once).
+  let suggested = '';
+  if (!member) {
+    const fill = (r) => { suggested = String(r.member_no || '').replace(/^EV-/, ''); if (!f.elements.member_no.value) f.elements.member_no.value = suggested; };
+    api('/members/next-number').then(fill).catch(() => api('/members/next-number').then(fill)).catch((err) => flash(view.querySelector('#mdMsg'), 'Could not load the next member number (' + err.message + '). Leave it blank and the system will assign one.', 'err'));
+  }
+  if (member) f.elements.passport_id.placeholder = member.passport_last4 ? '•••• ' + member.passport_last4 + ' (leave blank to keep)' : '';
+  const nat = (member && member.nationality) || '';
+  f.elements.nat_sel.value = !nat ? '' : NATIONALITIES.includes(nat) ? nat : 'other';
+  f.elements.nationality.hidden = f.elements.nat_sel.value !== 'other';
+  f.elements.nat_sel.onchange = () => { const other = f.elements.nat_sel.value === 'other'; f.elements.nationality.hidden = !other; if (other) { f.elements.nationality.value = ''; f.elements.nationality.focus(); } };
+  flash(view.querySelector('#mdMsg'), '');
+  view.querySelector('#mdSave').onclick = async (e) => {
+    e.preventDefault(); const data = {};
+    FIELDS.forEach(([k]) => { const v = f.elements[k].value.trim(); if (!member || k !== 'passport_id' || v) data[k] = v; });
+    if (f.elements.nat_sel.value !== 'other') data.nationality = f.elements.nat_sel.value;
+    if (!member) {
+      data.staff_notes = f.elements.staff_notes.value.trim();
+      data.group_id = f.elements.group_id.value || null;
+      const digits = f.elements.member_no.value.replace(/\D/g, '');
+      if (f.elements.member_no.value.trim() && digits.length !== 6) { flash(view.querySelector('#mdMsg'), 'Member number must be exactly 6 digits, e.g. 444444.', 'err'); return; }
+      data.member_no = digits === suggested ? '' : digits;
+    }
+    try { await save(data); d.close(); } catch (err) { flash(view.querySelector('#mdMsg'), err.message, 'err'); }
+  };
+  d.showModal();
+}
+
+// ---------- One member ----------
+async function viewMember(view, no) {
+  let gs, data;
+  try { [gs, data] = await Promise.all([groups(), api('/members/' + encodeURIComponent(no))]); }
+  catch (e) { if (e.movedTo) { location.replace('#/member/' + encodeURIComponent(e.movedTo)); return; } throw e; }
+  const m = data.member, s30 = data.stats.last30, sAll = data.stats.all;
+  let period = (() => { try { return localStorage.getItem('everest-period') || '30'; } catch (e) { return '30'; } })();
+  const since = Date.now() / 1000 - 30 * 86400;
+  const rw30 = data.rewards.filter((r) => !r.voided && r.approved_at && r.given_at >= since);
+  const byType = Object.keys(TYPES).map((t) => ({ t, amt: rw30.filter((r) => r.type === t).reduce((a, r) => a + r.amount, 0) })).filter((x) => x.amt > 0).sort((a, b) => b.amt - a.amt);
+  const maxType = Math.max(1, ...byType.map((x) => x.amt));
+  view.innerHTML = `<div class="row between"><div class="muted"><a href="#/members">Members</a> / <span class="mono">${esc(m.member_no)}</span></div>
+      <div class="row">${isMaster() ? '<button class="btn" id="merge" title="This is a duplicate: move everything to the member you keep">Merge into…</button><button class="btn danger" id="delm">Delete</button><button class="btn" id="renum">Change member no.</button>' : ''}<button class="btn" id="edit">Edit profile</button></div></div>
+    <section class="card" style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:none">
+        <div class="ph" id="ph" role="img" aria-label="Member photo">${esc((m.nickname || m.name || '?').trim().slice(0, 2).toUpperCase())}</div>
+        <label class="btn sm" style="cursor:pointer">${m.has_photo ? 'Change photo' : 'Add photo'}<input type="file" id="phIn" accept="image/*" class="sr"></label>
+        ${m.has_photo ? '<button type="button" class="btn sm" id="phRm">Remove</button>' : ''}
+        <div id="phMsg" class="small"></div>
+      </div>
+      <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:8px">
+        <div class="row" style="align-items:baseline"><h1>${esc(m.name)}</h1>${m.nickname ? `<span class="muted">“${esc(m.nick_label || m.nickname)}”</span>` : ''}</div>
+        <div class="row">${statusChip(m.status)}${m.language ? `<span class="chip">Language: ${esc(m.language)}</span>` : ''}${m.nationality ? `<span class="chip">${esc(m.nationality)}</span>` : ''}</div>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:6px;gap:10px 20px">
+          ${[['Member no.', `<span class="mono">${esc(m.member_no)}</span>`], ['Birthday', esc(m.birthday) || '—'], ['Passport / ID', m.passport_last4 ? '•••• ' + esc(m.passport_last4) : '—'], ['Phone', esc(m.phone) || '—'], ['WhatsApp', esc(m.whatsapp) || '—'], ['Telegram', esc(m.telegram) || '—'], ['LINE', esc(m.line) || '—'], ['Email', esc(m.email) || '—'], ['Referral', esc(m.referral_id) || '—'], ['Member since', day(m.created_at)]]
+            .map(([k, v]) => `<div><div class="small muted">${k}</div><div>${v}</div></div>`).join('')}
+        </div>
+      </div>
+      <div style="flex:0 1 300px;display:flex;flex-direction:column;gap:10px;padding:14px 16px;background:#F6F7F9;border-radius:10px">
+        <div class="small" style="font-weight:600">PLAYER GROUP</div>
+        <div><div style="font-size:20px;font-weight:700">${m.group_name ? esc(m.group_name) : '<span style="color:var(--amber)">No group</span>'}</div>
+          <div class="small muted">${m.group_owner ? (m.group_id === 'inhouse' ? 'In-House · owner ' : 'Host · ') + esc(m.group_owner) : 'Assign a group so this player has an owner.'}</div></div>
+        ${isMaster() ? `<form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
+          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button>
+          <label class="small" style="display:flex;gap:6px;align-items:flex-start;flex-basis:100%"><input type="checkbox" id="gpast" style="margin-top:2px"> Correction: the group was set wrong — move <b>all past hours and rewards</b> too</label></form>` : '<div class="small" style="color:var(--amber)">Only the master account can change the group.</div>'}
+        <div class="small muted">New hours go to the new group from now on; past hours stay where they were.</div>
+        <div id="gmsg"></div>
+      </div>
+    </section>
+    <div class="row between"><div role="group" aria-label="Period" class="seg">
+        <button type="button" data-period="30" aria-pressed="${period === '30'}">Last 30 days</button><button type="button" data-period="all" aria-pressed="${period === 'all'}">All time</button></div>
+      <span class="small muted">Play time from PPM, rest excluded</span></div>
+    <div class="grid" id="statTiles">${statTiles(period === 'all' ? sAll : s30)}</div>
+    ${(data.playing || []).map((x) => `<section class="card" style="border:2px solid var(--gold);display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center">
+      <span class="chip ${x.status === 'rest' ? 'amber' : 'green'}">${x.status === 'rest' ? 'Resting now' : 'Playing now'}</span>
+      <div><div class="small muted">Table · Seat</div><b>${esc(x.table)} · S${x.seat}</b></div>
+      <div><div class="small muted">Game</div><b>${esc(x.game_type)} ${esc(x.blinds)}</b></div>
+      <div><div class="small muted">Since</div><b class="mono">${time(x.started)}</b></div>
+      <div><div class="small muted">Play time so far</div><b class="mono">${hhmm(x.active_seconds)}</b></div>
+      <div><div class="small muted">Rest</div><span class="mono muted">${hhmm(x.rest_seconds)}</span></div>
+      <div><div class="small muted">Buy-in</div><b>${x.buy_in === null ? '—' : peso(x.buy_in)}</b></div>
+      <div class="small muted" style="flex:1 1 220px">PPM name "${esc(x.ref)}"${x.linked ? ' · linked by staff' : ' · matched automatically'}. Added to Game sessions and totals when the seat is cleared.</div>
+    </section>`).join('')}
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM when the player leaves the seat</span></div>
+      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
+      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)} ${restBadge(x.rest_seconds, x.active_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
+        <td class="num">${isManager() ? `<button type="button" class="linkbtn" data-co="${x.id}" title="Enter or correct the cash-out">${x.cash_out == null ? 'Add' : (x.busted ? 'Busted' : peso(x.cash_out))}</button>` : (x.cash_out == null ? '—' : x.busted ? 'Busted' : peso(x.cash_out))}</td>
+        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
+      </tbody></table></div></section>
+    <section class="card" style="display:flex;flex-direction:column;gap:14px">
+      <div class="row between"><h2>Rewards received</h2><span class="chip dark">Staff only</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:20px">
+        <div style="flex:1 1 200px;padding:14px 16px;background:#F6F7F9;border-radius:10px"><div class="small muted">Spent on this player · 30 days</div><div style="font-size:26px;font-weight:700">${peso(s30.rewards)}</div>
+          <div class="small">${perHour(s30.rewards, s30.secs)} per play hour</div><div class="small muted" style="margin-top:4px">All time: ${peso(sAll.rewards)}</div>${sAll.rewards_pending ? `<div class="small" style="margin-top:4px;color:var(--amber)">${peso(sAll.rewards_pending)} waiting for a manager</div>` : ''}</div>
+        <div style="flex:2 1 300px;display:flex;flex-direction:column;gap:8px;justify-content:center">${byType.map((x) => `<div class="row small" style="flex-wrap:nowrap"><span style="width:100px">${TYPES[x.t]}</span><div class="bar"><i style="width:${Math.round(x.amt / maxType * 100)}%"></i></div><b style="width:90px;text-align:right">${peso(x.amt)}</b></div>`).join('') || '<span class="muted small">No rewards in the last 30 days.</span>'}</div>
+      </div>
+      <form id="rf" class="form" style="background:#F6F7F9;border-radius:10px;padding:14px">
+        <label class="f">Type<select name="type" required>${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+        <label class="f">Value (₱)<input type="number" name="amount" min="0" step="1" required></label>
+        <label class="f">Date<input type="date" name="date" value="${today()}" max="${today()}"></label>
+        <label class="f wide">Detail<input type="text" name="detail" maxlength="200" placeholder="e.g. PromoChip code, Midori 1 night, airport transfer"></label>
+        <label class="f">Recorded by<input type="text" name="recorded_by" value="${esc(staff)}" required maxlength="60"></label>
+        ${isManager() ? '<label class="f">Approved by<input type="text" name="approved_by" value="' + esc(staff) + '" maxlength="60"></label>' : '<div class="small muted" style="align-self:end">A manager will approve this.</div>'}
+        <div style="align-self:end"><button class="btn primary">Record reward</button></div>
+        <div id="rmsg" style="grid-column:1/-1"></div>
+      </form>
+      <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Charged to</th><th>Recorded · approved</th><th></th></tr></thead><tbody>
+      ${data.rewards.map((r) => `<tr style="${r.voided ? 'opacity:.55;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small" style="text-decoration:none">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}${r.approved_at ? ' · ' + esc(r.approved_by) : (r.voided ? '' : ' · <span class="chip amber">Waiting</span>')}</td><td class="row" style="flex-wrap:nowrap">${!r.voided && !r.approved_at && isManager() ? `<button class="btn sm primary" data-approve="${r.id}">Approve</button>` : ''}${!r.voided && isMaster() ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing recorded yet.</td></tr>'}
+      </tbody></table></div>
+      <p class="small muted" style="margin:0">Chips, hotel stays, transportation and tournament tickets are recorded at their peso value so every type adds up. PromoChip counts as Free Chip. Each reward is charged to the player's group on the date it was given.</p>
+    </section>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+      <section class="card note" style="flex:1 1 320px"><h2>Remark</h2><form id="nf" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+        <label class="sr" for="notes">Remark</label><textarea id="notes" rows="4" maxlength="4000">${esc(m.staff_notes)}</textarea>
+        <div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Status<select id="status" ${isMaster() ? '' : 'disabled title="Master account only"'}>${['active', 'suspended', 'banned'].map((s) => `<option ${s === m.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label><button class="btn sm">Save</button><span id="nmsg"></span></div></form></section>
+      <section class="card" style="flex:1 1 280px"><h2>Group history</h2><div style="margin-top:8px">
+        ${data.group_history.map((h) => `<div style="padding:8px 0;border-top:1px solid var(--line2)"><b>${esc(h.group_name || 'No group')}</b> <span class="small muted">from ${dateTime(h.effective_from)}</span><div class="small muted">${esc(h.changed_by)}${h.note ? ' · ' + esc(h.note) : ''}</div></div>`).join('') || '<p class="muted small">Never assigned.</p>'}
+      </div></section>
+      <section class="card" style="flex:1 1 280px"><h2>Audit log</h2><div style="margin-top:8px">
+        ${data.audit.map((a) => `<div style="padding:8px 0;border-top:1px solid var(--line2)" class="small"><div>${esc(a.action)} ${esc(a.detail)}</div><div class="muted">${dateTime(a.at)} · ${esc(a.actor || '—')}</div></div>`).join('') || '<p class="muted small">No entries.</p>'}
+      </div></section>
+    </div>
+    ${memberDialog(gs)}`;
+  const reload = () => viewMember(view, no).catch((e) => flash(view, e.message, 'err'));
+  if (m.has_photo) api('/members/' + encodeURIComponent(no) + '/photo').then((ph) => { const img = new Image(); img.alt = ''; img.src = ph.data; const box = view.querySelector('#ph'); box.textContent = ''; box.appendChild(img); }).catch(() => {});
+  view.querySelector('#phIn').onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const msg = view.querySelector('#phMsg'); msg.textContent = 'Uploading…';
+    try { await api('/members/' + encodeURIComponent(no) + '/photo', 'PUT', { data: await squarePhoto(file) }); reload(); }
+    catch (err) { msg.textContent = err.message; msg.style.color = 'var(--red)'; }
+  };
+  const rm = view.querySelector('#phRm');
+  if (rm) rm.onclick = async () => { if (!confirm('Remove this photo?')) return; try { await api('/members/' + encodeURIComponent(no) + '/photo/remove', 'POST', {}); reload(); } catch (err) { alert(err.message); } };
+  const merge = view.querySelector('#merge');
+  if (merge) merge.onclick = async () => {
+    const into = (prompt(`Merge ${m.member_no} ${m.name} into which member?\nType the member number you want to KEEP (6 digits).\n\nGame records, rewards, photo and remark move there. Blank profile fields are filled from this one.\n${m.member_no} is removed and its number keeps working in PPM for the kept member.`) || '').trim();
+    if (!into) return;
+    let keep; try { keep = (await api('/members/' + encodeURIComponent(into))).member; } catch (err) { alert(err.movedTo ? 'That number now belongs to ' + err.movedTo + '. Type that number instead.' : err.message); return; }
+    if (keep.member_no === m.member_no) { alert('Choose a different member to keep.'); return; }
+    if (!confirm(`Keep ${keep.member_no} ${keep.name}${keep.nickname ? ' (' + keep.nickname + ')' : ''}\nRemove ${m.member_no} ${m.name}${m.nickname ? ' (' + m.nickname + ')' : ''}\n\nThis cannot be undone. Merge now?`)) return;
+    try { const r = await api('/members/' + encodeURIComponent(no) + '/merge', 'POST', { into: keep.member_no }); alert(`Merged: ${r.moved.sessions} game records and ${r.moved.rewards} rewards moved to ${r.member_no}.`); location.hash = '#/member/' + encodeURIComponent(r.member_no); }
+    catch (err) { alert(err.message); }
+  };
+  const delm = view.querySelector('#delm');
+  if (delm) delm.onclick = async () => {
+    if (!confirm(`Delete ${m.member_no} ${m.name}?\n\nIf this is a duplicate of another member, use "Merge into…" instead so nothing is lost.`)) return;
+    const path = '/members/' + encodeURIComponent(no) + '/delete';
+    try { await api(path, 'POST', {}); }
+    catch (err) {
+      if (err.code !== 'has_records') { alert(err.message); return; }
+      if (!confirm(`${m.member_no} has ${err.data.sessions} game records and ${err.data.rewards} rewards.\n\nDeleting sends the game records back to Unmatched PPM and removes the rewards.\nTo keep them, Cancel and use "Merge into…".\n\nDelete anyway?`)) return;
+      try { await api(path, 'POST', { confirm: true }); } catch (e2) { alert(e2.message); return; }
+    }
+    alert(m.member_no + ' deleted.'); location.hash = '#/members';
+  };
+  const renum = view.querySelector('#renum');
+  if (renum) renum.onclick = async () => {
+    const next = (prompt(`New member number for ${m.name} (now ${m.member_no}).\nType 6 digits — EV- is added automatically.\nGame records, rewards and photo stay with this member. The old number still works in PPM.`, m.member_no) || '').trim();
+    if (!next || next.toUpperCase() === m.member_no.toUpperCase()) return;
+    try { const r = await api('/members/' + encodeURIComponent(no) + '/number', 'POST', { member_no: next }); location.hash = '#/member/' + encodeURIComponent(r.member_no); }
+    catch (err) { alert(err.message); }
+  };
+  view.querySelector('#edit').onclick = () => openMemberDialog(view, m, async (d) => { await api('/members/' + encodeURIComponent(no), 'PUT', { ...d, staff: needStaff() }); reload(); });
+  if (view.querySelector('#gf')) view.querySelector('#gf').onsubmit = async (e) => {
+    e.preventDefault(); const who = needStaff(); if (!who) return;
+    const g = view.querySelector('#gsel').value || null;
+    const past = view.querySelector('#gpast').checked;
+    if (g === (m.group_id || null) && !past) return flash(view.querySelector('#gmsg'), 'Already in this group.');
+    const gName = g ? gs.find((x) => x.id === g).name : 'no group';
+    if (!confirm(past ? `Correction: move ${m.name} to ${gName} and move ALL past hours and rewards to ${gName}?` : `Move ${m.name} to ${gName}? Hours from now on count for the new group; past hours stay where they were.`)) return;
+    try { await api('/members/' + encodeURIComponent(no) + '/group', 'POST', { group_id: g, note: view.querySelector('#gnote').value, staff: who, move_past: past }); groupsCache = null; reload(); }
+    catch (err) { flash(view.querySelector('#gmsg'), err.message, 'err'); }
+  };
+  view.querySelector('#rf').onsubmit = async (e) => {
+    e.preventDefault(); const f = e.target;
+    const body = { type: f.type.value, amount: Number(f.amount.value), date: f.date.value, detail: f.detail.value, recorded_by: f.recorded_by.value, approved_by: f.approved_by ? f.approved_by.value : '' };
+    if (body.type === 'promo_cash' && !confirm(`Record a cash reward of ${peso(body.amount)} for ${m.name}?`)) return;
+    try { await api('/members/' + encodeURIComponent(no) + '/rewards', 'POST', body); reload(); } catch (err) { flash(view.querySelector('#rmsg'), err.message, 'err'); }
+  };
+  view.querySelectorAll('[data-period]').forEach((b) => b.onclick = () => {
+    period = b.dataset.period; try { localStorage.setItem('everest-period', period); } catch (e) {}
+    view.querySelectorAll('[data-period]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.period === period)));
+    view.querySelector('#statTiles').innerHTML = statTiles(period === 'all' ? sAll : s30);
+  });
+  view.querySelectorAll('[data-co]').forEach((b) => b.onclick = async () => {
+    const raw = prompt('Cash-out amount in pesos. Type 0 or "busted" if they lost the whole buy-in. Leave empty to remove.', '');
+    if (raw === null) return;
+    const v = raw.trim().toLowerCase();
+    const body = !v ? { clear: true } : v === 'busted' || v === 'b' ? { busted: true } : { cash_out: Number(v.replace(/[,\s₱]/g, '')), busted: Number(v.replace(/[,\s₱]/g, '')) === 0 };
+    try { await api('/sessions/' + b.dataset.co + '/cash-out', 'POST', body); reload(); } catch (err) { alert(err.message); }
+  });
+  view.querySelectorAll('[data-unsess]').forEach((b) => b.onclick = async () => {
+    if (!confirm(`Unlink this session from ${m.name}? It goes back to Unmatched PPM so you can link the right member.`)) return;
+    try { await api('/sessions/' + b.dataset.unsess + '/unlink', 'POST', {}); reload(); } catch (err) { alert(err.message); }
+  });
+  view.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => {
+    try { await api('/rewards/' + b.dataset.approve + '/approve', 'POST', {}); reload(); } catch (err) { alert(err.message); }
+  });
+  view.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => {
+    const reason = (prompt('Why is this reward being voided?') || '').trim(); if (!reason) return;
+    const who = needStaff(); if (!who) return;
+    try { await api('/rewards/' + b.dataset.void + '/void', 'POST', { reason, staff: who }); reload(); } catch (err) { alert(err.message); }
+  });
+  view.querySelector('#nf').onsubmit = async (e) => {
+    e.preventDefault();
+    try { await api('/members/' + encodeURIComponent(no), 'PUT', { staff_notes: view.querySelector('#notes').value, status: view.querySelector('#status').value, staff: needStaff() }); reload(); }
+    catch (err) { flash(view.querySelector('#nmsg'), err.message, 'err'); }
+  };
+}
+// Center-crop and shrink a phone photo to 320×320 JPEG (~30 KB) before upload.
+function squarePhoto(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight), size = 320, c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url); resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This file is not a photo the browser can read.')); };
+    img.src = url;
+  });
+}
+// Rest share of the time at the table: under 10% green, up to 20% yellow, above 20% red.
+function restBadge(rest, play) {
+  const total = (rest || 0) + (play || 0);
+  if (!total) return '<span class="muted">—</span>';
+  const pct = Math.round(rest / total * 100);
+  const c = pct <= 10 ? 'green' : pct <= 20 ? 'amber' : 'red';
+  return `<span class="chip ${c}" title="Rest ÷ (play + rest)">Rest ${pct}%</span>`;
+}
+const signedPeso = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + peso(Math.abs(n));
+function statTiles(st) {
+  const wlColor = st.win_loss > 0 ? 'var(--green)' : st.win_loss < 0 ? 'var(--red)' : 'inherit';
+  return `${tile('Visit days', st.days + ' days', st.sessions + ' sessions')}
+    <div class="tile"><div class="k">Play time</div><div class="v">${hm(st.secs)}</div><div class="s row" style="gap:6px">${restBadge(st.rest_secs, st.secs)} <span>rest ${hm(st.rest_secs)}</span></div></div>
+    ${tile('Buy-in', peso(st.buy_in), 'Cash-out ' + peso(st.cash_out))}
+    <div class="tile"><div class="k">History W/L</div><div class="v" style="color:${wlColor}">${st.with_cash_out ? signedPeso(st.win_loss) : '—'}</div><div class="s">${st.with_cash_out} of ${st.sessions} sessions with cash-out${st.busted ? ' · ' + st.busted + ' busted' : ''}</div></div>
+    ${tile('Rewards given', peso(st.rewards), perHour(st.rewards, st.secs) + ' per play hour' + (st.rewards_pending ? ' · ' + peso(st.rewards_pending) + ' waiting' : ''))}`;
+}
+const tile = (k, v, s) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+
+// ---------- Player groups ----------
+async function viewGroups(view) {
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const from = params.get('from') || daysAgo(29), to = params.get('to') || today();
+  const sel = params.get('g') || 'hee';
+  const data = await api(`/groups/summary?from=${from}&to=${to}`);
+  const max = Math.max(1, ...data.groups.map((g) => g.seconds));
+  const current = data.groups.find((g) => (g.id || 'none') === sel) || data.groups[0];
+  const setParams = (p) => { const n = new URLSearchParams({ from, to, g: sel, ...p }); location.hash = '#/playergroups?' + n.toString(); };
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Player groups</h1><p class="sub">Hours are finished PPM sessions (rest excluded), credited to the group the player belonged to when they sat down. Players still at a table are shown as "Playing now" and added when they leave.</p></div>
+      <form id="rangeF" class="row"><label class="f">From<input type="date" name="from" value="${from}"></label><label class="f">To<input type="date" name="to" value="${to}"></label>
+        <button class="btn" style="align-self:flex-end">Apply</button><button type="button" class="btn" data-days="30" style="align-self:flex-end">30 days</button><button type="button" class="btn" data-month style="align-self:flex-end">This month</button></form></div>
+    <div class="grid">
+      ${tile('Total play time', hm(data.total_seconds), data.from + ' → ' + data.to)}
+      ${tile('Reward cost', peso(data.total_rewards), perHour(data.total_rewards, data.total_seconds) + ' per play hour')}
+      <div class="tile" style="background:var(--note);border-color:var(--note-line)"><div class="k">Members without a group</div><div class="v">${data.unassigned_members}</div><a class="s" href="#/members?group=unassigned">Assign now</a></div>
+      <div class="tile"><div class="k">Rewards waiting for approval</div><div class="v">${data.pending_rewards}</div><a class="s" href="#/approvals">${peso(data.pending_amount)} not counted yet</a></div>
+      <div class="tile"><div class="k">PPM names not matched</div><div class="v">${data.unmatched_sessions}</div><a class="s" href="#/unmatchedppm">${hm(data.unmatched_seconds)} not credited · fix</a></div>
+    </div>
+    <h2>Hours contribution by group</h2>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">
+      ${data.groups.filter((g) => g.id || g.seconds || g.rewards).map((g) => `<button type="button" class="gcard" data-g="${esc(g.id || 'none')}" aria-pressed="${g === current}">
+        <div class="row between" style="width:100%"><span style="font-size:18px;font-weight:700">${esc(g.name)}</span><span class="chip ${g.kind === 'inhouse' ? 'amber' : 'blue'}">${g.kind === 'inhouse' ? 'In-House · Marketing' : g.kind === 'host' ? 'Host' : '—'}</span></div>
+        <div class="row between" style="width:100%;align-items:baseline"><span style="font-size:22px;font-weight:700">${hm(g.seconds)}</span><span class="small muted">${data.total_seconds ? Math.round(g.seconds / data.total_seconds * 100) : 0}% of total</span></div>
+        <div class="bar" style="width:100%;flex:none"><i style="width:${Math.round(g.seconds / max * 100)}%"></i></div>
+        <div class="small muted">${g.member_count} member${g.member_count === 1 ? '' : 's'} · ${g.player_count} played${g.owner ? ' · owner ' + esc(g.owner) : ''}</div>
+        ${g.playing_now ? `<div class="small" style="color:var(--green);font-weight:600">● ${g.playing_now} at a table now · ${hm(g.live_seconds)} so far</div>` : ''}
+        <div class="row between small" style="width:100%;border-top:1px solid var(--line2);padding-top:8px"><span class="muted">Rewards</span><span><b>${peso(g.rewards)}</b> <span class="muted">· ${perHour(g.rewards, g.seconds)}/h</span></span></div>
+      </button>`).join('')}
+    </div>
+    <section class="card"><div class="row between" style="margin-bottom:12px"><div><h2>${esc(current.name)} group</h2><div class="small muted">${current.member_count} members · ${current.player_count} played · ${hm(current.seconds)} finished${current.playing_now ? ' · ' + current.playing_now + ' at a table now' : ''} · rewards ${peso(current.rewards)}</div></div>
+      <button class="btn" id="csv">Export CSV</button></div>
+      <div class="tbl"><table><thead><tr><th>#</th><th>Player</th><th>Member no.</th><th class="num">Visit days</th><th class="num">Play time</th><th style="width:200px">Share of group</th><th class="num">Rewards</th><th class="num">Per hour</th><th>Last visit</th></tr></thead><tbody>
+      ${current.players.map((p, i) => { const pct = current.seconds ? Math.round(p.seconds / current.seconds * 100) : 0; return `<tr class="click" data-no="${esc(p.member_no)}"><td class="muted">${i + 1}</td><td><b>${esc(p.name)}</b>${p.nickname ? ` <span class="muted">“${esc(p.nickname)}”</span>` : ''}${p.moved_to ? `<div><span class="chip small">Now in ${esc(p.moved_to)}</span></div>` : ''}${p.playing_now ? `<div><span class="chip green small">Playing now · ${esc(p.playing_now.table)} S${p.playing_now.seat} · ${hm(p.playing_now.seconds)}</span></div>` : ''}</td><td class="mono">${esc(p.member_no)}</td><td class="num">${p.days}</td><td class="num"><b>${hm(p.seconds)}</b></td><td><div class="row" style="flex-wrap:nowrap"><div class="bar"><i style="width:${pct}%"></i></div><span style="width:36px;text-align:right">${pct}%</span></div></td><td class="num"><b>${peso(p.rewards)}</b></td><td class="num muted">${perHour(p.rewards, p.seconds)}</td><td class="muted">${p.last ? day(p.last) : '—'}</td></tr>`; }).join('') || '<tr><td colspan="9" class="muted">No play or rewards in this period.</td></tr>'}
+      </tbody></table></div></section>`;
+  view.querySelectorAll('.gcard').forEach((b) => b.onclick = () => setParams({ g: b.dataset.g }));
+  view.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => location.hash = '#/member/' + encodeURIComponent(tr.dataset.no));
+  const rf = view.querySelector('#rangeF');
+  rf.onsubmit = (e) => { e.preventDefault(); setParams({ from: rf.from.value, to: rf.to.value }); };
+  rf.querySelector('[data-days]').onclick = () => setParams({ from: daysAgo(29), to: today() });
+  rf.querySelector('[data-month]').onclick = () => setParams({ from: today().slice(0, 8) + '01', to: today() });
+  view.querySelector('#csv').onclick = () => {
+    const lines = [['Group', 'Member no', 'Name', 'Nickname', 'Visit days', 'Play hours', 'Rewards PHP', 'Last visit', 'Now in']]
+      .concat(current.players.map((p) => [current.name, p.member_no, p.name, p.nickname, p.days, (p.seconds / 3600).toFixed(2), p.rewards, p.last ? day(p.last) : '', p.moved_to || '']));
+    const csv = lines.map((r) => r.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-${current.name}-${from}-to-${to}.csv`; a.click();
+  };
+}
+
+// ---------- Daily operation ----------
+let operationTimer = null;
+async function viewOperation(view) {
+  clearTimeout(operationTimer);
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const q = params.get('day') ? '?day=' + encodeURIComponent(params.get('day')) : '';
+  const d = await api('/operation' + q);
+  const o = d.operating, mo = d.money, v = d.visitors, pl = d.play;
+  const dt = (t) => t ? fmt(t, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
+  const prevDay = d.history[0] ? d.history[0].day : null;
+  const nextDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(d.day + 'T00:00:00Z') + 864e5));
+  const big = (k, val, sub, extra = '') => `<div class="tile" ${extra}><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub}</div></div>`;
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Live Operation</h1>
+      <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A day starts at 12:00, or when the first table opens that morning.</p></div>
+    <div class="row">${prevDay ? `<a class="btn" href="#/liveoperation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/liveoperation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/liveoperation">Today</a>`}</div></div>
+    ${d.is_today ? `<section class="card"><div class="row between" style="margin-bottom:10px"><h2>Tables now <span class="small muted" style="font-weight:400">· ${d.open_tables} open · ${v.at_table_now} players</span></h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${d.tables.map((t) => `<div class="tile" style="${t.running ? 'border-color:var(--green)' : 'opacity:.6'}">
+        <div class="row between"><b style="font-size:18px">${esc(t.name)}</b><span class="chip ${t.running ? 'green' : ''}">${t.running ? 'Open' : 'Closed'}</span></div>
+        ${t.running ? `<div style="margin-top:6px"><b>${esc(t.game_type)} ${esc(t.blinds)}</b></div>
+        <div class="seats" role="img" aria-label="${t.seated} playing, ${t.resting} resting, ${t.empty} empty" style="display:flex;gap:4px;margin:8px 0">${'<i class="st on"></i>'.repeat(t.seated)}${'<i class="st rest"></i>'.repeat(t.resting)}${'<i class="st"></i>'.repeat(Math.max(0, t.empty))}</div>
+        <div class="small muted">${t.seated + t.resting}/9 seated${t.resting ? ' · ' + t.resting + ' resting' : ''}${t.waiting ? ' · ' + t.waiting + ' waiting' : ''}</div>
+        <div class="small muted">Running ${hm(t.run_seconds)} · on table ${peso(t.buy_in_on_table)}</div>` : '<div class="small muted" style="margin-top:6px">Not running</div>'}</div>`).join('')}</div></section>` : ''}
+    <div class="grid">
+      ${big('Operating time', hm(o.seconds), o.since ? `First table ${time(o.since)}${o.until ? ' · last closed ' + time(o.until) : ' · still open'} · table hours ${hm(o.table_seconds)}` : 'No table has run yet')}
+      ${big('Visitors', String(v.total), `${v.members} members · ${v.unmatched} not matched${v.at_table_now ? ' · ' + v.at_table_now + ' at a table now' : ''}${v.new_members ? ' · ' + v.new_members + ' new sign-ups' : ''}`)}
+      ${big('Total buy-in', peso(mo.buy_in_total), d.is_today ? `${peso(mo.buy_in_finished)} finished + ${peso(mo.buy_in_live)} at tables now` : `${pl.sessions} sessions`)}
+      ${big('Total cash-out', peso(mo.cash_out), `${mo.sessions_with_cash_out} sessions${mo.busted ? ' · ' + mo.busted + ' busted' : ''}${mo.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${mo.missing_cash_out} missing (${peso(mo.buy_in_without_cash_out)} buy-in)</span>` : ''}`)}
+      ${big('Player hours', hm(pl.finished_seconds + pl.live_seconds), `${hm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hm(pl.live_seconds) + ' playing now' : ''} · ${restBadge(pl.rest_seconds, pl.finished_seconds)}`)}
+    </div>
+    <section class="card"><h2 style="margin-bottom:10px">Last 7 business days</h2><div class="tbl"><table><thead><tr><th>Day</th><th class="num">Visitors</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th></tr></thead><tbody>
+      ${d.history.map((h) => `<tr class="click" data-day="${h.day}"><td>${esc(h.day)}</td><td class="num">${h.visitors}</td><td class="num">${hm(h.secs)}</td><td class="num">${peso(h.buy_in)}</td><td class="num">${peso(h.cash_out)}</td></tr>`).join('')}
+    </tbody></table></div><p class="small muted" style="margin:8px 0 0">Buy-in and cash-out are what PPM recorded at the tables; the cage system will reconcile them with cash.</p></section>`;
+  view.querySelectorAll('tr[data-day]').forEach((tr) => tr.onclick = () => { location.hash = '#/liveoperation?day=' + tr.dataset.day; });
+  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation') viewOperation(view).catch(() => {}); }, 30000);
+}
+
+// ---------- Operation Report ----------
+async function viewReport(view) {
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const d = await api('/report?' + new URLSearchParams({ from: params.get('from') || daysAgo(7), to: params.get('to') || today() }));
+  const T = d.totals, setRange = (from, to) => { location.hash = '#/operationreport?' + new URLSearchParams({ from, to }); };
+  const per = (a, b) => (b > 0 ? a / b : null);
+  const opt = (v, f = peso) => (v == null ? '—' : f(v));
+  const levels = Object.entries(T.levels).sort((a, b) => b[1].table_seconds - a[1].table_seconds);
+  const maxLv = Math.max(1, ...levels.map(([, v]) => v.table_seconds));
+  const wd = (s) => new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short' }).format(new Date(s + 'T00:00:00Z'));
+  const firstOfMonth = (s) => s.slice(0, 8) + '01';
+  const shift = (s, n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(s + 'T00:00:00Z') + n * 864e5));
+  const lastMonthEnd = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(firstOfMonth(d.today) + 'T00:00:00Z') - 864e5));
+  const tile = (k, v, sub) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  const revHr = per(T.revenue, T.table_seconds / 3600), revVisit = per(T.revenue, T.visits);
+  view.innerHTML = `<div class="row between" style="align-items:flex-end;gap:12px"><div><h1>Operation Report</h1>
+      <p class="sub">${esc(d.from)} → ${esc(d.to)} · ${T.days} business day${T.days === 1 ? '' : 's'} (each starts at 12:00, or when the first table opens that morning). Totals add up every day in the range.</p></div>
+    <button class="btn" id="csv">Export CSV</button></div>
+    <section class="card"><form id="rangeF" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <label class="f">From<input type="date" name="from" value="${esc(d.from)}" max="${esc(d.today)}"></label>
+      <label class="f">To<input type="date" name="to" value="${esc(d.to)}" max="${esc(d.today)}"></label>
+      <button class="btn primary">Show</button>
+      <span class="row" style="gap:6px;flex-wrap:wrap">
+        <button type="button" class="btn sm" data-r="${shift(d.today, -1)}|${shift(d.today, -1)}">Yesterday</button>
+        <button type="button" class="btn sm" data-r="${shift(d.today, -7)}|${shift(d.today, -1)}">Last 7 days</button>
+        <button type="button" class="btn sm" data-r="${firstOfMonth(d.today)}|${d.today}">This month</button>
+        <button type="button" class="btn sm" data-r="${firstOfMonth(lastMonthEnd)}|${lastMonthEnd}">Last month</button></span>
+    </form></section>
+    <div class="grid">
+      ${tile('Revenue', peso(T.revenue), `${T.entered_days} of ${T.open_days} open day${T.open_days === 1 ? '' : 's'} entered${revHr != null ? ' · ' + peso(revHr) + ' per table hour' : ''}${revVisit != null ? ' · ' + peso(revVisit) + ' per visit' : ''}`)}
+      ${tile('Bad Beat Jackpot', peso(d.bbj_pool.after), `Pool at ${esc(d.to)} · in ${peso(T.bbj_in)} · paid out ${peso(T.bbj_out)} · pool before ${peso(d.bbj_pool.before)}`)}
+      ${tile('Table hours', hm(T.table_seconds), `${T.open_days} open day${T.open_days === 1 ? '' : 's'} · avg ${hm(per(T.table_seconds, T.open_days) || 0)} a day · operating ${hm(T.operating_seconds)}`)}
+      ${tile('Visitors', String(T.visits), `visits (days added up) · ${T.unique_visitors} different players · ${T.unique_members} members · ${T.new_members} new members`)}
+      ${tile('Player hours', hm(T.play_seconds), `${T.sessions} sessions · ${restBadge(T.rest_seconds, T.play_seconds)}`)}
+      ${tile('Buy-in / Cash-out', peso(T.buy_in), `cash-out ${peso(T.cash_out)}${T.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${T.missing_cash_out} without cash-out</span>` : ''}`)}
+    </div>
+    <section class="card"><h2 style="margin-bottom:10px">By level</h2><div class="tbl"><table><thead><tr><th>Level</th><th class="num">Days</th><th class="num">Table hours</th><th style="width:30%"></th><th class="num">Player hours</th><th class="num">Sessions</th><th class="num">Players per table</th></tr></thead><tbody>
+      ${levels.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td><div class="bar" style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${(100 * v.table_seconds / maxLv).toFixed(1)}%"></i></div></td><td class="num">${hm(v.play_seconds)}</td><td class="num">${v.sessions}</td><td class="num">${v.table_seconds ? (v.play_seconds / v.table_seconds).toFixed(1) : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No tables ran in this range.</td></tr>'}
+    </tbody></table></div><p class="small muted" style="margin:8px 0 0">Players per table = player hours ÷ table hours (average seats in use). Level changes in PPM are split from today on.</p></section>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Daily</h2><span class="small muted">Click a day to enter revenue and the jackpot</span></div><div class="tbl"><table><thead><tr>
+      <th>Day</th><th class="num">Revenue</th><th class="num">BBJ in</th><th class="num">BBJ out</th><th>Tables</th><th class="num">Table hours</th><th class="num">Operating</th><th class="num">Visitors</th><th class="num">New</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>Levels</th><th>Note</th></tr></thead><tbody>
+      ${d.days.slice().reverse().map((r) => { const open = r.table_seconds || r.sessions; return `<tr class="click" data-day="${r.day}" tabindex="0" style="${open ? '' : 'opacity:.55'}">
+        <td style="white-space:nowrap"><b>${esc(r.day)}</b> <span class="small muted">${wd(r.day)}</span></td>
+        <td class="num">${r.revenue == null ? (open ? '<span class="chip amber">Enter</span>' : '—') : '<b>' + peso(r.revenue) + '</b>'}</td>
+        <td class="num">${opt(r.bbj_in)}</td><td class="num">${r.bbj_out ? '<b style="color:var(--red)">' + peso(r.bbj_out) + '</b>' : opt(r.bbj_out)}</td>
+        <td>${r.tables.map(esc).join(' ') || '—'}</td><td class="num">${hm(r.table_seconds)}</td><td class="num">${hm(r.operating_seconds)}</td>
+        <td class="num">${r.visitors}</td><td class="num">${r.new_members || ''}</td><td class="num">${hm(r.play_seconds)}</td><td class="num">${peso(r.buy_in)}</td><td class="num">${peso(r.cash_out)}</td>
+        <td class="small">${Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `<span style="white-space:nowrap">${esc(k)} · ${hm(v.table_seconds)}</span>`).join('<br>') || '—'}</td>
+        <td class="small muted" style="min-width:140px">${esc(r.note)}${r.updated_by ? `<div>by ${esc(r.updated_by)}</div>` : ''}</td></tr>`; }).join('')}
+    </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td class="num">${peso(T.bbj_in)}</td><td class="num">${peso(T.bbj_out)}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>
+    <dialog id="rd"><form method="dialog" id="rdf"><h2 id="rdTitle"></h2>
+      <div class="form"><label class="f">Revenue (₱)<input type="text" inputmode="numeric" name="revenue" placeholder="e.g. 85000"></label>
+        <label class="f">BBJ collected (₱)<input type="text" inputmode="numeric" name="bbj_in" placeholder="Into the jackpot today"></label>
+        <label class="f">BBJ paid out (₱)<input type="text" inputmode="numeric" name="bbj_out" placeholder="0 if it was not hit"></label>
+        <label class="f" style="grid-column:1/-1">Note<input type="text" name="note" maxlength="500" placeholder="e.g. BBJ hit on T3, holiday, tournament day"></label></div>
+      <p class="small muted" id="rdInfo" style="margin:0"></p>
+      <div id="rdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="rdSave">Save</button></div></form></dialog>`;
+  const rf = view.querySelector('#rangeF');
+  rf.onsubmit = (e) => { e.preventDefault(); setRange(rf.from.value, rf.to.value); };
+  rf.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { const [a, z] = b.dataset.r.split('|'); setRange(a, z); });
+  const dlg = view.querySelector('#rd'), f = view.querySelector('#rdf');
+  const num = (v) => { const t = String(v).replace(/[,\s₱]/g, ''); return t === '' ? null : Number(t); };
+  const openDay = (r) => {
+    view.querySelector('#rdTitle').textContent = `${r.day} (${wd(r.day)})`;
+    for (const k of ['revenue', 'bbj_in', 'bbj_out']) f.elements[k].value = r[k] == null ? '' : r[k];
+    f.elements.note.value = r.note || '';
+    view.querySelector('#rdInfo').textContent = `PPM: ${r.tables.join(' ') || 'no tables'} · table hours ${hm(r.table_seconds)} · ${r.visitors} visitors · buy-in ${peso(r.buy_in)}`;
+    flash(view.querySelector('#rdMsg'), '');
+    view.querySelector('#rdSave').onclick = async (e) => {
+      e.preventDefault();
+      const body = { revenue: num(f.elements.revenue.value), bbj_in: num(f.elements.bbj_in.value), bbj_out: num(f.elements.bbj_out.value), note: f.elements.note.value.trim() };
+      if (['revenue', 'bbj_in', 'bbj_out'].some((k) => body[k] != null && !(body[k] >= 0))) { flash(view.querySelector('#rdMsg'), 'Amounts must be numbers, 0 or more. Leave blank if not known yet.', 'err'); return; }
+      try { await api('/report/day/' + r.day, 'PUT', body); dlg.close(); viewReport(view); } catch (err) { flash(view.querySelector('#rdMsg'), err.message, 'err'); }
+    };
+    dlg.showModal(); f.elements.revenue.focus();
+  };
+  view.querySelectorAll('tr[data-day]').forEach((tr) => { const r = d.days.find((x) => x.day === tr.dataset.day); tr.onclick = () => openDay(r); tr.onkeydown = (e) => { if (e.key === 'Enter') openDay(r); }; });
+  view.querySelector('#csv').onclick = () => {
+    const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ in PHP', 'BBJ out PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Note', 'Entered by']]
+      .concat(d.days.map((r) => [r.day, wd(r.day), r.revenue ?? '', r.bbj_in ?? '', r.bbj_out ?? '', r.tables.join(' '), (r.table_seconds / 3600).toFixed(2), (r.operating_seconds / 3600).toFixed(2), r.visitors, r.members, r.new_members, r.sessions, (r.play_seconds / 3600).toFixed(2), r.buy_in, r.cash_out,
+        Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `${k} ${(v.table_seconds / 3600).toFixed(2)}`).join('; '), r.note, r.updated_by]))
+      .concat([['Total', '', T.revenue, T.bbj_in, T.bbj_out, '', (T.table_seconds / 3600).toFixed(2), (T.operating_seconds / 3600).toFixed(2), T.visits, '', T.new_members, T.sessions, (T.play_seconds / 3600).toFixed(2), T.buy_in, T.cash_out, '', '', '']]);
+    const csv = lines.map((row) => row.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-operation-report-${d.from}-to-${d.to}.csv`; a.click();
+  };
+}
+
+// ---------- Rewards waiting for a manager ----------
+async function refreshPending() {
+  try { const n = (await api('/rewards/pending')).rewards.length; const pill = document.getElementById('pendingPill'); if (pill) { pill.textContent = n; pill.hidden = !n; } } catch (e) {}
+}
+async function viewApprovals(view) {
+  const data = await api('/rewards/pending');
+  const total = data.rewards.reduce((a, r) => a + r.amount, 0);
+  view.innerHTML = `<div><h1>Rewards waiting for approval</h1><p class="sub">Rewards recorded by staff count in cost totals only after a manager approves them.${isManager() ? '' : ' A manager will review these.'}</p></div>
+    <div class="grid">${tile('Waiting', String(data.rewards.length), peso(total) + ' in total')}</div>
+    <section class="card"><div class="tbl"><table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Group</th><th>Recorded by</th><th></th></tr></thead><tbody>
+    ${data.rewards.map((r) => `<tr><td>${day(r.given_at)}</td><td><a href="#/member/${encodeURIComponent(r.member_no)}"><b>${esc(r.name)}</b></a><div class="small muted mono">${esc(r.member_no)}</div></td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}</td>
+      <td class="row" style="flex-wrap:nowrap">${isManager() ? `<button class="btn sm primary" data-ok="${r.id}">Approve</button>` : ''}${isMaster() ? `<button class="btn sm" data-no="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Nothing waiting.</td></tr>'}
+    </tbody></table></div></section>`;
+  view.querySelectorAll('[data-ok]').forEach((b) => b.onclick = async () => { try { await api('/rewards/' + b.dataset.ok + '/approve', 'POST', {}); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); } });
+  view.querySelectorAll('[data-no]').forEach((b) => b.onclick = async () => {
+    const reason = (prompt('Why is this reward being voided?') || '').trim(); if (!reason) return;
+    try { await api('/rewards/' + b.dataset.no + '/void', 'POST', { reason }); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); }
+  });
+}
+
+// ---------- Staff accounts (managers) ----------
+async function viewStaff(view) {
+  const { staff: list } = await api('/staff');
+  view.innerHTML = `<div><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account to the console, PPM and the waiting list. <b>Master</b>: everything, including group changes, voids, imports, suspensions and these accounts. <b>Manager</b>: approve rewards and edit promotions. <b>Staff</b>: look up, add members, record rewards.</p></div>
+    <div id="sm"></div>
+    <section class="card"><h2 style="margin-bottom:10px">New account</h2>
+      <form id="nf2" class="form"><label class="f">Username<input type="text" name="username" required maxlength="60" autocomplete="off"></label>
+        <label class="f">Password<input type="text" name="password" required minlength="6" maxlength="200" autocomplete="new-password"></label>
+        <label class="f">Role<select name="role"><option value="staff">Staff</option><option value="admin">Manager</option></select></label>
+        <div style="align-self:end"><button class="btn primary">Create account</button></div></form></section>
+    <section class="card"><div class="tbl"><table><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>
+    ${list.map((a, i) => `<tr><td><b>${esc(a.display_name)}</b>${a.display_name.toLowerCase() === staff.toLowerCase() ? ' <span class="small muted">(you)</span>' : ''}</td>
+      <td>${a.role === 'master' ? '<span class="chip" style="background:var(--gold);color:#1B1406">Master</span>' : `<select data-role="${i}"><option value="staff" ${a.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Manager</option></select>`}</td>
+      <td>${a.active ? '<span class="chip green">Active</span>' : '<span class="chip red">Disabled</span>'}</td><td class="muted">${day(a.created_at)}</td>
+      <td class="row" style="flex-wrap:nowrap"><button class="btn sm" data-pw="${i}">Reset password</button>${a.role === 'master' ? '' : `<button class="btn sm ${a.active ? 'danger' : ''}" data-act="${i}">${a.active ? 'Disable' : 'Enable'}</button><button class="btn sm danger" data-del="${i}">Delete</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No accounts yet.</td></tr>'}
+    </tbody></table></div></section>`;
+  const msg = view.querySelector('#sm');
+  const put = async (a, body, done) => { try { await api('/staff/' + encodeURIComponent(a.username), 'PUT', body); flash(msg, done, 'ok'); setTimeout(() => viewStaff(view), 700); } catch (err) { flash(msg, err.message, 'err'); } };
+  view.querySelector('#nf2').onsubmit = async (e) => {
+    e.preventDefault(); const f = e.target;
+    try { await api('/staff', 'POST', { username: f.username.value.trim(), password: f.password.value, role: f.role.value }); flash(msg, `Created ${f.username.value.trim()}.`, 'ok'); setTimeout(() => viewStaff(view), 700); }
+    catch (err) { flash(msg, err.message, 'err'); }
+  };
+  view.querySelectorAll('[data-role]').forEach((sel) => sel.onchange = () => put(list[sel.dataset.role], { role: sel.value }, 'Role updated.'));
+  view.querySelectorAll('[data-pw]').forEach((b) => b.onclick = () => { const a = list[b.dataset.pw]; const pw = prompt(`New password for ${a.display_name} (at least 6 characters):`); if (pw) put(a, { password: pw }, `Password reset for ${a.display_name}. They are signed out everywhere.`); });
+  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    const a = list[b.dataset.del];
+    if (!confirm(`Delete the account ${a.display_name}? They can no longer sign in. Their name stays in past records.`)) return;
+    try { await api('/staff/' + encodeURIComponent(a.username) + '/delete', 'POST', {}); flash(msg, `Deleted ${a.display_name}.`, 'ok'); setTimeout(() => viewStaff(view), 700); } catch (err) { flash(msg, err.message, 'err'); }
+  });
+  view.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => { const a = list[b.dataset.act]; if (a.active && !confirm(`Disable ${a.display_name}? They are signed out at once.`)) return; put(a, { active: !a.active }, a.active ? 'Account disabled.' : 'Account enabled.'); });
+}
+
+// ---------- Promotions shown in the member app ----------
+async function viewPromotions(view) {
+  const { promotions } = await api('/promotions');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  const live = (p) => p.active && (!p.starts || p.starts <= today) && (!p.ends || p.ends >= today);
+  const form = (p) => `<form class="form" data-id="${p ? p.id : ''}" style="background:#F6F7F9;border-radius:10px;padding:14px">
+      <label class="f wide">Title<input type="text" name="title" maxlength="120" required value="${esc(p ? p.title : '')}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f">Starts<input type="date" name="starts" value="${esc(p ? p.starts : '')}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f">Ends<input type="date" name="ends" value="${esc(p ? p.ends : '')}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f" style="grid-column:1/-1">Details<textarea name="body" rows="2" maxlength="1000" ${isManager() ? '' : 'disabled'}>${esc(p ? p.body : '')}</textarea></label>
+      <label class="f">Order<input type="number" name="sort" value="${p ? p.sort : 0}" ${isManager() ? '' : 'disabled'}></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:8px;align-self:end"><input type="checkbox" name="active" ${!p || p.active ? 'checked' : ''} ${isManager() ? '' : 'disabled'} style="height:auto"> Show to members</label>
+      ${isManager() ? `<div style="align-self:end"><button class="btn ${p ? '' : 'primary'}">${p ? 'Save' : 'Add promotion'}</button></div>` : ''}
+    </form>`;
+  view.innerHTML = `<div><h1>Promotions</h1><p class="sub">What members see under "Promotions" in the member app. Leave dates empty to show it until you turn it off.${isManager() ? '' : ' Only managers can edit.'}</p></div>
+    <div id="pm"></div>
+    ${isManager() ? `<section class="card"><h2 style="margin-bottom:10px">New promotion</h2>${form(null)}</section>` : ''}
+    ${promotions.map((p) => `<section class="card"><div class="row between" style="margin-bottom:10px"><h2>${esc(p.title)}</h2><span class="chip ${live(p) ? 'green' : ''}">${live(p) ? 'Showing now' : 'Not showing'}</span></div>${form(p)}</section>`).join('') || '<p class="muted">No promotions yet.</p>'}`;
+  view.querySelectorAll('form[data-id]').forEach((f) => f.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = { title: f.title.value, starts: f.starts.value, ends: f.ends.value, body: f.body.value, sort: Number(f.sort.value) || 0, active: f.active.checked };
+    try { await api('/promotions' + (f.dataset.id ? '/' + f.dataset.id : ''), f.dataset.id ? 'PUT' : 'POST', body); viewPromotions(view); }
+    catch (err) { flash(view.querySelector('#pm'), err.message, 'err'); }
+  });
+}
+
+// ---------- Unmatched PPM names ----------
+// Link, and if the typed name does not look like the member, ask once before linking anyway.
+async function linkWithCheck(path, body) {
+  try { return await api(path, 'POST', body); }
+  catch (e) {
+    if (e.code !== 'name_mismatch') throw e;
+    if (!confirm(e.message + '\n\nLink anyway?')) { const c = new Error('Not linked.'); c.cancelled = true; throw c; }
+    return api(path, 'POST', { ...body, confirm: true });
+  }
+}
+let unmatchedTimer = null;
+async function viewUnmatched(view) {
+  clearTimeout(unmatchedTimer);
+  const data = await api('/sessions/unmatched');
+  const box = (id, ph) => `<div class="ac" style="flex:1"><label class="sr" for="${id}">Member</label><input type="text" id="${id}" inputmode="numeric" placeholder="${ph}" style="width:100%" autocomplete="off"></div>`;
+  view.innerHTML = `<div><h1>Unmatched PPM names</h1><p class="sub">Names typed in PPM that are not a member number or a unique nickname. Their hours count for no one until you link them.</p></div>
+    <div id="um"></div>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>At the table now <span class="small muted" style="font-weight:400">· ${data.seated.filter((x) => !x.auto && !x.linked).length} not matched of ${data.seated.length}</span></h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
+      <p class="small muted" style="margin:0 0 10px">Everyone seated in PPM. Link the ones without a member before they leave; their hours go to the member when they leave the seat. "Matched" means the PPM name is a member's number or nickname — fix it with "Wrong person?" if it is someone else.</p>
+      <div class="tbl"><table><thead><tr><th>Table · Seat</th><th>Typed in PPM</th><th>Status</th><th class="num">Playing so far</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
+      ${data.seated.map((x, i) => `<tr><td><b>${esc(x.table)}</b> · S${x.seat}</td><td><b>${esc(x.ref)}</b></td>
+        <td>${x.status === 'rest' ? '<span class="chip amber">Resting</span>' : '<span class="chip green">Playing</span>'}</td><td class="num">${hm(x.active_seconds)}</td>
+        <td>${x.linked ? `<div class="row" style="flex-wrap:nowrap"><span class="chip blue">Linked to ${esc(x.linked.member_no)}</span> <span class="small muted" style="flex:1">${esc(x.linked.name)}</span><button type="button" class="btn sm" data-unlink="${i}">Change</button></div>`
+          : x.auto ? `<div class="row" style="flex-wrap:nowrap" id="auto${i}"><span class="chip" title="Matched automatically: the PPM name is this member's number or nickname">Matched ${esc(x.auto.member_no)}</span> <span class="small muted" style="flex:1">${esc(x.auto.name)}</span><button type="button" class="btn sm" data-wrong="${i}">Wrong person?</button></div>
+              <form class="row" data-s="${i}" style="flex-wrap:nowrap" hidden>${box('s' + i, 'Correct 6-digit member no.')}<button class="btn sm">Link</button></form>`
+          : `<form class="row" data-s="${i}" style="flex-wrap:nowrap">${box('s' + i, '6-digit member no.')}<button class="btn sm">Link</button></form>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No one is seated in PPM right now.</td></tr>'}
+      </tbody></table></div></section>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Already left the table</h2></div>
+    <div class="tbl"><table><thead><tr><th>Typed in PPM</th><th class="num">Sessions</th><th class="num">Play time</th><th>Last seen</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
+    ${data.refs.map((r, i) => `<tr><td><b>${esc(r.member_ref)}</b></td><td class="num">${r.sessions}</td><td class="num">${hm(r.secs)}</td><td class="muted">${day(r.last)}</td>
+      <td><form class="row" data-i="${i}" style="flex-wrap:nowrap">${box('u' + i, '6-digit member no., e.g. 444444')}<button class="btn sm">Link</button></form></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Nothing to link.</td></tr>'}
+    </tbody></table></div></section>`;
+  const msg = view.querySelector('#um');
+  view.querySelectorAll('form[data-s]').forEach((f) => {
+    const input = f.querySelector('input'); memberPicker(input);
+    f.onsubmit = async (e) => {
+      e.preventDefault(); const x = data.seated[Number(f.dataset.s)];
+      try { const res = await linkWithCheck('/sessions/link-seat', { seat_key: x.seat_key, member_no: input.value.trim() }); flash(msg, `${x.ref} (${x.table} · S${x.seat}) will count for ${res.member_no} when they leave.`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
+      catch (err) { flash(msg, err.message, err.cancelled ? '' : 'err'); }
+    };
+  });
+  view.querySelectorAll('form[data-i]').forEach((f) => {
+    const input = f.querySelector('input'); memberPicker(input);
+    f.onsubmit = async (e) => {
+      e.preventDefault(); const r = data.refs[Number(f.dataset.i)];
+      try { const res = await linkWithCheck('/sessions/link', { member_ref: r.member_ref, member_no: input.value.trim() }); flash(msg, `Linked ${res.linked} sessions of "${r.member_ref}".`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
+      catch (err) { flash(msg, err.message, err.cancelled ? '' : 'err'); }
+    };
+  });
+  view.querySelectorAll('[data-wrong]').forEach((b) => b.onclick = () => {
+    const i = b.dataset.wrong; view.querySelector('#auto' + i).hidden = true;
+    const f = view.querySelector(`form[data-s="${i}"]`); f.hidden = false; f.querySelector('input').focus();
+  });
+  view.querySelectorAll('[data-unlink]').forEach((b) => b.onclick = async () => {
+    const x = data.seated[Number(b.dataset.unlink)];
+    try { await api('/sessions/unlink-seat', 'POST', { seat_key: x.seat_key }); viewUnmatched(view); } catch (err) { flash(msg, err.message, 'err'); }
+  });
+  // Refresh while the page is open, but never while someone is typing a number.
+  unmatchedTimer = setTimeout(function tick() {
+    if (parseHash().page !== 'unmatchedppm') return;
+    if (view.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { unmatchedTimer = setTimeout(tick, 30000); return; }
+    viewUnmatched(view).catch(() => {});
+  }, 30000);
+}
+
+// ---------- Import from the Google Sheet ----------
+const HEADER_MAP = { surname: 'surname', firstname: 'surname', 'first name': 'surname', middlename: 'middle_name', 'middle name': 'middle_name', familyname: 'family_name', 'family name': 'family_name', lastname: 'family_name', 'last name': 'family_name',
+  nickname: 'nickname', 'nick name': 'nickname', nationality: 'nationality', birthday: 'birthday', 'date of birth': 'birthday', passportid: 'passport_id', passport: 'passport_id', 'passport id': 'passport_id',
+  email: 'email', phone: 'phone', whatsapp: 'whatsapp', telegram: 'telegram', line: 'line', referralid: 'referral_id', 'referral id': 'referral_id', language: 'language',
+  memberid: 'member_no', 'member id': 'member_no', 'member no': 'member_no', memberno: 'member_no', '會員號碼': 'member_no', group: 'group', host: 'group', '場主': 'group', submittedat: 'created', 'submitted at': 'created', timestamp: 'created' };
+function parseCsv(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true; else if (c === ',' || c === '\t') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim()));
+}
+function normDate(v) {
+  v = String(v || '').trim(); if (!v) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const d = new Date(v); return isNaN(d) ? v : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(d);
+}
+async function viewImport(view) {
+  view.innerHTML = `<div><h1>Import members</h1><p class="sub">Export the registration Google Sheet as CSV (File → Download → .csv) and load it here. Existing member numbers and passports are skipped, so importing twice is safe.</p></div>
+    <section class="card" style="display:flex;flex-direction:column;gap:12px">
+      <label class="f">CSV file<input type="file" id="file" accept=".csv,text/csv,.tsv,text/tab-separated-values"></label>
+      <label class="f">…or paste the rows (with the header row)<textarea id="paste" rows="6" placeholder="surname,middleName,familyName,nickName,…"></textarea></label>
+      <div class="row"><button class="btn" id="preview">Preview</button></div><div id="pv"></div></section>`;
+  let rows = [];
+  const show = (text) => {
+    const table = parseCsv(text); if (table.length < 2) return flash(view.querySelector('#pv'), 'No rows found.', 'err');
+    const head = table[0].map((h) => HEADER_MAP[h.trim().toLowerCase()] || HEADER_MAP[h.trim().toLowerCase().replace(/[_\s]/g, '')] || null);
+    rows = table.slice(1).map((r) => { const o = {}; head.forEach((k, i) => { if (k) o[k] = (r[i] || '').trim(); }); if (o.birthday) o.birthday = normDate(o.birthday); if (o.created) o.created = normDate(o.created); return o; });
+    const used = [...new Set(head.filter(Boolean))], ignored = table[0].filter((h, i) => !head[i]);
+    view.querySelector('#pv').innerHTML = `<div class="msg">${rows.length} rows · using columns: ${esc(used.join(', '))}${ignored.length ? ' · ignored: ' + esc(ignored.join(', ')) : ''}</div>
+      <div class="tbl" style="margin-top:10px"><table><thead><tr>${used.map((k) => `<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0, 5).map((r) => `<tr>${used.map((k) => `<td>${k === 'passport_id' && r[k] ? '••••' + esc(r[k].slice(-4)) : esc(r[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <p class="small muted">Showing the first 5. Rows without a "Member ID" column get the next EV- number. A "Group" column (Hee, Dee, SK, Patrick, JOY, In-House) assigns the group.</p>
+      <div class="row"><button class="btn primary" id="go">Import ${rows.length} rows</button><span id="prog"></span></div>`;
+    view.querySelector('#go').onclick = async () => {
+      const who = needStaff(); if (!who) return; const btn = view.querySelector('#go'); btn.disabled = true;
+      const total = { created: 0, skipped: 0, errors: [] };
+      for (let i = 0; i < rows.length; i += 50) {
+        view.querySelector('#prog').textContent = `Importing ${Math.min(i + 50, rows.length)} / ${rows.length}…`;
+        try { const r = await api('/members/import', 'POST', { rows: rows.slice(i, i + 50), staff: who }); total.created += r.created; total.skipped += r.skipped; r.errors.forEach((e) => total.errors.push({ row: e.row + i + 2, error: e.error })); }
+        catch (err) { total.errors.push({ row: `${i + 2}–${i + 51}`, error: err.message }); }
+      }
+      groupsCache = null;
+      view.querySelector('#prog').innerHTML = `<b>${total.created} created</b>, ${total.skipped} already existed${total.errors.length ? `, ${total.errors.length} problems:<ul>${total.errors.map((e) => `<li>Sheet row ${esc(e.row)}: ${esc(e.error)}</li>`).join('')}</ul>` : '.'}`;
+    };
+  };
+  view.querySelector('#file').onchange = async (e) => { const f = e.target.files[0]; if (f) show(await f.text()); };
+  view.querySelector('#preview').onclick = () => show(view.querySelector('#paste').value);
+}
+
+window.addEventListener('hashchange', render);
+render();
+if (token) loadMe();
+})();
+</script>
+</body>
+</html>

@@ -11,12 +11,19 @@ const addDays = (d, n) => localDate(dayStart(d) + n * DAY + HOUR);
 // Track when each PPM table is running. Called after every PPM save; a run opens when a table starts or resumes
 // (at PPM's own start time) and closes at the save that stops or pauses it.
 export async function recordTableRuns(env, tables, now) {
-  const open = new Map((await all(env.DB.prepare('SELECT run_key,table_name FROM table_runs WHERE closed_at IS NULL'))).map((r) => [r.table_name, r.run_key]));
+  const openRows = await all(env.DB.prepare('SELECT run_key,table_name,game_type,blinds FROM table_runs WHERE closed_at IS NULL'));
+  const open = new Map(openRows.map((r) => [r.table_name, r.run_key]));
+  const openLevel = new Map(openRows.map((r) => [r.table_name, r.blinds + '|' + r.game_type]));
   const stmts = [];
   for (const t of tables || []) {
     const name = str(t.name || 'T' + t.id, 10);
     const running = t.isRunning === true;
-    if (running && !open.has(name)) {
+    // Level changed while running: close the run and start a new one, so table hours are split by level.
+    if (running && open.has(name) && openLevel.get(name) !== str(t.blinds, 20) + '|' + str(t.gameType, 10)) {
+      stmts.push(env.DB.prepare('UPDATE table_runs SET closed_at=? WHERE run_key=? AND closed_at IS NULL').bind(now, open.get(name)));
+      stmts.push(env.DB.prepare('INSERT OR IGNORE INTO table_runs(run_key,table_name,opened_at,closed_at,game_type,blinds) VALUES(?,?,?,NULL,?,?)')
+        .bind(`${name}|${now}`, name, now, str(t.gameType, 10), str(t.blinds, 20)));
+    } else if (running && !open.has(name)) {
       const started = Number.isFinite(t.lastStartTime) ? Math.min(now, Math.floor(t.lastStartTime / 1000)) : now;
       stmts.push(env.DB.prepare('INSERT OR IGNORE INTO table_runs(run_key,table_name,opened_at,closed_at,game_type,blinds) VALUES(?,?,?,NULL,?,?)')
         .bind(`${name}|${started}`, name, started, str(t.gameType, 10), str(t.blinds, 20)));

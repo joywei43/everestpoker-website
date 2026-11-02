@@ -80,4 +80,29 @@ assert.equal(prev.tables.length, 0, 'no live tables on a past day');
 assert.equal(prev.money.buy_in_finished, 35000);
 assert.equal(op.history[0].day, '2026-11-02'); assert.equal(op.history[0].buy_in, 35000);
 
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history');
+
+// Operation Report: managers enter revenue and BBJ per day; the rest comes from PPM.
+await relogin(); const maria2 = (await call('/login', 'POST', { username: 'Maria', password: 'maria-pass' })).body.token;
+assert.equal((await call('/report', 'GET', null, maria2)).status, 403, 'report: managers only');
+assert.equal((await call('/report/day/2026-11-02', 'PUT', { revenue: 85000, bbj_in: 4200, bbj_out: 0, note: 'Busy Sunday' }, boss)).status, 200);
+assert.equal((await call('/report/day/2026-11-01', 'PUT', { bbj_in: 1000, bbj_out: 300 }, boss)).status, 200);
+assert.equal((await call('/report/day/2026-11-02', 'PUT', { revenue: -5 }, boss)).status, 400);
+assert.equal((await call('/report/day/2026-12-31', 'PUT', { revenue: 5 }, boss)).status, 400, 'no future days');
+let rep = (await call('/report?from=2026-11-01&to=2026-11-03', 'GET', null, boss)).body;
+assert.deepEqual(rep.days.map((d) => d.day), ['2026-11-01', '2026-11-02', '2026-11-03']);
+const r2 = rep.days[1];
+assert.equal(r2.revenue, 85000); assert.equal(r2.bbj_in, 4200); assert.equal(r2.note, 'Busy Sunday'); assert.equal(r2.updated_by, 'Boss');
+assert.equal(r2.table_seconds, 21.5 * 3600 + 8 * 3600, 'T1 13:00 → 10:30 next morning, T3 8 h');
+assert.deepEqual(r2.tables, ['T1', 'T3']);
+assert.equal(r2.visitors, 3); assert.equal(r2.members, 2); assert.equal(r2.sessions, 3); assert.equal(r2.buy_in, 35000); assert.equal(r2.cash_out, 32000);
+assert.equal(r2.levels['50 / 100 NLH'].table_seconds, r2.table_seconds);
+assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.bbj_in, 5200); assert.equal(rep.totals.bbj_out, 300); assert.equal(rep.totals.entered_days, 1);
+assert.equal(rep.bbj_pool.before, 0); assert.equal(rep.bbj_pool.after, 4900);
+assert.equal((await call('/report?from=2026-11-02&to=2026-11-03', 'GET', null, boss)).body.bbj_pool.before, 700, 'pool carried from earlier days');
+// A level change while the table runs splits the table hours.
+clock = at('2026-11-03 11:30:00'); tables[1].blinds = '100 / 200'; await save();
+clock = at('2026-11-03 12:30:00');
+rep = (await call('/report?from=2026-11-03&to=2026-11-03', 'GET', null, boss)).body;
+assert.equal(rep.days[0].levels['50 / 100 NLH'].table_seconds, 3600 + 2 * 3600, 'T2 10:30–11:30 + T1 10:30–12:30');
+assert.equal(rep.days[0].levels['100 / 200 NLH'].table_seconds, 3600, 'T2 11:30–12:30');
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels');

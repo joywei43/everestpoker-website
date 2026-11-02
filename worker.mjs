@@ -2,6 +2,7 @@ import { isMemberApi, handleMembersApi, handleRegister, ingestPpm } from './memb
 import { handleMemberApp, handlePromotions } from './member-app.mjs';
 import { handleStaff } from './staff.mjs';
 import { handleOperation, recordTableRuns } from './operation.mjs';
+import { handleReport } from './report.mjs';
 const enc = new TextEncoder();
 // Master accounts are fixed in wrangler.toml (MASTER_USERS) so nobody can grant themselves master from the console.
 const isMaster=(env,u)=>!!u&&(env.MASTER_USERS||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean).includes(String(u).toLowerCase());
@@ -61,13 +62,14 @@ export default {async fetch(req,env){
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});
  }
- if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||path==='/me'||path==='/promotions'||path.startsWith('/promotions/')||path==='/staff'||path.startsWith('/staff/')||path==='/operation'||isMemberApi(path)){
+ if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||path==='/me'||path==='/promotions'||path.startsWith('/promotions/')||path==='/staff'||path.startsWith('/staff/')||path==='/operation'||path==='/report'||path.startsWith('/report/')||isMemberApi(path)){
   const bearer=req.headers.get('Authorization')||'';if(!/^Bearer [a-f0-9]{64}$/.test(bearer))return reply({error:'Login required'},401);
   const hashed=await digest(bearer.slice(7));const session=await env.DB.prepare('SELECT expires FROM sessions WHERE token=?').bind(hashed).first();if(!session||session.expires<=now)return reply({error:'Session expired'},401);
   if(path==='/logout'){await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(hashed),env.DB.prepare('DELETE FROM session_users WHERE token=?').bind(hashed)]);return reply({ok:true});}
   const owner=await env.DB.prepare('SELECT username,role FROM session_users WHERE token=?').bind(hashed).first();const user=owner?owner.username:null,role=isMaster(env,user)?'master':owner?owner.role:'admin';
   if(path==='/me')return reply({user,role});
   if(path==='/operation'&&req.method==='GET')return handleOperation(req,env,now,reply,role);
+  if(path==='/report'||path.startsWith('/report/')){const res=await handleReport(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
   if(path==='/staff'||path.startsWith('/staff/')){const res=await handleStaff(req,env,path,now,reply,user,role,u=>isMaster(env,u));return res||reply({error:'Not found'},404);}
   if(path==='/promotions'||path.startsWith('/promotions/')){const res=await handlePromotions(req,env,path,now,reply,role!=='staff');return res||reply({error:'Not found'},404);}
   if(isMemberApi(path)){const res=await handleMembersApi(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
