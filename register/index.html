@@ -63,8 +63,8 @@ const T = {
   th: { title: 'ลงทะเบียนสมาชิก', sub: 'ใช้เวลาเพียง 30 วินาที ส่วนที่เหลือเจ้าหน้าที่จะช่วยที่เคาน์เตอร์', surname: 'นามสกุล', given: 'ชื่อ', tg: 'ดูสถานะโต๊ะสดบน Telegram', nick: 'ชื่อเล่น', bday: 'วันเกิด', contact: 'โทรศัพท์ WhatsApp หรือ Telegram', optional: 'ไม่บังคับ', agree: 'ฉันอายุ 21 ปีขึ้นไป ข้อมูลเป็นความจริง และยอมรับกฎของ Everest Poker Room', submit: 'ลงทะเบียน', sending: 'กำลังส่ง…', required: 'กรุณากรอกนามสกุล ชื่อ และวันเกิด และทำเครื่องหมายยอมรับ', age: 'สมาชิกต้องมีอายุ 21 ปีขึ้นไป', many: 'ส่งข้อมูลจากอุปกรณ์นี้มากเกินไป กรุณาติดต่อเจ้าหน้าที่', fail: 'ส่งข้อมูลไม่สำเร็จ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่', doneTitle: 'ขอบคุณ!', done1: 'เราได้รับการลงทะเบียนของคุณแล้ว', done2: 'กรุณาแสดงบัตรประจำตัวที่เคาน์เตอร์เพื่อรับหมายเลขสมาชิก', again: 'ลงทะเบียนให้ผู้อื่น', foot: 'สำหรับผู้มีอายุ 21 ปีขึ้นไปเท่านั้น การพนันอาจทำให้เสพติด' },
   vi: { title: 'Đăng ký thành viên', sub: 'Chỉ mất 30 giây. Nhân viên sẽ hoàn tất phần còn lại tại quầy.', surname: 'Họ', given: 'Tên', tg: 'Tình trạng bàn trực tiếp trên Telegram', nick: 'Biệt danh', bday: 'Ngày sinh', contact: 'Điện thoại, WhatsApp hoặc Telegram', optional: 'không bắt buộc', agree: 'Tôi từ 21 tuổi trở lên, thông tin là đúng sự thật và tôi đồng ý với nội quy của Everest Poker Room.', submit: 'Đăng ký', sending: 'Đang gửi…', required: 'Vui lòng nhập họ, tên, ngày sinh và đánh dấu đồng ý.', age: 'Thành viên phải từ 21 tuổi trở lên.', many: 'Thiết bị này đã gửi quá nhiều lần. Vui lòng liên hệ nhân viên.', fail: 'Gửi thất bại. Vui lòng thử lại hoặc liên hệ nhân viên.', doneTitle: 'Cảm ơn bạn!', done1: 'Chúng tôi đã nhận được đăng ký của bạn.', done2: 'Vui lòng xuất trình giấy tờ tùy thân tại quầy để nhận mã thành viên.', again: 'Đăng ký cho người khác', foot: 'Chỉ dành cho người từ 21 tuổi trở lên. Cờ bạc có thể gây nghiện.' }
 };
-const LANG_KEY = 'everest_register_language';
-let lang = localStorage.getItem(LANG_KEY) || ({ zh: 'zh', ja: 'ja', ko: 'ko', th: 'th', vi: 'vi' }[(navigator.language || 'en').slice(0, 2)] || 'en');
+// Always opens in English; the guest can switch with the language menu.
+let lang = 'en';
 const t = (k) => (T[lang] || T.en)[k] || T.en[k];
 const main = document.getElementById('main'), sel = document.getElementById('lang');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -120,7 +120,7 @@ function done() {
     <a class="tg" href="https://t.me/MidoriPoker" target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.5 4.1 2.9 11.3c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.3 4.8 3.6c.9.5 1.5.2 1.7-.8l3.1-14.8c.3-1.3-.5-1.9-1.5-1.5zM8.6 14.1l9.2-5.8c.4-.3.8-.1.5.2l-7.9 7.1-.3 3.3-1.5-4.8z"/></svg><span>${t('tg')}</span><span aria-hidden="true">›</span></a>`;
   document.getElementById('again').onclick = () => form();
 }
-sel.onchange = () => { const v = document.getElementById('rf') ? read() : null; lang = sel.value; localStorage.setItem(LANG_KEY, lang); v ? form(v) : done(); };
+sel.onchange = () => { const v = document.getElementById('rf') ? read() : null; lang = sel.value; v ? form(v) : done(); };
 form();
 })();
 </script>
