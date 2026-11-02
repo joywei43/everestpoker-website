@@ -136,7 +136,7 @@ function render() {
     <nav class="side" aria-label="Main">
       <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Member console</small></div></div>
       <div class="navlinks">
-        ${isManager() ? link('operation', 'Operation') : ''}
+        ${isManager() ? link('operation', 'Live Operation') : ''}
         ${link('members', 'Members')}
         ${link('groups', 'Player groups')}
         ${link('unmatched', 'Unmatched PPM')}
@@ -521,7 +521,7 @@ async function viewOperation(view) {
   const prevDay = d.history[0] ? d.history[0].day : null;
   const nextDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(d.day + 'T00:00:00Z') + 864e5));
   const big = (k, val, sub, extra = '') => `<div class="tile" ${extra}><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub}</div></div>`;
-  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Operation</h1>
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Live Operation</h1>
       <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A day starts at 12:00, or when the first table opens that morning.</p></div>
     <div class="row">${prevDay ? `<a class="btn" href="#/operation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/operation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/operation">Today</a>`}</div></div>
     ${d.is_today ? `<section class="card"><div class="row between" style="margin-bottom:10px"><h2>Tables now <span class="small muted" style="font-weight:400">· ${d.open_tables} open · ${v.at_table_now} players</span></h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
