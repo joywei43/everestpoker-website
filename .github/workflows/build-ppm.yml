@@ -1,6 +1,6 @@
 # Builds PPM (joywei43/everwin-ppm-system, main branch) and publishes it to /ppm/ on this site.
 # Runs when this file changes, or by hand: Actions → Build PPM → Run workflow.
-# Last requested: nickname + nationality in the member dropdown.
+# Last requested: 2026-11-02T16:53:42Z leave dialog 結帳
 name: Build PPM
 
 on:
