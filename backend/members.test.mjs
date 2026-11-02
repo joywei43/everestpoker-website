@@ -360,6 +360,18 @@ await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.to
   assert.equal(g2.groups.find((g) => g.id === 'inhouse').seconds, inBefore - 7200);
 }
 
+// Same nickname: the nationality is shown after it.
+{
+  await call('/members', 'POST', { nickname: 'Twin', nationality: 'Taiwanese', member_no: '900001' }, boss.token);
+  let hits = (await call('/members?q=twin', 'GET', null, boss.token)).body.members;
+  assert.equal(hits[0].nick_label, 'Twin', 'unique nickname shown as is');
+  await call('/members', 'POST', { nickname: 'twin', nationality: 'Korean', member_no: '900002' }, boss.token);
+  await call('/members', 'POST', { nickname: 'TWIN', member_no: '900003' }, boss.token);
+  hits = (await call('/members?q=twin', 'GET', null, boss.token)).body.members;
+  assert.deepEqual(hits.map((h) => h.nick_label).sort(), ['TWIN (EV-900003)', 'Twin (Taiwan)', 'twin (South Korea)']);
+  assert.equal((await call('/members/900002', 'GET', null, boss.token)).body.member.nick_label, 'twin (South Korea)');
+}
+
 // Nationality: one spelling per country.
 assert.equal((await call('/members/EV-444444', 'PUT', { nationality: 'Taiwanese' }, boss.token)).status, 200);
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan');
@@ -371,4 +383,4 @@ sql.exec("UPDATE members SET nationality='台灣' WHERE member_no='EV-444444'");
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan', 'old rows cleaned on deploy');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections');
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality');

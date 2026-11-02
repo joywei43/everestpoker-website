@@ -39,10 +39,20 @@ function ageOn(birthday, now) {
   if (today.getUTCMonth() + 1 < m || (today.getUTCMonth() + 1 === m && today.getUTCDate() < d)) age--;
   return age;
 }
+// When two or more members share a nickname, show the nationality after it: "Wei (Taiwan)".
+export async function dupNicknames(env) {
+  const rows = await all(env.DB.prepare("SELECT lower(trim(nickname)) n FROM members WHERE trim(nickname)<>'' GROUP BY lower(trim(nickname)) HAVING COUNT(*)>1"));
+  return new Set(rows.map((r) => r.n));
+}
+export function nickLabel(m, dups) {
+  const nick = (m.nickname || '').trim();
+  if (!nick || !dups || !dups.has(nick.toLowerCase())) return nick;
+  return `${nick} (${m.nationality || m.member_no})`;
+}
 function displayName(m) {
   return [m.surname, m.middle_name, m.family_name].filter(Boolean).join(' ') || m.nickname || m.member_no;
 }
-function publicMember(m, groups) {
+function publicMember(m, groups, dups) {
   const g = m.group_id ? groups.get(m.group_id) : null;
   return {
     member_no: m.member_no, name: displayName(m), surname: m.surname, middle_name: m.middle_name, family_name: m.family_name,
@@ -51,7 +61,7 @@ function publicMember(m, groups) {
     email: m.email, phone: m.phone, whatsapp: m.whatsapp, telegram: m.telegram, line: m.line,
     referral_id: m.referral_id, language: m.language, status: m.status, staff_notes: m.staff_notes,
     group_id: m.group_id, group_name: g ? g.name : null, group_owner: g ? g.owner : null,
-    source: m.source, created_at: m.created_at, updated_at: m.updated_at, has_photo: !!m.has_photo
+    source: m.source, created_at: m.created_at, updated_at: m.updated_at, has_photo: !!m.has_photo, nick_label: nickLabel(m, dups)
   };
 }
 const audit = (env, now, actor, action, memberId, detail) =>
@@ -324,10 +334,10 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
   if (parts[0] === 'groups' && parts[1] === 'summary' && method === 'GET') {
     const r = range(url, now);
     const play = await all(env.DB.prepare(`SELECT ps.group_id, ps.member_id, SUM(ps.active_seconds) secs, COUNT(*) sessions, COUNT(DISTINCT ps.play_date) days, MAX(ps.start_at) last,
-        m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.group_id AS current_group
+        m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.nationality, m.group_id AS current_group
       FROM play_sessions ps JOIN members m ON m.id=ps.member_id
       WHERE ps.start_at>=? AND ps.start_at<? GROUP BY ps.group_id, ps.member_id`).bind(r.start, r.end));
-    const rw = await all(env.DB.prepare(`SELECT rw.group_id, rw.member_id, SUM(rw.amount) amt, m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.group_id AS current_group
+    const rw = await all(env.DB.prepare(`SELECT rw.group_id, rw.member_id, SUM(rw.amount) amt, m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.nationality, m.group_id AS current_group
       FROM rewards rw JOIN members m ON m.id=rw.member_id
       WHERE rw.voided=0 AND rw.approved_at IS NOT NULL AND rw.given_at>=? AND rw.given_at<? GROUP BY rw.group_id, rw.member_id`).bind(r.start, r.end));
     const pendingRw = await env.DB.prepare('SELECT COUNT(*) n, COALESCE(SUM(amount),0) amt FROM rewards WHERE voided=0 AND approved_at IS NULL').first();
@@ -342,17 +352,18 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       }
       return buckets.get(key);
     };
+    const dupsG = await dupNicknames(env);
     const player = (b, row) => {
       if (!b.players.has(row.member_id)) {
         const cg = row.current_group;
-        b.players.set(row.member_id, { member_no: row.member_no, name: displayName(row), nickname: row.nickname, seconds: 0, sessions: 0, days: 0, last: null, rewards: 0, playing_now: null,
+        b.players.set(row.member_id, { member_no: row.member_no, name: displayName(row), nickname: nickLabel(row, dupsG), seconds: 0, sessions: 0, days: 0, last: null, rewards: 0, playing_now: null,
           moved_to: cg !== row.group_id ? (cg ? (groups.get(cg) || {}).name || cg : 'No group') : null });
       }
       return b.players.get(row.member_id);
     };
     for (const g of groups.values()) bucket(g.id);
     // Current members of each group, even with no finished play in this period.
-    const current = await all(env.DB.prepare("SELECT id AS member_id, member_no, surname, middle_name, family_name, nickname, group_id, group_id AS current_group FROM members WHERE status='active' AND group_id IS NOT NULL"));
+    const current = await all(env.DB.prepare("SELECT id AS member_id, member_no, surname, middle_name, family_name, nickname, nationality, group_id, group_id AS current_group FROM members WHERE status='active' AND group_id IS NOT NULL"));
     for (const row of current) { const b = bucket(row.group_id); player(b, row); }
     // Players at a table right now count for their current group, shown separately until they leave.
     const live = await liveSeats(env);
@@ -396,7 +407,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const order = q ? "ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, member_no" : 'ORDER BY member_no';
     const rows = await all(env.DB.prepare(`SELECT members.*, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=members.id) AS has_photo FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, normNo(q), q] : []), limit, offset));
     const total = await env.DB.prepare(`SELECT COUNT(*) n FROM members ${sqlWhere}`).bind(...args).first();
-    return reply({ members: rows.map((m) => publicMember(m, groups)), total: total.n });
+    const dups = await dupNicknames(env);
+    return reply({ members: rows.map((m) => publicMember(m, groups, dups)), total: total.n });
   }
   if (parts[0] === 'members' && parts.length === 1 && method === 'POST') {
     const b = await readJson(req);
@@ -479,11 +491,12 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const history = await all(env.DB.prepare('SELECT group_id,effective_from,changed_by,note FROM member_group_history WHERE member_id=? ORDER BY effective_from DESC, id DESC').bind(m.id));
       const log = await all(env.DB.prepare('SELECT at,actor,action,detail FROM audit_log WHERE member_id=? ORDER BY at DESC, id DESC LIMIT 50').bind(m.id));
       const gname = (id) => (id ? (groups.get(id) || { name: id }).name : null);
+      const dupsM = await dupNicknames(env);
       // Still at the table: shown on the profile now, written to Game sessions when the seat is cleared.
       const playing = (await liveSeats(env)).filter((x) => x.member_id === m.id).map((x) => ({ table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, rest_seconds: x.rest_seconds, buy_in: x.buy_in, game_type: x.game_type, blinds: x.blinds, linked: !!x.link_member }));
       return reply({
         playing,
-        member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups),
+        member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups, dupsM),
         stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share },
         sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id) })),
         rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
@@ -654,7 +667,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const ids = [...new Set(live.flatMap((x) => [x.auto_member, x.link_member]).filter(Boolean))];
     const names = new Map();
     for (const part of chunks(ids, 90)) (await all(env.DB.prepare(`SELECT id,member_no,nickname,surname,middle_name,family_name FROM members WHERE id IN (${marks(part.length)})`).bind(...part))).forEach((m) => names.set(m.id, m));
-    const info = (id) => { const m = id ? names.get(id) : null; return m ? { member_no: m.member_no, name: displayName(m) } : null; };
+    const dupsU = await dupNicknames(env);
+    const info = (id) => { const m = id ? names.get(id) : null; return m ? { member_no: m.member_no, name: displayName(m) + (m.nickname ? ' “' + nickLabel(m, dupsU) + '”' : '') } : null; };
     // Every player at the table: not matched first, then linked by staff, then matched automatically by number or nickname.
     const rank = (x) => (x.link_member ? 1 : x.auto_member ? 2 : 0);
     const seated = live.map((x) => ({ table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, seat_key: x.key,
