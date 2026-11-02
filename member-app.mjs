@@ -149,7 +149,8 @@ export async function handleMemberApp(req, env, path, now, reply, ipHash) {
 }
 
 // ----- Promotions editor (staff API, managers edit) -----
-export async function handlePromotions(req, env, path, now, reply, manager) {
+export async function handlePromotions(req, env, path, now, reply, manager, user = '') {
+  const log = (action, detail) => env.DB.prepare('INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,?,NULL,?)').bind(now, str(user || 'staff', 60), action, str(detail, 500)).run();
   const parts = path.split('/').filter(Boolean);
   const clean = (b) => ({ title: str(b.title, 120), body: str(b.body, 1000), starts: /^\d{4}-\d{2}-\d{2}$/.test(b.starts || '') ? b.starts : '', ends: /^\d{4}-\d{2}-\d{2}$/.test(b.ends || '') ? b.ends : '', active: b.active === false || b.active === 0 ? 0 : 1, sort: Number.isSafeInteger(Number(b.sort)) ? Number(b.sort) : 0 });
   if (parts.length === 1 && req.method === 'GET') return reply({ promotions: await all(env.DB.prepare('SELECT * FROM promotions ORDER BY active DESC, sort, id')) });
@@ -158,12 +159,14 @@ export async function handlePromotions(req, env, path, now, reply, manager) {
     const p = clean(await readJson(req));
     if (!p.title) return bad(reply, 'Title is required.');
     await env.DB.prepare('INSERT INTO promotions(title,body,starts,ends,active,sort,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').bind(p.title, p.body, p.starts, p.ends, p.active, p.sort, now, now).run();
+    await log('promotion.create', `Added promotion "${p.title}"${p.active ? '' : ' (hidden)'}`);
     return reply({ ok: true });
   }
   if (parts.length === 2 && req.method === 'PUT') {
     const p = clean(await readJson(req));
     if (!p.title) return bad(reply, 'Title is required.');
     await env.DB.prepare('UPDATE promotions SET title=?,body=?,starts=?,ends=?,active=?,sort=?,updated_at=? WHERE id=?').bind(p.title, p.body, p.starts, p.ends, p.active, p.sort, now, Number(parts[1])).run();
+    await log('promotion.update', `Edited promotion "${p.title}"${p.active ? '' : ' (hidden)'}`);
     return reply({ ok: true });
   }
   return null;

@@ -196,3 +196,6 @@ CREATE TABLE IF NOT EXISTS daily_reports(day TEXT PRIMARY KEY, revenue INTEGER, 
 
 -- Bad Beat Jackpot board per business day, in centavos: Main, 1st Reserved, and any amount paid out that day.
 CREATE TABLE IF NOT EXISTS bbj_daily(day TEXT PRIMARY KEY, main_cents INTEGER, reserve_cents INTEGER, paid_cents INTEGER, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
+
+-- Operation Report: revenue per table per business day (the day's revenue is their sum).
+CREATE TABLE IF NOT EXISTS table_revenue(day TEXT NOT NULL, table_name TEXT NOT NULL, revenue INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, PRIMARY KEY(day, table_name));

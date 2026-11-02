@@ -87,19 +87,25 @@ assert.equal(op.history[0].day, '2026-11-02'); assert.equal(op.history[0].buy_in
 await relogin(); const maria2 = (await call('/login', 'POST', { username: 'Maria', password: 'maria-pass' })).body.token;
 assert.equal((await call('/report', 'GET', null, maria2)).status, 403, 'report: managers only');
 assert.equal((await call('/report/day/2026-10-31', 'PUT', { bbj_main: '270,000.00', bbj_reserve: '74,000' }, boss)).status, 200);
-assert.equal((await call('/report/day/2026-11-02', 'PUT', { revenue: 85000, bbj_main: '273,962.25', bbj_reserve: 74555.25, note: 'Busy Sunday' }, boss)).status, 200);
+assert.equal((await call('/report/day/2026-11-02', 'PUT', { tables: { T1: '50,000', T3: 35000 }, bbj_main: '273,962.25', bbj_reserve: 74555.25 }, boss)).status, 200);
 assert.equal((await call('/report/day/2026-11-01', 'PUT', { bbj_main: 1000, bbj_reserve: 74100, bbj_paid: 271000 }, boss)).status, 200);
 assert.equal((await call('/report/day/2026-11-02', 'PUT', { revenue: -5 }, boss)).status, 400);
 assert.equal((await call('/report/day/2026-12-31', 'PUT', { revenue: 5 }, boss)).status, 400, 'no future days');
 let rep = (await call('/report?from=2026-11-01&to=2026-11-03', 'GET', null, boss)).body;
 assert.deepEqual(rep.days.map((d) => d.day), ['2026-11-01', '2026-11-02', '2026-11-03']);
 const r2 = rep.days[1];
-assert.equal(r2.revenue, 85000); assert.equal(r2.bbj_main, 273962.25); assert.equal(r2.bbj_reserve, 74555.25); assert.equal(r2.note, 'Busy Sunday'); assert.equal(r2.updated_by, 'Boss');
+assert.equal(r2.revenue, 85000); assert.deepEqual(r2.table_revenue, { T1: 50000, T3: 35000 }); assert.equal(r2.bbj_main, 273962.25); assert.equal(r2.bbj_reserve, 74555.25); assert.equal(r2.updated_by, 'Boss');
 assert.equal(r2.table_seconds, 21.5 * 3600 + 8 * 3600, 'T1 13:00 → 10:30 next morning, T3 8 h');
 assert.deepEqual(r2.tables, ['T1', 'T3']);
 assert.equal(r2.visitors, 3); assert.equal(r2.members, 2); assert.equal(r2.sessions, 3); assert.equal(r2.buy_in, 35000); assert.equal(r2.cash_out, 32000);
 assert.equal(r2.levels['50 / 100 NLH'].table_seconds, r2.table_seconds);
 assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.entered_days, 1);
+assert.deepEqual(rep.totals.tables.T3, { revenue: 35000, table_seconds: 8 * 3600, days: 1 });
+// Clearing one table keeps the other; the BBJ board is untouched.
+assert.equal((await call('/report/day/2026-11-02', 'PUT', { tables: { T3: '' } }, boss)).status, 200);
+let chk = (await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0];
+assert.equal(chk.revenue, 50000); assert.equal(chk.bbj_main, 273962.25);
+await call('/report/day/2026-11-02', 'PUT', { tables: { T3: 35000 } }, boss);
 // 10-31 board 344,000 → 11-01 board 75,100 after paying 271,000 (growth 2,100) → 11-02 board 348,517.50 (growth 273,417.50).
 assert.equal(rep.days[0].bbj_growth, 2100); assert.equal(rep.days[1].bbj_growth, 273417.5);
 assert.deepEqual(rep.bbj, { as_of: '2026-11-02', main: 273962.25, reserve: 74555.25, before: 344000, paid: 271000, growth: 275517.5 });
@@ -122,4 +128,33 @@ assert.equal((await call('/operation/runs/update', 'POST', { run_key: t3run.run_
 assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 21.5 * 3600 + 7 * 3600);
 assert.equal((await call('/operation/runs/delete', 'POST', { run_key: t3run.run_key }, boss)).status, 200);
 assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 21.5 * 3600, 'T3 removed');
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes');
+
+// History Log: master only; PPM actions, logins and fixes are all there.
+assert.equal((await call('/audit', 'GET', null, maria2)).status, 403);
+const log = (await call('/audit?limit=200', 'GET', null, boss)).body;
+const acts = new Set(log.entries.map((e) => e.action));
+for (const a of ['staff.login', 'ppm.table_open', 'ppm.table_close', 'ppm.seat', 'ppm.level', 'table.run', 'report.day']) assert.ok(acts.has(a), 'logged ' + a);
+assert.ok(log.entries.some((e) => e.action === 'ppm.seat' && /Ann sat at T1 #2 · buy-in 8,000/.test(e.detail)));
+assert.ok(log.actors.includes('Boss'));
+const ppmOnly = (await call('/audit?category=ppm', 'GET', null, boss)).body.entries;
+assert.ok(ppmOnly.length && ppmOnly.every((e) => e.action.startsWith('ppm.')));
+await call('/login', 'POST', { username: 'Maria', password: 'nope' });
+assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).body.entries[0].action, 'staff.login_failed');
+{ // ppmChanges: leave with cash-out, add chips, rest, seat and table moves.
+  const { ppmChanges } = await import('./audit.mjs');
+  const seat = (id, m, st = 'seated', buy = 1000, start = 'S') => ({ id, status: m ? st : 'idle', memberId: m || '', buyInAmount: buy, sessionStart: m ? start : null });
+  const tb = (id, name, seats, sessions = []) => ({ id, name, isRunning: true, gameType: 'NLH', blinds: '50 / 100', seats: Array.from({ length: 9 }, (_, j) => seats[j + 1] || seat(j + 1)), sessions });
+  const a = [tb(1, 'T1', { 1: seat(1, 'Wei'), 2: seat(2, 'Bob'), 3: seat(3, 'Ann'), 4: seat(4, 'Kim') }), tb(2, 'T2', {})];
+  const b = [tb(1, 'T1', { 2: seat(2, 'Bob', 'rest'), 3: seat(3, 'Ann', 'seated', 3000), 6: seat(6, 'Kim') }, [{ seatId: 1, memberId: 'Wei', buyInAmount: 1000, cashOutAmount: 4000 }]), tb(2, 'T2', { 5: seat(5, 'Joe', 'seated', 2000) })];
+  b[1].seats[6] = seat(7, 'Wei', 'seated', 4000, 'S2'); a[0].seats[0] = seat(1, 'Wei'); b[0].sessions = [{ seatId: 1, memberId: 'Wei', buyInAmount: 1000, cashOutAmount: 4000 }];
+  const ch = ppmChanges(a, b).map((c) => c.action + ': ' + c.detail);
+  assert.ok(ch.includes('ppm.change_table: Wei: T1 #1 → T2 #7 with 4,000 chips (cashed out 4,000 at T1)'), ch.join('\n'));
+  assert.ok(ch.includes('ppm.change_seat: Kim: T1 #4 → T1 #6'));
+  assert.ok(ch.includes('ppm.rest: Bob at T1 #2 on a break'));
+  assert.ok(ch.includes('ppm.add_chips: Ann at T1 #3 added 2,000 · total 3,000'));
+  assert.ok(ch.includes('ppm.seat: Joe sat at T2 #5 · buy-in 2,000'));
+  assert.ok(!ch.some((c) => c.startsWith('ppm.leave')), 'a move is not a leave');
+  const c = structuredClone(b); c[1].seats[4] = seat(5); c[1].sessions = [{ seatId: 5, memberId: 'Joe', buyInAmount: 2000, cashOutAmount: 500 }];
+  assert.deepEqual(ppmChanges(b, c).map((x) => x.detail), ['Joe left T2 #5 · buy-in 2,000 · cash-out 500 · W/L −1,500']);
+}
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log');

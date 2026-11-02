@@ -3,6 +3,7 @@ import { handleMemberApp, handlePromotions } from './member-app.mjs';
 import { handleStaff } from './staff.mjs';
 import { handleOperation, recordTableRuns, handleTableRuns } from './operation.mjs';
 import { handleReport } from './report.mjs';
+import { auditStmt, ppmChanges, handleAudit } from './audit.mjs';
 const enc = new TextEncoder();
 // Master accounts are fixed in wrangler.toml (MASTER_USERS) so nobody can grant themselves master from the console.
 const isMaster=(env,u)=>!!u&&(env.MASTER_USERS||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean).includes(String(u).toLowerCase());
@@ -46,9 +47,10 @@ export default {async fetch(req,env){
   let user=null,role='admin';
   if(staff){if(staff.active&&await equal(await pbkdf2(input.password,staff.salt,staff.iterations),staff.pw_hash)){user=staff.display_name;role=isMaster(env,staff.username)?'master':staff.role==='staff'?'staff':'admin';}}
   else if(username.toLowerCase()==='admin01'&&env.ADMIN_PASSWORD&&await equal(input.password,env.ADMIN_PASSWORD)){user='admin01';role=isMaster(env,'admin01')?'master':'admin';}
-  if(!user)return reply({error:'帳號或密碼不正確'},401);
+  if(!user){try{await auditStmt(env,now,username.slice(0,60),'staff.login_failed','Wrong password or disabled account').run();}catch(e){}return reply({error:'帳號或密碼不正確'},401);}
   const bytes=crypto.getRandomValues(new Uint8Array(32));const token=Array.from(bytes).map(x=>x.toString(16).padStart(2,'0')).join('');const hashed=await digest(token);
   await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM session_users WHERE token NOT IN (SELECT token FROM sessions)'),env.DB.prepare('DELETE FROM attempts WHERE started<? OR ip=?').bind(now-900,ip),env.DB.prepare('INSERT INTO sessions(token,expires) VALUES(?,?)').bind(hashed,now+28800),env.DB.prepare('INSERT OR REPLACE INTO session_users(token,username,role) VALUES(?,?,?)').bind(hashed,user,role)]);
+  try{await auditStmt(env,now,user,'staff.login','Signed in').run();}catch(e){}
   return reply({token,expires:now+28800,user,role});
  }
  if(path.startsWith('/member/')){
@@ -62,17 +64,18 @@ export default {async fetch(req,env){
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});
  }
- if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||path==='/me'||path==='/promotions'||path.startsWith('/promotions/')||path==='/staff'||path.startsWith('/staff/')||path==='/operation'||path.startsWith('/operation/')||path==='/report'||path.startsWith('/report/')||isMemberApi(path)){
+ if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||path==='/me'||path==='/promotions'||path.startsWith('/promotions/')||path==='/staff'||path.startsWith('/staff/')||path==='/operation'||path.startsWith('/operation/')||path==='/report'||path.startsWith('/report/')||path==='/audit'||isMemberApi(path)){
   const bearer=req.headers.get('Authorization')||'';if(!/^Bearer [a-f0-9]{64}$/.test(bearer))return reply({error:'Login required'},401);
   const hashed=await digest(bearer.slice(7));const session=await env.DB.prepare('SELECT expires FROM sessions WHERE token=?').bind(hashed).first();if(!session||session.expires<=now)return reply({error:'Session expired'},401);
   if(path==='/logout'){await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(hashed),env.DB.prepare('DELETE FROM session_users WHERE token=?').bind(hashed)]);return reply({ok:true});}
   const owner=await env.DB.prepare('SELECT username,role FROM session_users WHERE token=?').bind(hashed).first();const user=owner?owner.username:null,role=isMaster(env,user)?'master':owner?owner.role:'admin';
   if(path==='/me')return reply({user,role});
   if(path==='/operation'&&req.method==='GET')return handleOperation(req,env,now,reply,role);
+  if(path==='/audit'&&req.method==='GET')return handleAudit(req,env,now,reply,role);
   if(path.startsWith('/operation/')){const res=await handleTableRuns(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
   if(path==='/report'||path.startsWith('/report/')){const res=await handleReport(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
   if(path==='/staff'||path.startsWith('/staff/')){const res=await handleStaff(req,env,path,now,reply,user,role,u=>isMaster(env,u));return res||reply({error:'Not found'},404);}
-  if(path==='/promotions'||path.startsWith('/promotions/')){const res=await handlePromotions(req,env,path,now,reply,role!=='staff');return res||reply({error:'Not found'},404);}
+  if(path==='/promotions'||path.startsWith('/promotions/')){const res=await handlePromotions(req,env,path,now,reply,role!=='staff',user);return res||reply({error:'Not found'},404);}
   if(isMemberApi(path)){const res=await handleMembersApi(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
   if(path==='/ppm'){
    const row=await env.DB.prepare('SELECT version,data FROM ppm WHERE id=1').first();
@@ -93,6 +96,7 @@ export default {async fetch(req,env){
    // Copy finished seat sessions into member play time. Never blocks the PPM save; missed rows are picked up on the next save.
    try{await ingestPpm(env,ts,now);}catch(e){}
    try{await recordTableRuns(env,ts,now);}catch(e){}
+   try{const ch=ppmChanges(JSON.parse(row.data),ts);if(ch.length)await env.DB.batch(ch.slice(0,60).map(c=>auditStmt(env,now,user||'staff',c.action,c.detail)));}catch(e){}
    return reply({version:body.version+1,tables:ts});
   }
   if(Number(req.headers.get('content-length'))>100000)return reply({error:'Too large'},413);

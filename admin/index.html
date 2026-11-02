@@ -75,7 +75,8 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (min-width:700px){.wide{grid-column:span 2}}
 @media (max-width:640px){main{padding:16px}nav.side{gap:12px}.navlinks{flex-direction:row;flex-wrap:wrap}.staffbox{margin-top:0}}
-.bbj{background:#0B0B0B;color:#fff;border-radius:14px;padding:18px 16px 16px;text-align:center;font-family:'Ultra',Georgia,serif;letter-spacing:.5px;margin-bottom:16px}
+.bbj-edit{position:absolute;z-index:1;right:12px;top:12px;background:transparent;color:#fff;border-color:rgba(255,255,255,.4);font-family:'IBM Plex Sans',system-ui,sans-serif;letter-spacing:0}
+.bbj{position:relative;background:#0B0B0B;color:#fff;border-radius:14px;padding:18px 16px 16px;text-align:center;font-family:'Ultra',Georgia,serif;letter-spacing:.5px;margin-bottom:16px}
 .bbj-date{font-size:clamp(14px,2.2vw,20px);opacity:.92}.bbj-main{font-size:clamp(28px,6vw,64px);line-height:1.1;margin:4px 0}.bbj-res{font-size:clamp(15px,2.6vw,26px)}
 .floor{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);gap:16px;align-items:start}@media(max-width:900px){.floor{grid-template-columns:1fr}}
 .floor-tables{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 18px}@media(max-width:560px){.floor-tables{grid-template-columns:1fr}}
@@ -173,6 +174,7 @@ function render() {
         ${link('promotions', 'Promotions')}
         ${isMaster() ? link('importmembers', 'Import members') : ''}
         ${isMaster() ? link('staffaccounts', 'Staff accounts') : ''}
+        ${isMaster() ? link('historylog', 'History Log') : ''}
         <a href="../ppm/">PPM tables ↗</a>
       </div>
       <div class="staffbox" id="staffbox"></div>
@@ -181,7 +183,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isMaster() ? viewImport : viewMembers };
+  const pages = { members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isMaster() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -658,6 +660,26 @@ async function loadRuns(view, dayStr) {
   });
 }
 const dtShort = (t) => fmt(t, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+function bbjDialog(view, d) {
+  view.querySelector('#bbjd')?.remove();
+  const dlg = document.createElement('dialog'); dlg.id = 'bbjd';
+  const same = d.bbj && d.bbj.day === d.day;
+  dlg.innerHTML = `<form method="dialog"><h2>Bad Beat Jackpot · ${esc(d.day)}</h2><div class="form">
+      <label class="f">MAIN (₱)<input type="text" inputmode="decimal" name="main" value="${same && d.bbj.main != null ? d.bbj.main : ''}" placeholder="${d.bbj ? 'Last: ' + peso2(d.bbj.main) : 'e.g. 273,962.25'}"></label>
+      <label class="f">1st Reserved (₱)<input type="text" inputmode="decimal" name="reserve" value="${same && d.bbj.reserve != null ? d.bbj.reserve : ''}" placeholder="${d.bbj ? 'Last: ' + peso2(d.bbj.reserve) : 'e.g. 74,555.25'}"></label>
+      <label class="f">Paid out today (₱)<input type="text" inputmode="decimal" name="paid" placeholder="Only if it was hit"></label></div>
+    <p class="small muted" style="margin:0">Enter the amounts shown on the board for business day ${esc(d.day)}.</p><div id="bbjMsg"></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="bbjSave">Save</button></div></form>`;
+  view.appendChild(dlg);
+  const f = dlg.querySelector('form'), num = (v) => { const t = String(v).replace(/[,\s₱]/g, ''); return t === '' ? null : Number(t); };
+  dlg.querySelector('#bbjSave').onclick = async (e) => {
+    e.preventDefault();
+    const body = { bbj_main: num(f.main.value), bbj_reserve: num(f.reserve.value), bbj_paid: num(f.paid.value) };
+    if (Object.values(body).some((v) => v != null && !(v >= 0)) || body.bbj_main == null) { flash(dlg.querySelector('#bbjMsg'), 'Enter MAIN (and 1st Reserved) as numbers, 0 or more.', 'err'); return; }
+    try { await api('/report/day/' + d.day, 'PUT', body); dlg.close(); viewOperation(view).catch(() => {}); } catch (err) { flash(dlg.querySelector('#bbjMsg'), err.message, 'err'); }
+  };
+  dlg.showModal(); f.main.focus();
+}
 async function viewOperation(view) {
   clearTimeout(operationTimer);
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -671,8 +693,9 @@ async function viewOperation(view) {
   const tables = d.tables || [];
   if (!tables.find((t) => t.name === floorTable)) floorTable = (tables.find((t) => t.running && (t.players || []).length) || tables.find((t) => t.running) || tables[0] || {}).name || null;
   const sel = tables.find((t) => t.name === floorTable);
-  const bbj = d.bbj ? `<section class="bbj" aria-label="Bad Beat Jackpot"><div class="bbj-date">${esc(ordinalDate(d.bbj.day))}</div><div class="bbj-main">MAIN: ${peso2(d.bbj.main)}</div><div class="bbj-res">1st Reserved: ${peso2(d.bbj.reserve)}</div></section>`
-    : (isManager() ? `<div class="msg">Bad Beat Jackpot board: enter Main and 1st Reserved in <a href="#/operationreport">Operation Report</a> (click a day).</div>` : '');
+  const bbjBtn = isManager() ? `<button type="button" class="btn sm bbj-edit" id="bbjEdit">Update BBJ</button>` : '';
+  const bbj = d.bbj ? `<section class="bbj" aria-label="Bad Beat Jackpot">${bbjBtn}<div class="bbj-date">${esc(ordinalDate(d.bbj.day))}</div><div class="bbj-main">MAIN: ${peso2(d.bbj.main)}</div><div class="bbj-res">1st Reserved: ${peso2(d.bbj.reserve)}</div></section>`
+    : (isManager() ? `<div class="msg row between">Bad Beat Jackpot board is empty. ${bbjBtn}</div>` : '');
   view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Live Operation</h1>
       <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A day starts at 12:00, or when the first table opens that morning.</p></div>
     <div class="row">${prevDay ? `<a class="btn" href="#/liveoperation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/liveoperation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/liveoperation">Today</a>`}<a class="btn" href="#/operationreport">Operation Report →</a></div></div>
@@ -696,6 +719,8 @@ async function viewOperation(view) {
       <p class="small muted" style="margin:0">Leave Closed empty only while the table is still open.</p><div id="runMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="runSave">Save</button></div></form></dialog>` : ''}`;
   if (isMaster()) loadRuns(view, d.day);
   loadPhotos(view);
+  const be = view.querySelector('#bbjEdit');
+  if (be) be.onclick = () => bbjDialog(view, d);
   const find = (key) => { const [tn, seat] = key.split('|'); const t = tables.find((x) => x.name === tn); return t && (t.players || []).find((p) => String(p.seat) === seat); };
   view.querySelectorAll('[data-table]').forEach((el) => {
     const pick = () => { floorTable = el.dataset.table; viewOperation(view).catch(() => {}); };
@@ -703,7 +728,55 @@ async function viewOperation(view) {
     el.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); pick(); } };
   });
   view.querySelectorAll('[data-seat]').forEach((el) => el.onclick = (e) => { e.stopPropagation(); const p = find(el.dataset.seat); if (p) playerCard(view, p, el); });
-  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation' && !document.getElementById('pcard') && !(view.querySelector('#rund') || {}).open) viewOperation(view).catch(() => {}); else if (parseHash().page === 'liveoperation') operationTimer = setTimeout(() => viewOperation(view).catch(() => {}), 30000); }, 30000);
+  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation' && !document.getElementById('pcard') && !(view.querySelector('#rund') || {}).open && !(view.querySelector('#bbjd') || {}).open) viewOperation(view).catch(() => {}); else if (parseHash().page === 'liveoperation') operationTimer = setTimeout(() => viewOperation(view).catch(() => {}), 30000); }, 30000);
+}
+
+// ---------- History Log ----------
+const ACTION_LABELS = {
+  'staff.login': ['Signed in', ''], 'staff.login_failed': ['Sign-in failed', 'red'], 'staff.create': ['Staff added', 'dark'], 'staff.update': ['Staff changed', 'dark'], 'staff.delete': ['Staff deleted', 'red'],
+  'ppm.table_open': ['Table open', 'green'], 'ppm.table_close': ['Table close', ''], 'ppm.level': ['Level change', 'amber'], 'ppm.reset': ['Table reset', 'red'],
+  'ppm.seat': ['Seat in', 'green'], 'ppm.leave': ['Leave', ''], 'ppm.add_chips': ['Add chips', 'amber'], 'ppm.rest': ['Break', ''], 'ppm.back': ['Back', ''],
+  'ppm.change_seat': ['Change seat', 'blue'], 'ppm.change_table': ['Change table', 'blue'],
+  'member.create': ['Member added', 'green'], 'member.update': ['Profile edited', 'blue'], 'member.group': ['Group change', 'amber'], 'member.number': ['Number change', 'amber'],
+  'member.photo': ['Photo', ''], 'member.merge': ['Merged', 'red'], 'member.delete': ['Member deleted', 'red'], 'member.import': ['Import', 'blue'],
+  'sessions.link': ['Linked PPM', 'blue'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
+  'reward.add': ['Reward', 'green'], 'reward.approve': ['Approved', 'green'], 'reward.void': ['Voided', 'red'],
+  'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue']
+};
+async function viewHistory(view) {
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const f = { from: params.get('from') || today(), to: params.get('to') || today(), actor: params.get('actor') || '', category: params.get('category') || '', q: params.get('q') || '' };
+  const go = (p) => { location.hash = '#/historylog?' + new URLSearchParams({ ...f, ...p }); };
+  const first = await api('/audit?' + new URLSearchParams({ ...f, limit: 100 }));
+  const cats = [['', 'Everything'], ['ppm', 'PPM tables'], ['members', 'Members'], ['rewards', 'Rewards'], ['sessions', 'PPM links & cash-out'], ['tables', 'Table record fixes'], ['report', 'Operation Report'], ['promotions', 'Promotions'], ['staff', 'Staff accounts'], ['login', 'Sign-ins']];
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>History Log</h1><p class="sub">Every action, newest first: who did it, when, and what changed. Master only.</p></div><button class="btn" id="csv">Export CSV</button></div>
+    <section class="card"><form id="hf" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <label class="f">From<input type="date" name="from" value="${esc(f.from)}"></label><label class="f">To<input type="date" name="to" value="${esc(f.to)}"></label>
+      <label class="f">Who<select name="actor"><option value="">Everyone</option>${first.actors.map((a) => `<option ${a === f.actor ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
+      <label class="f">What<select name="category">${cats.map(([k, l]) => `<option value="${k}" ${k === f.category ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="f" style="flex:1 1 180px">Search<input type="search" name="q" value="${esc(f.q)}" placeholder="Name, member no., table…"></label>
+      <button class="btn primary">Show</button><button type="button" class="btn sm" data-days="0">Today</button><button type="button" class="btn sm" data-days="6">7 days</button><button type="button" class="btn sm" data-days="29">30 days</button></form></section>
+    <section class="card"><div class="tbl"><table><thead><tr><th style="width:120px">Time</th><th style="width:120px">Who</th><th style="width:150px">Action</th><th>Details</th></tr></thead><tbody id="hrows"></tbody></table></div>
+      <div class="row" style="justify-content:center;margin-top:10px"><button class="btn" id="more" hidden>Load more</button></div><p class="small muted" id="hcount" style="margin:6px 0 0"></p></section>`;
+  const fm = view.querySelector('#hf');
+  fm.onsubmit = (e) => { e.preventDefault(); go({ from: fm.from.value, to: fm.to.value, actor: fm.actor.value, category: fm.category.value, q: fm.q.value.trim() }); };
+  fm.querySelectorAll('[data-days]').forEach((b) => b.onclick = () => go({ from: daysAgo(Number(b.dataset.days)), to: today() }));
+  const all = [];
+  const render = (res) => {
+    all.push(...res.entries);
+    view.querySelector('#hrows').innerHTML = all.map((e) => { const [label, color] = ACTION_LABELS[e.action] || [e.action, '']; return `<tr><td class="small" style="white-space:nowrap">${fmt(e.at, { day: 'numeric', month: 'short' })} <b>${fmt(e.at, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</b></td>
+      <td><b>${esc(e.actor || '—')}</b></td><td><span class="chip ${color}">${esc(label)}</span></td>
+      <td>${e.member_no ? `<a href="#/member/${encodeURIComponent(e.member_no)}" class="mono">${esc(e.member_no)}</a>${e.nickname ? ' ' + esc(e.nickname) : ''} · ` : ''}${esc(e.detail)}</td></tr>`; }).join('') || '<tr><td colspan="4" class="muted">Nothing in this range.</td></tr>';
+    const more = view.querySelector('#more'); more.hidden = !res.more;
+    more.onclick = async () => { more.disabled = true; try { render(await api('/audit?' + new URLSearchParams({ ...f, limit: 100, before: all[all.length - 1].id }))); } finally { more.disabled = false; } };
+    view.querySelector('#hcount').textContent = `${all.length}${res.more ? '+' : ''} entries`;
+  };
+  render(first);
+  view.querySelector('#csv').onclick = () => {
+    const lines = [['Time', 'Who', 'Action', 'Member no', 'Details']].concat(all.map((e) => [fmt(e.at, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }), e.actor, (ACTION_LABELS[e.action] || [e.action])[0], e.member_no || '', e.detail]));
+    const csv = lines.map((r) => r.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-history-${f.from}-to-${f.to}.csv`; a.click();
+  };
 }
 
 // ---------- Operation Report ----------
@@ -715,6 +788,7 @@ async function viewReport(view) {
   const opt = (v, f = peso) => (v == null ? '—' : f(v));
   const levels = Object.entries(T.levels).sort((a, b) => b[1].table_seconds - a[1].table_seconds);
   const maxLv = Math.max(1, ...levels.map(([, v]) => v.table_seconds));
+  const tablesSorted = Object.entries(T.tables || {}).sort((a, b) => a[0].localeCompare(b[0]));
   const wd = (s) => new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short' }).format(new Date(s + 'T00:00:00Z'));
   const firstOfMonth = (s) => s.slice(0, 8) + '01';
   const shift = (s, n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(s + 'T00:00:00Z') + n * 864e5));
@@ -742,26 +816,26 @@ async function viewReport(view) {
       ${tile('Player hours', hm(T.play_seconds), `${T.sessions} sessions · ${restBadge(T.rest_seconds, T.play_seconds)}`)}
       ${tile('Buy-in / Cash-out', peso(T.buy_in), `cash-out ${peso(T.cash_out)}${T.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${T.missing_cash_out} without cash-out</span>` : ''}`)}
     </div>
+    <section class="card"><h2 style="margin-bottom:10px">By table</h2><div class="tbl"><table><thead><tr><th>Table</th><th class="num">Days open</th><th class="num">Table hours</th><th class="num">Revenue</th><th class="num">Per table hour</th><th style="width:30%">Share of revenue</th></tr></thead><tbody>
+      ${tablesSorted.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td class="num"><b>${v.revenue ? peso(v.revenue) : '—'}</b></td><td class="num">${v.revenue && v.table_seconds ? peso(v.revenue / (v.table_seconds / 3600)) : '—'}</td><td><div style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${T.revenue ? (100 * v.revenue / T.revenue).toFixed(1) : 0}%"></i></div></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No tables ran in this range.</td></tr>'}
+    </tbody></table></div></section>
     <section class="card"><h2 style="margin-bottom:10px">By level</h2><div class="tbl"><table><thead><tr><th>Level</th><th class="num">Days</th><th class="num">Table hours</th><th style="width:30%"></th><th class="num">Player hours</th><th class="num">Sessions</th><th class="num">Players per table</th></tr></thead><tbody>
       ${levels.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td><div class="bar" style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${(100 * v.table_seconds / maxLv).toFixed(1)}%"></i></div></td><td class="num">${hm(v.play_seconds)}</td><td class="num">${v.sessions}</td><td class="num">${v.table_seconds ? (v.play_seconds / v.table_seconds).toFixed(1) : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No tables ran in this range.</td></tr>'}
     </tbody></table></div><p class="small muted" style="margin:8px 0 0">Players per table = player hours ÷ table hours (average seats in use). Level changes in PPM are split from today on.</p></section>
-    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Daily</h2><span class="small muted">Click a day to enter revenue and the jackpot board</span></div><div class="tbl"><table><thead><tr>
-      <th>Day</th><th class="num">Revenue</th><th class="num">BBJ Main</th><th class="num">1st Reserved</th><th class="num">BBJ +/−</th><th>Tables</th><th class="num">Table hours</th><th class="num">Operating</th><th class="num">Visitors</th><th class="num">New</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>Levels</th><th>Note</th></tr></thead><tbody>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Daily</h2><span class="small muted">Click a day to enter each table's revenue</span></div><div class="tbl"><table><thead><tr>
+      <th>Day</th><th class="num">Revenue</th><th class="num">BBJ Main</th><th class="num">1st Reserved</th><th class="num">BBJ +/−</th><th>Tables</th><th class="num">Table hours</th><th class="num">Operating</th><th class="num">Visitors</th><th class="num">New</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>Levels</th><th>By</th></tr></thead><tbody>
       ${d.days.slice().reverse().map((r) => { const open = r.table_seconds || r.sessions; return `<tr class="click" data-day="${r.day}" tabindex="0" style="${open ? '' : 'opacity:.55'}">
         <td style="white-space:nowrap"><b>${esc(r.day)}</b> <span class="small muted">${wd(r.day)}</span></td>
-        <td class="num">${r.revenue == null ? (open ? '<span class="chip amber">Enter</span>' : '—') : '<b>' + peso(r.revenue) + '</b>'}</td>
+        <td class="num">${r.revenue == null ? (open ? '<span class="chip amber">Enter</span>' : '—') : '<b>' + peso(r.revenue) + '</b>' + (Object.keys(r.table_revenue).length ? `<div class="small muted" style="white-space:nowrap">${Object.entries(r.table_revenue).sort().map(([k, v]) => esc(k) + ' ' + peso(v)).join(' · ')}</div>` : '')}</td>
         <td class="num">${opt(r.bbj_main, peso2)}</td><td class="num">${opt(r.bbj_reserve, peso2)}</td><td class="num">${r.bbj_paid ? `<b style="color:var(--red)" title="Paid out">Hit ${peso2(r.bbj_paid)}</b>` : r.bbj_growth == null ? '—' : (r.bbj_growth >= 0 ? '+' : '−') + peso2(Math.abs(r.bbj_growth))}</td>
         <td>${r.tables.map(esc).join(' ') || '—'}</td><td class="num">${hm(r.table_seconds)}</td><td class="num">${hm(r.operating_seconds)}</td>
         <td class="num">${r.visitors}</td><td class="num">${r.new_members || ''}</td><td class="num">${hm(r.play_seconds)}</td><td class="num">${peso(r.buy_in)}</td><td class="num">${peso(r.cash_out)}</td>
         <td class="small">${Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `<span style="white-space:nowrap">${esc(k)} · ${hm(v.table_seconds)}</span>`).join('<br>') || '—'}</td>
-        <td class="small muted" style="min-width:140px">${esc(r.note)}${r.updated_by ? `<div>by ${esc(r.updated_by)}</div>` : ''}</td></tr>`; }).join('')}
+        <td class="small muted">${esc(r.updated_by || '')}</td></tr>`; }).join('')}
     </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td class="num">${opt(d.bbj.main, peso2)}</td><td class="num">${opt(d.bbj.reserve, peso2)}</td><td class="num">${d.bbj.growth == null ? '' : '+' + peso2(d.bbj.growth)}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>
     <dialog id="rd"><form method="dialog" id="rdf"><h2 id="rdTitle"></h2>
-      <div class="form"><label class="f">Revenue (₱)<input type="text" inputmode="numeric" name="revenue" placeholder="e.g. 85000"></label>
-        <label class="f">BBJ Main (₱)<input type="text" inputmode="decimal" name="bbj_main" placeholder="e.g. 273,962.25"></label>
-        <label class="f">BBJ 1st Reserved (₱)<input type="text" inputmode="decimal" name="bbj_reserve" placeholder="e.g. 74,555.25"></label>
-        <label class="f">BBJ paid out (₱)<input type="text" inputmode="decimal" name="bbj_paid" placeholder="Only if it was hit"></label>
-        <label class="f" style="grid-column:1/-1">Note<input type="text" name="note" maxlength="500" placeholder="e.g. BBJ hit on T3, holiday, tournament day"></label></div>
+      <div class="form" id="rdTables"></div>
+      <p style="margin:0">Total <b id="rdSum">₱0</b></p>
       <p class="small muted" id="rdInfo" style="margin:0"></p>
       <div id="rdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="rdSave">Save</button></div></form></dialog>`;
   const rf = view.querySelector('#rangeF');
@@ -771,23 +845,28 @@ async function viewReport(view) {
   const num = (v) => { const t = String(v).replace(/[,\s₱]/g, ''); return t === '' ? null : Number(t); };
   const openDay = (r) => {
     view.querySelector('#rdTitle').textContent = `${r.day} (${wd(r.day)})`;
-    for (const k of ['revenue', 'bbj_main', 'bbj_reserve', 'bbj_paid']) f.elements[k].value = r[k] == null ? '' : r[k];
-    f.elements.note.value = r.note || '';
-    view.querySelector('#rdInfo').textContent = `PPM: ${r.tables.join(' ') || 'no tables'} · table hours ${hm(r.table_seconds)} · ${r.visitors} visitors · buy-in ${peso(r.buy_in)}`;
+    // Tables that ran that day (and any already entered); before table records existed, all tables.
+    const names = [...new Set([...r.tables, ...Object.keys(r.table_revenue)])].sort();
+    const list = names.length ? names : ['T1', 'T2', 'T3', 'T5'];
+    view.querySelector('#rdTables').innerHTML = list.map((k) => `<label class="f">${esc(k)} revenue (₱)<input type="text" inputmode="numeric" data-t="${esc(k)}" value="${r.table_revenue[k] ?? ''}" placeholder="${r.table_seconds_by[k] ? hm(r.table_seconds_by[k]) + ' open' : 'e.g. 45000'}"></label>`).join('');
+    const inputs = [...view.querySelectorAll('#rdTables input')];
+    const sum = () => { view.querySelector('#rdSum').textContent = peso(inputs.reduce((a, i) => a + (num(i.value) || 0), 0)); };
+    inputs.forEach((i) => i.oninput = sum); sum();
+    view.querySelector('#rdInfo').textContent = names.length ? `PPM: table hours ${hm(r.table_seconds)} · ${r.visitors} visitors · buy-in ${peso(r.buy_in)}` : 'No table records for this day, so all tables are listed. Leave blank the ones that did not open.';
     flash(view.querySelector('#rdMsg'), '');
     view.querySelector('#rdSave').onclick = async (e) => {
       e.preventDefault();
-      const body = { revenue: num(f.elements.revenue.value), bbj_main: num(f.elements.bbj_main.value), bbj_reserve: num(f.elements.bbj_reserve.value), bbj_paid: num(f.elements.bbj_paid.value), note: f.elements.note.value.trim() };
-      if (['revenue', 'bbj_main', 'bbj_reserve', 'bbj_paid'].some((k) => body[k] != null && !(body[k] >= 0))) { flash(view.querySelector('#rdMsg'), 'Amounts must be numbers, 0 or more. Leave blank if not known yet.', 'err'); return; }
-      try { await api('/report/day/' + r.day, 'PUT', body); dlg.close(); viewReport(view); } catch (err) { flash(view.querySelector('#rdMsg'), err.message, 'err'); }
+      const tables = {};
+      for (const i of inputs) { const v = num(i.value); if (v != null && !(v >= 0)) { flash(view.querySelector('#rdMsg'), 'Revenue must be a number, 0 or more. Leave blank if not known yet.', 'err'); return; } tables[i.dataset.t] = v == null ? '' : v; }
+      try { await api('/report/day/' + r.day, 'PUT', { tables }); dlg.close(); viewReport(view); } catch (err) { flash(view.querySelector('#rdMsg'), err.message, 'err'); }
     };
-    dlg.showModal(); f.elements.revenue.focus();
+    dlg.showModal(); if (inputs[0]) inputs[0].focus();
   };
   view.querySelectorAll('tr[data-day]').forEach((tr) => { const r = d.days.find((x) => x.day === tr.dataset.day); tr.onclick = () => openDay(r); tr.onkeydown = (e) => { if (e.key === 'Enter') openDay(r); }; });
   view.querySelector('#csv').onclick = () => {
-    const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ Main PHP', 'BBJ 1st Reserved PHP', 'BBJ paid out PHP', 'BBJ change PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Note', 'Entered by']]
+    const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ Main PHP', 'BBJ 1st Reserved PHP', 'BBJ paid out PHP', 'BBJ change PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Revenue by table', 'Entered by']]
       .concat(d.days.map((r) => [r.day, wd(r.day), r.revenue ?? '', r.bbj_main ?? '', r.bbj_reserve ?? '', r.bbj_paid ?? '', r.bbj_growth ?? '', r.tables.join(' '), (r.table_seconds / 3600).toFixed(2), (r.operating_seconds / 3600).toFixed(2), r.visitors, r.members, r.new_members, r.sessions, (r.play_seconds / 3600).toFixed(2), r.buy_in, r.cash_out,
-        Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `${k} ${(v.table_seconds / 3600).toFixed(2)}`).join('; '), r.note, r.updated_by]))
+        Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `${k} ${(v.table_seconds / 3600).toFixed(2)}`).join('; '), Object.entries(r.table_revenue).map(([k, v]) => `${k} ${v}`).join('; '), r.updated_by]))
       .concat([['Total', '', T.revenue, d.bbj.main ?? '', d.bbj.reserve ?? '', d.bbj.paid || '', d.bbj.growth ?? '', '', (T.table_seconds / 3600).toFixed(2), (T.operating_seconds / 3600).toFixed(2), T.visits, '', T.new_members, T.sessions, (T.play_seconds / 3600).toFixed(2), T.buy_in, T.cash_out, '', '', '']]);
     const csv = lines.map((row) => row.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-operation-report-${d.from}-to-${d.to}.csv`; a.click();

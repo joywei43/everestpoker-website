@@ -7,7 +7,7 @@ const HOUR = 3600, DAY = 86400, TZ = 8 * HOUR, MAX_DAYS = 120;
 const all = async (stmt) => (await stmt.all()).results || [];
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
 const addDays = (d, n) => localDate(dayStart(d) + n * DAY + HOUR);
-const money = (v) => (v === '' || v == null ? null : Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 1e11 ? Math.round(Number(v)) : NaN);
+const money = (v) => { if (v === '' || v == null) return null; const n = Number(String(v).replace(/[,\s₱]/g, '')); return Number.isFinite(n) && n >= 0 && n <= 1e11 ? Math.round(n) : NaN; };
 const cents = (v) => { if (v === '' || v == null) return null; const n = Number(String(v).replace(/[,\s₱]/g, '')); return Number.isFinite(n) && n >= 0 && n <= 1e11 ? Math.round(n * 100) : NaN; };
 const levelOf = (blinds, game) => `${blinds || ''} ${game || ''}`.trim() || 'Unknown';
 
@@ -35,19 +35,37 @@ export async function handleReport(req, env, path, now, reply, user, role) {
     if (!isDate(day)) return reply({ error: 'Bad date.' }, 400);
     if (day > (await businessDay(env, now)).day) return reply({ error: 'That business day has not started yet.' }, 400);
     let b = {}; try { b = await req.json(); } catch { return reply({ error: 'Invalid JSON' }, 400); }
-    const revenue = money(b.revenue), main = cents(b.bbj_main), reserve = cents(b.bbj_reserve), paid = cents(b.bbj_paid);
-    if ([revenue, main, reserve, paid].some((v) => Number.isNaN(v))) return reply({ error: 'Amounts must be 0 or more.' }, 400);
     const who = str(user || 'staff', 60), show = (c) => (c == null ? '—' : (c / 100).toFixed(2));
-    await env.DB.batch([
-      env.DB.prepare(`INSERT INTO daily_reports(day,revenue,bbj_in,bbj_out,note,updated_by,updated_at) VALUES(?,?,NULL,NULL,?,?,?)
-        ON CONFLICT(day) DO UPDATE SET revenue=excluded.revenue,note=excluded.note,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
-        .bind(day, revenue, str(b.note, 500), who, now),
-      env.DB.prepare(`INSERT INTO bbj_daily(day,main_cents,reserve_cents,paid_cents,updated_by,updated_at) VALUES(?,?,?,?,?,?)
+    const stmts = [], notes = [];
+    // Revenue per table: { tables: { T1: 50000, T2: '' } } — blank removes that table's entry. The day's revenue is the sum.
+    if (b.tables && typeof b.tables === 'object') {
+      const entries = Object.entries(b.tables).slice(0, 12).map(([k, v]) => [str(k, 10), money(v)]);
+      if (entries.some(([k, v]) => !k || Number.isNaN(v))) return reply({ error: 'Revenue must be 0 or more.' }, 400);
+      for (const [k, v] of entries) {
+        stmts.push(v == null ? env.DB.prepare('DELETE FROM table_revenue WHERE day=? AND table_name=?').bind(day, k)
+          : env.DB.prepare('INSERT INTO table_revenue(day,table_name,revenue,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(day,table_name) DO UPDATE SET revenue=excluded.revenue,updated_by=excluded.updated_by,updated_at=excluded.updated_at').bind(day, k, v, who, now));
+        notes.push(`${k} ${v == null ? '—' : v}`);
+      }
+      stmts.push(env.DB.prepare(`INSERT INTO daily_reports(day,revenue,bbj_in,bbj_out,note,updated_by,updated_at) VALUES(?,(SELECT SUM(revenue) FROM table_revenue WHERE day=?),NULL,NULL,'',?,?)
+        ON CONFLICT(day) DO UPDATE SET revenue=(SELECT SUM(revenue) FROM table_revenue WHERE day=excluded.day),updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(day, day, who, now));
+    } else if ('revenue' in b) {
+      const revenue = money(b.revenue);
+      if (Number.isNaN(revenue)) return reply({ error: 'Amounts must be 0 or more.' }, 400);
+      stmts.push(env.DB.prepare(`INSERT INTO daily_reports(day,revenue,bbj_in,bbj_out,note,updated_by,updated_at) VALUES(?,?,NULL,NULL,'',?,?)
+        ON CONFLICT(day) DO UPDATE SET revenue=excluded.revenue,updated_by=excluded.updated_by,updated_at=excluded.updated_at`).bind(day, revenue, who, now));
+      notes.push(`revenue ${revenue ?? '—'}`);
+    }
+    if ('bbj_main' in b || 'bbj_reserve' in b || 'bbj_paid' in b) {
+      const main = cents(b.bbj_main), reserve = cents(b.bbj_reserve), paid = cents(b.bbj_paid);
+      if ([main, reserve, paid].some((v) => Number.isNaN(v))) return reply({ error: 'Amounts must be 0 or more.' }, 400);
+      stmts.push(env.DB.prepare(`INSERT INTO bbj_daily(day,main_cents,reserve_cents,paid_cents,updated_by,updated_at) VALUES(?,?,?,?,?,?)
         ON CONFLICT(day) DO UPDATE SET main_cents=excluded.main_cents,reserve_cents=excluded.reserve_cents,paid_cents=excluded.paid_cents,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
-        .bind(day, main, reserve, paid, who, now),
-      env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.day',NULL,?)")
-        .bind(now, who, `${day}: revenue ${revenue ?? '—'}, BBJ main ${show(main)}, 1st reserved ${show(reserve)}, paid ${show(paid)}`)
-    ]);
+        .bind(day, main, reserve, paid, who, now));
+      notes.push(`BBJ main ${show(main)}, 1st reserved ${show(reserve)}, paid ${show(paid)}`);
+    }
+    if (!stmts.length) return reply({ error: 'Nothing to save.' }, 400);
+    stmts.push(env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.day',NULL,?)").bind(now, who, `${day}: ${notes.join(' · ')}`));
+    await env.DB.batch(stmts);
     return reply({ ok: true });
   }
   if (path !== '/report' || method !== 'GET') return null;
@@ -68,13 +86,18 @@ export async function handleReport(req, env, path, now, reply, user, role) {
   const dayOf = (t) => { for (const d of days) if (t >= d.start && t < d.end) return d; return null; };
 
   const rows = {};
-  for (const d of days) rows[d.day] = { day: d.day, revenue: null, bbj_main: null, bbj_reserve: null, bbj_paid: null, bbj_growth: null, note: '', updated_by: '', table_seconds: 0, operating_seconds: 0, tables: [],
+  for (const d of days) rows[d.day] = { day: d.day, revenue: null, bbj_main: null, bbj_reserve: null, bbj_paid: null, bbj_growth: null, table_revenue: {}, table_seconds_by: {}, note: '', updated_by: '', table_seconds: 0, operating_seconds: 0, tables: [],
     visitors: 0, members: 0, new_members: 0, sessions: 0, play_seconds: 0, rest_seconds: 0, buy_in: 0, cash_out: 0, missing_cash_out: 0, levels: {} };
   const level = (r, name) => (r.levels[name] ||= { table_seconds: 0, play_seconds: 0, sessions: 0 });
 
   // Manager entries.
   for (const e of await all(env.DB.prepare('SELECT * FROM daily_reports WHERE day>=? AND day<=?').bind(from, to))) {
     Object.assign(rows[e.day], { revenue: e.revenue, note: e.note, updated_by: e.updated_by });
+  }
+  const byTable = {};
+  for (const e of await all(env.DB.prepare('SELECT day,table_name,revenue FROM table_revenue WHERE day>=? AND day<=?').bind(from, to))) {
+    rows[e.day].table_revenue[e.table_name] = e.revenue;
+    (byTable[e.table_name] ||= { revenue: 0, table_seconds: 0, days: 0 }).revenue += e.revenue;
   }
   // Bad Beat Jackpot: the board amounts each day. Growth = change in Main + 1st Reserved since the last board, plus anything paid out.
   const pesos = (c) => (c == null ? null : c / 100);
@@ -105,6 +128,7 @@ export async function handleReport(req, env, path, now, reply, user, role) {
       if (e <= s) continue;
       const row = rows[d.day];
       row.table_seconds += e - s;
+      row.table_seconds_by[r.table_name] = (row.table_seconds_by[r.table_name] || 0) + (e - s);
       level(row, levelOf(r.blinds, r.game_type)).table_seconds += e - s;
       (used[d.day] ||= new Set()).add(r.table_name);
       const sp = (span[d.day] ||= [s, e]); sp[0] = Math.min(sp[0], s); sp[1] = Math.max(sp[1], e);
@@ -143,11 +167,12 @@ export async function handleReport(req, env, path, now, reply, user, role) {
     const t = (levels[k] ||= { table_seconds: 0, play_seconds: 0, sessions: 0, days: 0 });
     t.table_seconds += v.table_seconds; t.play_seconds += v.play_seconds; t.sessions += v.sessions; if (v.table_seconds || v.sessions) t.days++;
   }
+  for (const r of list) for (const [k, sec] of Object.entries(r.table_seconds_by)) { const t = (byTable[k] ||= { revenue: 0, table_seconds: 0, days: 0 }); t.table_seconds += sec; t.days++; }
   const totals = {
     days: list.length, open_days: list.filter((r) => r.table_seconds || r.sessions).length, entered_days: list.filter((r) => r.revenue != null).length,
     revenue: sum('revenue'), table_seconds: sum('table_seconds'), operating_seconds: sum('operating_seconds'),
     visits: sum('visitors'), unique_visitors: everyone.size, unique_members: everyMember.size, new_members: sum('new_members'), sessions: sum('sessions'),
-    play_seconds: sum('play_seconds'), rest_seconds: sum('rest_seconds'), buy_in: sum('buy_in'), cash_out: sum('cash_out'), missing_cash_out: sum('missing_cash_out'), levels
+    tables: byTable, play_seconds: sum('play_seconds'), rest_seconds: sum('rest_seconds'), buy_in: sum('buy_in'), cash_out: sum('cash_out'), missing_cash_out: sum('missing_cash_out'), levels
   };
   return reply({ from, to, today, days: list, totals, bbj });
 }
