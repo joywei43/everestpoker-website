@@ -194,7 +194,7 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
   if (!found.length) return { inserted: 0 };
   const seen = new Set();
   for (const part of chunks(found.map((f) => f.key), 90)) {
-    const rows = await all(env.DB.prepare(`SELECT session_key FROM play_sessions WHERE session_key IN (${marks(part.length)})`).bind(...part));
+    const rows = await all(env.DB.prepare(`SELECT session_key FROM play_sessions WHERE session_key IN (${marks(part.length)}) UNION SELECT session_key FROM deleted_sessions WHERE session_key IN (${marks(part.length)})`).bind(...part, ...part));
     rows.forEach((r) => seen.add(r.session_key));
   }
   const fresh = [];
@@ -828,6 +828,22 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     return reply({ ok: true });
   }
   // Undo a wrong link on a finished session (master): it goes back to Unmatched.
+  // Master: delete a game session entirely (e.g. recorded on a table opened by mistake). PPM will not add it again.
+  if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'delete' && method === 'POST') {
+    if (!master) return masterOnly();
+    const b = await readJson(req, 2000);
+    const row = await env.DB.prepare('SELECT * FROM play_sessions WHERE id=?').bind(Number(parts[1])).first();
+    if (!row) return bad(reply, 'Session not found.', 404);
+    const t = (x) => new Date((x + TZ_OFFSET) * 1000).toISOString().slice(11, 16);
+    const summary = `"${row.member_ref}" · ${row.table_name} S${row.seat} · ${row.play_date} ${t(row.start_at)}–${t(row.end_at)} · buy-in ${row.buy_in ?? '—'}`;
+    await env.DB.batch([
+      env.DB.prepare('INSERT OR REPLACE INTO deleted_sessions(session_key,summary,deleted_by,deleted_at) VALUES(?,?,?,?)').bind(row.session_key, summary, who(b), now),
+      env.DB.prepare('DELETE FROM session_results WHERE session_id=?').bind(row.id),
+      env.DB.prepare('DELETE FROM play_sessions WHERE id=?').bind(row.id),
+      audit(env, now, who(b), 'session.delete', row.member_id, 'Deleted game session ' + summary)
+    ]);
+    return reply({ ok: true });
+  }
   if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'unlink' && method === 'POST') {
     if (!master) return masterOnly();
     const b = await readJson(req, 2000);

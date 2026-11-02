@@ -199,3 +199,6 @@ CREATE TABLE IF NOT EXISTS bbj_daily(day TEXT PRIMARY KEY, main_cents INTEGER, r
 
 -- Operation Report: revenue per table per business day (the day's revenue is their sum).
 CREATE TABLE IF NOT EXISTS table_revenue(day TEXT NOT NULL, table_name TEXT NOT NULL, revenue INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, PRIMARY KEY(day, table_name));
+
+-- PPM sessions the master deleted (e.g. a table opened by mistake). Kept so the next PPM save does not bring them back.
+CREATE TABLE IF NOT EXISTS deleted_sessions(session_key TEXT PRIMARY KEY, summary TEXT NOT NULL DEFAULT '', deleted_by TEXT NOT NULL DEFAULT '', deleted_at INTEGER NOT NULL);

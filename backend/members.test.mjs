@@ -427,4 +427,18 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   const empty = (await call('/members', 'POST', { nickname: 'Oops' }, boss.token)).body.member_no;
   assert.equal((await call('/members/' + empty + '/delete', 'POST', { staff: 'Boss' }, boss.token)).status, 200, 'no records: deleted at once');
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete');
+{ // Master deletes a game session; the next PPM save does not bring it back.
+  await call('/members', 'POST', { nickname: 'Oops Table', member_no: '777777' }, boss.token);
+  let cur = (await call('/ppm', 'GET', null, boss.token)).body;
+  cur.tables[2].sessions = [...cur.tables[2].sessions, { seatId: 1, memberId: '777777', startTime: '2026-10-28 01:14:00', endTime: '2026-10-28 01:14:30', activeSeconds: 30, restSeconds: 0, buyInAmount: 12000 }];
+  assert.equal((await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, boss.token)).status, 200);
+  const vs = (await call('/members/777777', 'GET', null, boss.token)).body.sessions;   const victim = vs.find((x) => x.buy_in === 12000);
+  assert.equal(victim.buy_in, 12000);
+  assert.equal((await call('/sessions/' + victim.id + '/delete', 'POST', {}, maria.token)).status, 403);
+  assert.equal((await call('/sessions/' + victim.id + '/delete', 'POST', {}, boss.token)).status, 200);
+  cur = (await call('/ppm', 'GET', null, boss.token)).body;
+  assert.equal((await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, boss.token)).status, 200);
+  const left = (await call('/members/777777', 'GET', null, boss.token)).body.sessions;
+  assert.equal(left.length, vs.length - 1, 'deleted session stays deleted'); assert.ok(!left.some((x) => x.buy_in === 12000));
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session');
