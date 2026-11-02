@@ -243,7 +243,10 @@ function openMemberDialog(view, member, save) {
   if (member) FIELDS.forEach(([k]) => { if (k !== 'passport_id') f.elements[k].value = member[k] || ''; });
   // New member: fill in the smallest free number; if staff leave it as is, the server assigns it (safe if two people add at once).
   let suggested = '';
-  if (!member) api('/members/next-number').then((r) => { suggested = r.member_no.slice(3); if (!f.elements.member_no.value) f.elements.member_no.value = suggested; }).catch(() => {});
+  if (!member) {
+    const fill = (r) => { suggested = String(r.member_no || '').replace(/^EV-/, ''); if (!f.elements.member_no.value) f.elements.member_no.value = suggested; };
+    api('/members/next-number').then(fill).catch(() => api('/members/next-number').then(fill)).catch((err) => flash(view.querySelector('#mdMsg'), 'Could not load the next member number (' + err.message + '). Leave it blank and the system will assign one.', 'err'));
+  }
   if (member) f.elements.passport_id.placeholder = member.passport_last4 ? '•••• ' + member.passport_last4 + ' (leave blank to keep)' : '';
   const nat = (member && member.nationality) || '';
   f.elements.nat_sel.value = !nat ? '' : NATIONALITIES.includes(nat) ? nat : 'other';
