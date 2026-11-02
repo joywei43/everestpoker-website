@@ -54,7 +54,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-weight:600;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:10px;border-bottom:1px solid var(--line2);vertical-align:top}
 tr.click{cursor:pointer}tr.click:hover td{background:#F6F8FB}
-td.num,th.num{text-align:right}
+td.num,th.num{text-align:right;white-space:nowrap}
 .chip{display:inline-block;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;background:var(--bg);color:#3A4554;white-space:nowrap}
 .chip.green{background:var(--green-l);color:var(--green)}.chip.red{background:var(--red-l);color:var(--red)}.chip.amber{background:var(--amber-l);color:var(--amber)}.chip.blue{background:var(--blue-l);color:#1F4F8A}.chip.dark{background:#2A3442;color:#fff}
 .muted{color:var(--muted)}.small{font-size:12px}
@@ -69,6 +69,8 @@ dialog{border:0;border-radius:14px;padding:0;max-width:720px;width:calc(100% - 3
 dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 .ph{width:112px;height:112px;border-radius:50%;background:#F3E7C8;color:#5E410C;border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;overflow:hidden;flex:none}.ph img{width:100%;height:100%;object-fit:cover}
 .evno{display:flex;align-items:center;border:1px solid #CDD5DF;border-radius:8px;background:#fff;overflow:hidden}.evno>span{padding:0 4px 0 10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);font-weight:500}.evno input{border:0!important;flex:1;font-family:'IBM Plex Mono',monospace;padding-left:0!important}.evno:focus-within{outline:2px solid var(--blue);outline-offset:1px}
+.seg{display:inline-flex;background:#fff;border:1px solid #CDD5DF;border-radius:10px;padding:3px;gap:2px}.seg button{height:34px;padding:0 14px;border:0;border-radius:8px;background:transparent;font-weight:600;cursor:pointer;color:#3A4554}.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+.linkbtn{background:none;border:0;padding:0;color:var(--blue);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline dotted}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (min-width:700px){.wide{grid-column:span 2}}
 @media (max-width:640px){main{padding:16px}nav.side{gap:12px}.navlinks{flex-direction:row;flex-wrap:wrap}.staffbox{margin-top:0}}
@@ -263,7 +265,8 @@ async function viewMember(view, no) {
   let gs, data;
   try { [gs, data] = await Promise.all([groups(), api('/members/' + encodeURIComponent(no))]); }
   catch (e) { if (e.movedTo) { location.replace('#/member/' + encodeURIComponent(e.movedTo)); return; } throw e; }
-  const m = data.member, s30 = data.stats.last30, sAll = data.stats.all, share = data.stats.group_share;
+  const m = data.member, s30 = data.stats.last30, sAll = data.stats.all;
+  let period = (() => { try { return localStorage.getItem('everest-period') || '30'; } catch (e) { return '30'; } })();
   const since = Date.now() / 1000 - 30 * 86400;
   const rw30 = data.rewards.filter((r) => !r.voided && r.approved_at && r.given_at >= since);
   const byType = Object.keys(TYPES).map((t) => ({ t, amt: rw30.filter((r) => r.type === t).reduce((a, r) => a + r.amount, 0) })).filter((x) => x.amt > 0).sort((a, b) => b.amt - a.amt);
@@ -295,13 +298,10 @@ async function viewMember(view, no) {
         <div id="gmsg"></div>
       </div>
     </section>
-    <div class="row between"><h2>Last 30 days</h2><span class="small muted">Play time from PPM, rest excluded</span></div>
-    <div class="grid">
-      ${tile('Visit days', s30.days + ' days', 'All time: ' + sAll.days + ' days')}
-      ${tile('Play time', hm(s30.secs), s30.sessions + ' sessions · all time ' + hm(sAll.secs))}
-      ${tile('Total buy-in', peso(s30.buy_in), 'From PPM')}
-      ${tile('Rewards given', peso(s30.rewards), perHour(s30.rewards, s30.secs) + ' per play hour' + (s30.rewards_pending ? ' · ' + peso(s30.rewards_pending) + ' waiting' : ''))}
-    </div>
+    <div class="row between"><div role="group" aria-label="Period" class="seg">
+        <button type="button" data-period="30" aria-pressed="${period === '30'}">Last 30 days</button><button type="button" data-period="all" aria-pressed="${period === 'all'}">All time</button></div>
+      <span class="small muted">Play time from PPM, rest excluded</span></div>
+    <div class="grid" id="statTiles">${statTiles(period === 'all' ? sAll : s30)}</div>
     ${(data.playing || []).map((x) => `<section class="card" style="border:2px solid var(--gold);display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center">
       <span class="chip ${x.status === 'rest' ? 'amber' : 'green'}">${x.status === 'rest' ? 'Resting now' : 'Playing now'}</span>
       <div><div class="small muted">Table · Seat</div><b>${esc(x.table)} · S${x.seat}</b></div>
@@ -313,8 +313,10 @@ async function viewMember(view, no) {
       <div class="small muted" style="flex:1 1 220px">PPM name "${esc(x.ref)}"${x.linked ? ' · linked by staff' : ' · matched automatically'}. Added to Game sessions and totals when the seat is cleared.</div>
     </section>`).join('')}
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM when the player leaves the seat</span></div>
-      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
-      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="9" class="muted">No PPM sessions yet.</td></tr>'}
+      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
+      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)} ${restBadge(x.rest_seconds, x.active_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
+        <td class="num">${isManager() ? `<button type="button" class="linkbtn" data-co="${x.id}" title="Enter or correct the cash-out">${x.cash_out == null ? 'Add' : (x.busted ? 'Busted' : peso(x.cash_out))}</button>` : (x.cash_out == null ? '—' : x.busted ? 'Busted' : peso(x.cash_out))}</td>
+        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
     <section class="card" style="display:flex;flex-direction:column;gap:14px">
       <div class="row between"><h2>Rewards received</h2><span class="chip dark">Staff only</span></div>
@@ -382,6 +384,18 @@ async function viewMember(view, no) {
     if (body.type === 'promo_cash' && !confirm(`Record a cash reward of ${peso(body.amount)} for ${m.name}?`)) return;
     try { await api('/members/' + encodeURIComponent(no) + '/rewards', 'POST', body); reload(); } catch (err) { flash(view.querySelector('#rmsg'), err.message, 'err'); }
   };
+  view.querySelectorAll('[data-period]').forEach((b) => b.onclick = () => {
+    period = b.dataset.period; try { localStorage.setItem('everest-period', period); } catch (e) {}
+    view.querySelectorAll('[data-period]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.period === period)));
+    view.querySelector('#statTiles').innerHTML = statTiles(period === 'all' ? sAll : s30);
+  });
+  view.querySelectorAll('[data-co]').forEach((b) => b.onclick = async () => {
+    const raw = prompt('Cash-out amount in pesos. Type 0 or "busted" if they lost the whole buy-in. Leave empty to remove.', '');
+    if (raw === null) return;
+    const v = raw.trim().toLowerCase();
+    const body = !v ? { clear: true } : v === 'busted' || v === 'b' ? { busted: true } : { cash_out: Number(v.replace(/[,\s₱]/g, '')), busted: Number(v.replace(/[,\s₱]/g, '')) === 0 };
+    try { await api('/sessions/' + b.dataset.co + '/cash-out', 'POST', body); reload(); } catch (err) { alert(err.message); }
+  });
   view.querySelectorAll('[data-unsess]').forEach((b) => b.onclick = async () => {
     if (!confirm(`Unlink this session from ${m.name}? It goes back to Unmatched PPM so you can link the right member.`)) return;
     try { await api('/sessions/' + b.dataset.unsess + '/unlink', 'POST', {}); reload(); } catch (err) { alert(err.message); }
@@ -413,6 +427,23 @@ function squarePhoto(file) {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This file is not a photo the browser can read.')); };
     img.src = url;
   });
+}
+// Rest share of the time at the table: under 10% green, up to 20% yellow, above 20% red.
+function restBadge(rest, play) {
+  const total = (rest || 0) + (play || 0);
+  if (!total) return '<span class="muted">—</span>';
+  const pct = Math.round(rest / total * 100);
+  const c = pct <= 10 ? 'green' : pct <= 20 ? 'amber' : 'red';
+  return `<span class="chip ${c}" title="Rest ÷ (play + rest)">Rest ${pct}%</span>`;
+}
+const signedPeso = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + peso(Math.abs(n));
+function statTiles(st) {
+  const wlColor = st.win_loss > 0 ? 'var(--green)' : st.win_loss < 0 ? 'var(--red)' : 'inherit';
+  return `${tile('Visit days', st.days + ' days', st.sessions + ' sessions')}
+    <div class="tile"><div class="k">Play time</div><div class="v">${hm(st.secs)}</div><div class="s row" style="gap:6px">${restBadge(st.rest_secs, st.secs)} <span>rest ${hm(st.rest_secs)}</span></div></div>
+    ${tile('Buy-in', peso(st.buy_in), 'Cash-out ' + peso(st.cash_out))}
+    <div class="tile"><div class="k">History W/L</div><div class="v" style="color:${wlColor}">${st.with_cash_out ? signedPeso(st.win_loss) : '—'}</div><div class="s">${st.with_cash_out} of ${st.sessions} sessions with cash-out${st.busted ? ' · ' + st.busted + ' busted' : ''}</div></div>
+    ${tile('Rewards given', peso(st.rewards), perHour(st.rewards, st.secs) + ' per play hour' + (st.rewards_pending ? ' · ' + peso(st.rewards_pending) + ' waiting' : ''))}`;
 }
 const tile = (k, v, s) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
 

@@ -314,6 +314,30 @@ assert.equal((await call('/members/EV-444445/number', 'POST', { member_no: 'bad 
 await call('/members/EV-444444/number', 'POST', { member_no: '444446' }, boss.token);
 await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.token);
 
+// Cash-out from PPM, History W/L, rest ratio data, manager corrections.
+{
+  const pp = (await call('/ppm', 'GET', null, boss.token)).body;
+  const tt = structuredClone(pp.tables);
+  tt[3].sessions = [
+    { seatId: 1, memberId: '777777', startTime: '2026-10-20 20:00:00', endTime: '2026-10-20 23:00:00', activeSeconds: 9000, restSeconds: 1800, buyInAmount: 20000, cashOutAmount: 32000, busted: false },
+    { seatId: 1, memberId: '777777', startTime: '2026-10-21 20:00:00', endTime: '2026-10-21 22:00:00', activeSeconds: 7200, restSeconds: 0, buyInAmount: 10000, cashOutAmount: 0, busted: true },
+    { seatId: 2, memberId: '777777', startTime: '2026-10-22 20:00:00', endTime: '2026-10-22 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 5000 }
+  ];
+  assert.equal((await call('/ppm', 'PUT', { version: pp.version, tables: tt }, boss.token)).status, 200);
+  let e7 = (await call('/members/EV-777777', 'GET', null, boss.token)).body;
+  const s1 = e7.sessions.find((x) => x.play_date === '2026-10-20'), s2 = e7.sessions.find((x) => x.play_date === '2026-10-21'), s3 = e7.sessions.find((x) => x.play_date === '2026-10-22');
+  assert.equal(s1.cash_out, 32000); assert.equal(s2.cash_out, 0); assert.equal(s2.busted, 1); assert.equal(s3.cash_out, null);
+  const allBefore = e7.stats.all;
+  assert.equal(allBefore.win_loss, 12000 - 10000, 'W/L = cash-out − buy-in on sessions with a cash-out');
+  assert.equal(allBefore.busted, 1); assert.ok(allBefore.rest_secs >= 1800);
+  assert.equal((await call(`/sessions/${s3.id}/cash-out`, 'POST', { cash_out: 7000 }, maria.token)).status, 403, 'staff cannot edit cash-out');
+  assert.equal((await call(`/sessions/${s3.id}/cash-out`, 'POST', { cash_out: 7000 }, geraldine.token)).status, 200);
+  e7 = (await call('/members/EV-777777', 'GET', null, boss.token)).body;
+  assert.equal(e7.stats.all.win_loss, allBefore.win_loss + 2000); assert.equal(e7.stats.all.with_cash_out, allBefore.with_cash_out + 1);
+  assert.equal((await call(`/sessions/${s3.id}/cash-out`, 'POST', { clear: true }, geraldine.token)).status, 200);
+  assert.ok(e7.audit.some((a) => a.action === 'session.cash_out'));
+}
+
 // Nationality: one spelling per country.
 assert.equal((await call('/members/EV-444444', 'PUT', { nationality: 'Taiwanese' }, boss.token)).status, 200);
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan');
@@ -325,4 +349,4 @@ sql.exec("UPDATE members SET nationality='台灣' WHERE member_no='EV-444444'");
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan', 'old rows cleaned on deploy');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo');
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L');

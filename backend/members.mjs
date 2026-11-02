@@ -196,6 +196,11 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
       str(f.t.gameType, 10), str(f.t.blinds, 20), f.start, f.end, active, rest, buyIn, f.s.transferNote ? str(f.s.transferNote, 120) : null, now);
   });
   if (linked.size) stmts.push(env.DB.prepare('DELETE FROM ppm_seat_links WHERE created_at<?').bind(now - 3 * DAY));
+  // Cash-out typed at Leave in PPM.
+  for (const f of fresh) {
+    const co = f.s.cashOutAmount;
+    if (Number.isSafeInteger(co) && co >= 0) stmts.push(env.DB.prepare("INSERT OR IGNORE INTO session_results(session_id,cash_out,busted,entered_by,updated_at) SELECT id,?,?,'PPM',? FROM play_sessions WHERE session_key=?").bind(co, f.s.busted ? 1 : 0, now, f.key));
+  }
   for (const part of chunks(stmts, 50)) await env.DB.batch(part);
   return { inserted: fresh.length };
 }
@@ -441,7 +446,11 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
 
     if (parts.length === 2 && method === 'GET') {
       const t30 = now - 30 * DAY;
-      const stat = (since) => env.DB.prepare('SELECT COUNT(*) sessions, COUNT(DISTINCT play_date) days, COALESCE(SUM(active_seconds),0) secs, COALESCE(SUM(buy_in),0) buy_in FROM play_sessions WHERE member_id=? AND start_at>=?').bind(m.id, since).first();
+      // W/L only counts sessions that have a cash-out, against those sessions' own buy-ins.
+      const stat = (since) => env.DB.prepare(`SELECT COUNT(*) sessions, COUNT(DISTINCT ps.play_date) days, COALESCE(SUM(ps.active_seconds),0) secs, COALESCE(SUM(ps.rest_seconds),0) rest_secs,
+          COALESCE(SUM(ps.buy_in),0) buy_in, COUNT(sr.session_id) with_cash_out, COALESCE(SUM(sr.cash_out),0) cash_out,
+          COALESCE(SUM(CASE WHEN sr.session_id IS NOT NULL THEN sr.cash_out - COALESCE(ps.buy_in,0) END),0) win_loss, COALESCE(SUM(sr.busted),0) busted
+        FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.member_id=? AND ps.start_at>=?`).bind(m.id, since).first();
       const rwSum = (since) => env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN approved_at IS NOT NULL THEN amount ELSE 0 END),0) amt, COALESCE(SUM(CASE WHEN approved_at IS NULL THEN amount ELSE 0 END),0) pending FROM rewards WHERE member_id=? AND voided=0 AND given_at>=?').bind(m.id, since).first();
       const [s30, sAll, r30, rAll] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0)]);
       let share = null;
@@ -450,7 +459,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         const mine = await env.DB.prepare('SELECT COALESCE(SUM(active_seconds),0) secs FROM play_sessions WHERE group_id=? AND member_id=? AND start_at>=?').bind(m.group_id, m.id, t30).first();
         share = { group_seconds: g.secs, member_seconds: mine.secs };
       }
-      const sessions = await all(env.DB.prepare('SELECT id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,buy_in,transfer_note,group_id FROM play_sessions WHERE member_id=? ORDER BY start_at DESC LIMIT 200').bind(m.id));
+      const sessions = await all(env.DB.prepare('SELECT ps.id,ps.play_date,ps.table_name,ps.seat,ps.game_type,ps.blinds,ps.start_at,ps.end_at,ps.active_seconds,ps.rest_seconds,ps.buy_in,ps.transfer_note,ps.group_id,sr.cash_out,sr.busted,sr.entered_by FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.member_id=? ORDER BY ps.start_at DESC LIMIT 200').bind(m.id));
       const rewards = await all(env.DB.prepare('SELECT id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,voided,void_reason,group_id FROM rewards WHERE member_id=? ORDER BY given_at DESC, id DESC LIMIT 500').bind(m.id));
       const history = await all(env.DB.prepare('SELECT group_id,effective_from,changed_by,note FROM member_group_history WHERE member_id=? ORDER BY effective_from DESC, id DESC').bind(m.id));
       const log = await all(env.DB.prepare('SELECT at,actor,action,detail FROM audit_log WHERE member_id=? ORDER BY at DESC, id DESC LIMIT 50').bind(m.id));
@@ -654,6 +663,24 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     await env.DB.batch([
       env.DB.prepare('DELETE FROM ppm_seat_links WHERE seat_key=?').bind(key),
       audit(env, now, who(b), 'sessions.unlink', row.member_id, `Seat ${key.split('|').slice(0, 3).join(' · ')}`)
+    ]);
+    return reply({ ok: true });
+  }
+  // Enter or correct a cash-out later (managers). busted=true means 0.
+  if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'cash-out' && method === 'POST') {
+    if (!manager) return managerOnly();
+    const b = await readJson(req, 2000);
+    const row = await env.DB.prepare('SELECT ps.id,ps.member_id,ps.buy_in,ps.play_date,sr.cash_out FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.id=?').bind(Number(parts[1])).first();
+    if (!row) return bad(reply, 'Session not found.', 404);
+    if (b.clear) {
+      await env.DB.batch([env.DB.prepare('DELETE FROM session_results WHERE session_id=?').bind(row.id), audit(env, now, who(b), 'session.cash_out', row.member_id, `${row.play_date} cleared (was ₱${row.cash_out})`)]);
+      return reply({ ok: true });
+    }
+    const amount = b.busted ? 0 : Number(b.cash_out);
+    if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1000000000) return bad(reply, 'Cash-out must be a whole number of pesos.');
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO session_results(session_id,cash_out,busted,entered_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET cash_out=excluded.cash_out,busted=excluded.busted,entered_by=excluded.entered_by,updated_at=excluded.updated_at').bind(row.id, amount, b.busted ? 1 : 0, who(b), now),
+      audit(env, now, who(b), 'session.cash_out', row.member_id, `${row.play_date} ${row.cash_out == null ? '' : '₱' + row.cash_out + ' → '}₱${amount}${b.busted ? ' (busted)' : ''}`)
     ]);
     return reply({ ok: true });
   }

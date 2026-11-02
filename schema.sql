@@ -182,3 +182,7 @@ UPDATE members SET nationality='United States' WHERE nationality<>'United States
 UPDATE members SET nationality='Canada' WHERE nationality<>'Canada' AND lower(trim(nationality)) IN ('canada','canadian','ca','can','加拿大');
 UPDATE members SET nationality='Australia' WHERE nationality<>'Australia' AND lower(trim(nationality)) IN ('australia','australian','au','aus','澳洲','澳大利亞','澳大利亚');
 UPDATE members SET nationality='United Kingdom' WHERE nationality<>'United Kingdom' AND lower(trim(nationality)) IN ('united kingdom','uk','u.k.','gb','gbr','great britain','britain','british','england','english','英國','英国');
+
+-- Cash-out recorded when a player leaves the seat in PPM (or entered later by a manager). busted=1: lost the whole buy-in.
+-- Kept beside play_sessions so the existing table is never altered.
+CREATE TABLE IF NOT EXISTS session_results(session_id INTEGER PRIMARY KEY REFERENCES play_sessions(id), cash_out INTEGER NOT NULL CHECK(cash_out>=0), busted INTEGER NOT NULL DEFAULT 0, entered_by TEXT NOT NULL DEFAULT 'PPM', updated_at INTEGER NOT NULL);
