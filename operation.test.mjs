@@ -70,6 +70,11 @@ assert.equal(op.visitors.at_table_now, 2);
 assert.equal(op.money.buy_in_finished, 35000); assert.equal(op.money.buy_in_live, 23000); assert.equal(op.money.buy_in_total, 58000);
 assert.equal(op.money.cash_out, 32000); assert.equal(op.money.missing_cash_out, 1); assert.equal(op.money.busted, 1);
 assert.equal(op.play.finished_seconds, 23800);
+const vl = op.visitor_list;
+assert.deepEqual(vl.map((v) => v.member_no || v.ref), ['EV-000001', 'Ann', 'Bob', 'EV-000002'], 'playing now first, then by play time');
+assert.equal(vl[0].buy_in, 35000); assert.equal(vl[0].cash_out, 32000); assert.equal(vl[0].win_loss, 12000); assert.ok(vl[0].play_seconds >= 19000); assert.equal(vl[0].playing_now.table, 'T1');
+const bob = vl.find((v) => v.ref === 'Bob'); assert.equal(bob.busted, 1); assert.equal(bob.win_loss, -10000);
+assert.equal(vl.find((v) => v.member_no === 'EV-000002').missing_cash_out, 1);
 
 // A morning opening moves the next day's start earlier.
 clock = at('2026-11-03 10:30:00'); tables[1].isRunning = true; tables[1].lastStartTime = clock; tables[1].openedAt = '2026-11-03 10:30:00'; await save();

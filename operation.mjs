@@ -1,7 +1,7 @@
 // Daily operation: business day, live tables, hours, visitors, buy-in and cash-out.
 // Business day D starts at 12:00 Manila, or earlier if a table opened (or a session started) between 06:00 and 12:00 that day.
 // It ends when business day D+1 starts. Sessions belong to the business day in which they started.
-import { str, localDate, dayStart, ppmTime, normNo, liveSeatPlayers } from './members.mjs';
+import { str, localDate, dayStart, ppmTime, normNo, liveSeatPlayers, displayName } from './members.mjs';
 
 const HOUR = 3600, DAY = 86400;
 const all = async (stmt) => (await stmt.all()).results || [];
@@ -83,8 +83,9 @@ export async function handleOperation(req, env, now, reply, role) {
   }
 
   // Who is sitting where right now, with their member profile.
+  let players = [];
   if (bd.is_today) {
-    const players = await liveSeatPlayers(env);
+    players = await liveSeatPlayers(env);
     for (const t of tables) t.players = players.filter((p) => p.table === t.name).sort((a, b) => a.seat - b.seat);
   }
   const bbjRow = await env.DB.prepare('SELECT day,main_cents,reserve_cents FROM bbj_daily WHERE day<=? AND (main_cents IS NOT NULL OR reserve_cents IS NOT NULL) ORDER BY day DESC LIMIT 1').bind(bd.day).first();
@@ -104,6 +105,27 @@ export async function handleOperation(req, env, now, reply, role) {
   if (bd.is_today) for (const r of liveRefs) if (!finishedRefs.has(r)) liveNew++;
   const matched = vis.filter((v) => v.member_no).length;
   const newMembers = await env.DB.prepare('SELECT COUNT(*) n FROM members WHERE created_at>=? AND created_at<?').bind(bd.start, bd.end).first();
+
+  // Today's visitors: one row per player, finished sessions plus anyone still at a table.
+  const people = new Map();
+  const person = (key, base) => { if (!people.has(key)) people.set(key, { ...base, sessions: 0, play_seconds: 0, buy_in: 0, cash_out: 0, with_cash_out: 0, cash_out_buy_in: 0, busted: 0, missing_cash_out: 0, first_at: null, last_at: null, tables: new Set(), playing_now: null }); return people.get(key); };
+  const visRows = await all(env.DB.prepare(`SELECT ps.member_ref, ps.table_name, ps.start_at, ps.end_at, ps.active_seconds, ps.buy_in, sr.session_id has_result, sr.cash_out, sr.busted, m.member_no, m.nickname, m.surname, m.middle_name, m.family_name
+    FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.start_at>=? AND ps.start_at<? ORDER BY ps.start_at`).bind(bd.start, bd.end));
+  for (const r of visRows) {
+    const p = person(r.member_no ? 'm:' + r.member_no : 'r:' + r.member_ref.toLowerCase(), { member_no: r.member_no || null, name: r.member_no ? displayName(r) : r.member_ref, nickname: r.member_no ? r.nickname : '', ref: r.member_ref });
+    p.sessions++; p.play_seconds += r.active_seconds; p.buy_in += r.buy_in || 0; p.tables.add(r.table_name);
+    if (r.has_result) { p.with_cash_out++; p.cash_out += r.cash_out; p.cash_out_buy_in += r.buy_in || 0; p.busted += r.busted ? 1 : 0; } else if (r.buy_in != null) p.missing_cash_out++;
+    p.first_at = p.first_at == null ? r.start_at : Math.min(p.first_at, r.start_at); p.last_at = Math.max(p.last_at || 0, r.end_at);
+  }
+  for (const x of players) {
+    const m = x.member;
+    const p = person(m ? 'm:' + m.member_no : 'r:' + x.ref.toLowerCase(), { member_no: m ? m.member_no : null, name: m ? m.name : x.ref, nickname: m ? m.nickname : '', ref: x.ref });
+    p.play_seconds += x.active_seconds; p.buy_in += x.buy_in || 0; p.tables.add(x.table);
+    p.playing_now = { table: x.table, seat: x.seat, status: x.status, buy_in: x.buy_in, active_seconds: x.active_seconds };
+    if (x.started != null) p.first_at = p.first_at == null ? x.started : Math.min(p.first_at, x.started);
+  }
+  const visitorList = [...people.values()].map((p) => ({ ...p, tables: [...p.tables].sort(), win_loss: p.with_cash_out ? p.cash_out - p.cash_out_buy_in : null }))
+    .sort((a, b) => (b.playing_now ? 1 : 0) - (a.playing_now ? 1 : 0) || (b.play_seconds - a.play_seconds));
 
   // Table hours: time tables were running inside the business day.
   const runs = await all(env.DB.prepare('SELECT table_name,opened_at,closed_at FROM table_runs WHERE opened_at<? AND (closed_at IS NULL OR closed_at>?)').bind(bd.end, bd.start));
@@ -134,7 +156,8 @@ export async function handleOperation(req, env, now, reply, role) {
     visitors: { total: visitors.size + liveNew, members: matched, unmatched: visitors.size - matched, at_table_now: bd.is_today ? livePlayers : 0, new_members: newMembers.n },
     money: { buy_in_finished: fin.buy_in, buy_in_live: liveBuyIn, buy_in_total: fin.buy_in + liveBuyIn, cash_out: fin.cash_out, sessions_with_cash_out: fin.with_cash_out,
       missing_cash_out: fin.missing_cash_out, buy_in_without_cash_out: fin.buy_in_without_cash_out, busted: fin.busted },
-    history
+    history,
+    visitor_list: visitorList
   });
 }
 

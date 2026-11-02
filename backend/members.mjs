@@ -49,7 +49,7 @@ export function nickLabel(m, dups) {
   if (!nick || !dups || !dups.has(nick.toLowerCase())) return nick;
   return `${nick} (${m.nationality || m.member_no})`;
 }
-function displayName(m) {
+export function displayName(m) {
   return [m.surname, m.middle_name, m.family_name].filter(Boolean).join(' ') || m.nickname || m.member_no;
 }
 function publicMember(m, groups, dups) {

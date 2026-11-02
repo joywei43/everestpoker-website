@@ -719,11 +719,23 @@ async function viewOperation(view) {
       ${big('Total cash-out', peso(mo.cash_out), `${mo.sessions_with_cash_out} sessions${mo.busted ? ' · ' + mo.busted + ' busted' : ''}${mo.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${mo.missing_cash_out} missing (${peso(mo.buy_in_without_cash_out)} buy-in)</span>` : ''}`)}
       ${big('Player hours', hm(pl.finished_seconds + pl.live_seconds), `${hm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hm(pl.live_seconds) + ' playing now' : ''} · ${restBadge(pl.rest_seconds, pl.finished_seconds)}`)}
     </div>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>${d.is_today ? "Today's visitors" : 'Visitors'} <span class="small muted" style="font-weight:400">· ${d.visitor_list.length} players</span></h2><span class="small muted">Play time and buy-in include players still at a table · cash-out is entered at Leave</span></div>
+      <div class="tbl"><table><thead><tr><th>Member ID</th><th>Name</th><th class="num">Play time</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Tables</th><th>Now</th></tr></thead><tbody>
+      ${d.visitor_list.map((p) => `<tr ${p.member_no ? `class="click" data-no="${esc(p.member_no)}"` : ''}><td class="mono">${p.member_no ? esc(p.member_no) : '<span class="chip amber">Not matched</span>'}</td>
+        <td><b>${esc(p.nickname || p.name)}</b>${p.nickname && p.name && p.name !== p.nickname ? ` <span class="small muted">${esc(p.name)}</span>` : ''}</td>
+        <td class="num">${hm(p.play_seconds)}</td><td class="num">${peso(p.buy_in)}</td>
+        <td class="num">${p.with_cash_out ? peso(p.cash_out) + (p.busted ? ' <span class="chip red">Busted</span>' : '') : '—'}${p.missing_cash_out ? `<div class="small" style="color:var(--amber)">${p.missing_cash_out} missing</div>` : ''}</td>
+        <td class="num" style="font-weight:600;color:${p.win_loss == null ? 'inherit' : p.win_loss >= 0 ? 'var(--green)' : 'var(--red)'}">${p.win_loss == null ? '—' : signedPeso(p.win_loss)}</td>
+        <td>${p.tables.map(esc).join(' ')}</td>
+        <td>${p.playing_now ? `<span class="chip ${p.playing_now.status === 'rest' ? 'amber' : 'green'}">${esc(p.playing_now.table)} #${p.playing_now.seat}${p.playing_now.status === 'rest' ? ' · break' : ''}</span>` : `<span class="small muted">Left ${p.last_at ? time(p.last_at) : ''}</span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No visitors yet.</td></tr>'}
+      </tbody>${d.visitor_list.length ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td colspan="2">Total · ${d.visitor_list.length} players</td><td class="num">${hm(d.visitor_list.reduce((a, p) => a + p.play_seconds, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.buy_in, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.cash_out, 0))}</td><td></td><td></td><td></td></tr></tfoot>` : ''}</table></div>
+      <p class="small muted" style="margin:8px 0 0">W/L counts only sessions that have a cash-out. Click a member to open their profile.</p></section>
     ${isMaster() ? `<section class="card" id="runsCard"><div class="row between"><h2>Table records <span class="chip dark small">Master</span></h2><span class="small muted">Fix a table opened by mistake or wrong open/close times. Changes are logged.</span></div><div id="runs" class="small muted" style="margin-top:10px">Loading…</div></section>
     <dialog id="rund"><form method="dialog" id="runf"><h2 id="runTitle"></h2><div class="form"><label class="f">Opened<input type="datetime-local" name="opened" required></label><label class="f">Closed<input type="datetime-local" name="closed"></label></div>
       <p class="small muted" style="margin:0">Leave Closed empty only while the table is still open.</p><div id="runMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="runSave">Save</button></div></form></dialog>` : ''}`;
   if (isMaster()) loadRuns(view, d.day);
   loadPhotos(view);
+  view.querySelectorAll('tr[data-no]').forEach((tr) => tr.onclick = () => { location.hash = '#/member/' + encodeURIComponent(tr.dataset.no); });
   const be = view.querySelector('#bbjEdit');
   if (be) be.onclick = () => bbjDialog(view, d);
   const find = (key) => { const [tn, seat] = key.split('|'); const t = tables.find((x) => x.name === tn); return t && (t.players || []).find((p) => String(p.seat) === seat); };
