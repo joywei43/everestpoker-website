@@ -144,7 +144,7 @@ chen = (await call('/members/EV-000001', 'GET', null, g.token)).body;
 assert.equal(chen.audit[0].actor, 'Geraldine', 'log shows the signed-in person, not a typed name');
 // Managers approve and edit promotions; group changes, voids, imports, suspensions and accounts are master only.
 assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'dee' }, g.token)).status, 403);
-assert.equal((await call('/members/import', 'POST', { rows: [] }, g.token)).status, 403);
+assert.equal((await call('/members/import', 'POST', { rows: [] }, g.token)).status, 200, 'managers can import');
 assert.equal((await call('/members/EV-000001', 'PUT', { status: 'suspended' }, g.token)).status, 403);
 assert.equal((await call('/staff', 'GET', null, g.token)).status, 403);
 assert.equal((await call('/me', 'GET', null, token)).body.role, 'master');

@@ -172,7 +172,7 @@ function render() {
         ${link('unmatchedppm', 'Unmatched PPM')}
         ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
         ${link('promotions', 'Promotions')}
-        ${isMaster() ? link('importmembers', 'Import members') : ''}
+        ${isManager() ? link('importmembers', 'Import members') : ''}
         ${isMaster() ? link('staffaccounts', 'Staff accounts') : ''}
         ${isMaster() ? link('historylog', 'History Log') : ''}
         <a href="../ppm/">PPM tables ↗</a>
@@ -183,7 +183,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isMaster() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
+  const pages = { members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -1065,7 +1065,7 @@ async function viewUnmatched(view) {
 const HEADER_MAP = { surname: 'surname', firstname: 'surname', 'first name': 'surname', middlename: 'middle_name', 'middle name': 'middle_name', familyname: 'family_name', 'family name': 'family_name', lastname: 'family_name', 'last name': 'family_name',
   nickname: 'nickname', 'nick name': 'nickname', nationality: 'nationality', birthday: 'birthday', 'date of birth': 'birthday', passportid: 'passport_id', passport: 'passport_id', 'passport id': 'passport_id',
   email: 'email', phone: 'phone', whatsapp: 'whatsapp', telegram: 'telegram', line: 'line', referralid: 'referral_id', 'referral id': 'referral_id', language: 'language',
-  memberid: 'member_no', 'member id': 'member_no', 'member no': 'member_no', memberno: 'member_no', '會員號碼': 'member_no', group: 'group', host: 'group', '場主': 'group', submittedat: 'created', 'submitted at': 'created', timestamp: 'created' };
+  memberid: 'member_no', 'member id': 'member_no', 'member no': 'member_no', memberno: 'member_no', '會員號碼': 'member_no', remark: 'staff_notes', remarks: 'staff_notes', note: 'staff_notes', notes: 'staff_notes', '備註': 'staff_notes', group: 'group', host: 'group', '場主': 'group', submittedat: 'created', 'submitted at': 'created', timestamp: 'created' };
 function parseCsv(text) {
   const rows = []; let row = [], cell = '', q = false;
   for (let i = 0; i < text.length; i++) {
@@ -1083,12 +1083,35 @@ function normDate(v) {
   if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
   const d = new Date(v); return isNaN(d) ? v : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(d);
 }
+const IMPORT_GUIDE = [
+  ['Member ID', 'Optional', '6 digits, e.g. 000123. Leave blank to give the next free number automatically.'],
+  ['Surname', 'Name or Nickname', 'As on the passport.'], ['Middle Name', 'Optional', ''], ['Family Name', 'Name or Nickname', 'As on the passport.'],
+  ['Nickname', 'Name or Nickname', 'The name staff type in PPM.'],
+  ['Nationality', 'Optional', 'Country name, e.g. Taiwan, South Korea, Philippines. "Taiwanese", "Korean" etc. are converted.'],
+  ['Birthday', 'Optional', 'YYYY-MM-DD, e.g. 1988-04-17. The member app uses it to sign in.'],
+  ['Passport ID', 'Optional', 'Used to skip a person who is already a member.'],
+  ['Phone', 'Optional', 'With country code, e.g. +63 917 555 1234.'], ['Email', 'Optional', ''], ['WhatsApp', 'Optional', ''], ['Telegram', 'Optional', 'e.g. @username'], ['LINE', 'Optional', ''],
+  ['Language', 'Optional', 'e.g. English, 中文, Korean, Japanese.'], ['Referral ID', 'Optional', 'Member ID of whoever brought them.'],
+  ['Group', 'Optional', 'Hee, Dee, SK, Patrick, JOY or In-House.'], ['Remark', 'Optional', 'Anything the team should know.']
+];
+function downloadImportSample() {
+  const rows = [IMPORT_GUIDE.map(([c]) => c),
+    ['', 'Wei-Lun', '', 'Chen', 'Wei', 'Taiwan', '1988-04-17', '', '+886 912 345 678', 'wei@example.com', '', '@weichen', 'weilun88', '中文', '', 'Hee', 'Prefers Table 3'],
+    ['000150', 'Ji-ho', '', 'Park', 'Jiho', 'South Korea', '1992-11-02', '', '+82 10 1234 5678', '', '', '', '', 'Korean', '', 'In-House', '']];
+  const csv = rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = 'everest-member-import-sample.csv'; a.click();
+}
 async function viewImport(view) {
-  view.innerHTML = `<div><h1>Import members</h1><p class="sub">Export the registration Google Sheet as CSV (File → Download → .csv) and load it here. Existing member numbers and passports are skipped, so importing twice is safe.</p></div>
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Import members</h1><p class="sub">Fill in the sample file (Excel or Google Sheets), save it as CSV, and upload it here. Existing member numbers and passports are skipped, so importing twice is safe.</p></div>
+    <button class="btn primary" id="sample">Download sample CSV</button></div>
+    <section class="card"><h2 style="margin-bottom:8px">Columns</h2><div class="tbl"><table><thead><tr><th>Column</th><th>Required?</th><th>How to fill it</th></tr></thead><tbody>
+      ${IMPORT_GUIDE.map(([c, req, how]) => `<tr><td><b>${esc(c)}</b></td><td>${req}</td><td class="small">${esc(how)}</td></tr>`).join('')}
+    </tbody></table></div><p class="small muted" style="margin:8px 0 0">Keep the header row as it is; column order does not matter and unknown columns are ignored. In Excel use File → Save As → <b>CSV UTF-8</b> so Chinese, Korean and Japanese names stay readable.</p></section>
     <section class="card" style="display:flex;flex-direction:column;gap:12px">
       <label class="f">CSV file<input type="file" id="file" accept=".csv,text/csv,.tsv,text/tab-separated-values"></label>
       <label class="f">…or paste the rows (with the header row)<textarea id="paste" rows="6" placeholder="surname,middleName,familyName,nickName,…"></textarea></label>
       <div class="row"><button class="btn" id="preview">Preview</button></div><div id="pv"></div></section>`;
+  view.querySelector('#sample').onclick = downloadImportSample;
   let rows = [];
   const show = (text) => {
     const table = parseCsv(text); if (table.length < 2) return flash(view.querySelector('#pv'), 'No rows found.', 'err');

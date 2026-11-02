@@ -479,7 +479,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     return reply({ ok: true, member_no: created.member_no });
   }
   if (parts[0] === 'members' && parts[1] === 'import' && method === 'POST') {
-    if (!master) return masterOnly();
+    if (!manager) return managerOnly();
     const b = await readJson(req, 1000000);
     const rows = Array.isArray(b.rows) ? b.rows.slice(0, 100) : [];
     const actor = who(b) || 'import';
@@ -505,8 +505,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       existingNos.add(no.toLowerCase()); if (fields.passport_id) existingPassports.add(fields.passport_id);
       const cols = PROFILE_FIELDS.filter((k) => fields[k]);
       const created = isDate(str(row.created, 10)) ? dayStart(str(row.created, 10)) : now;
-      stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO members(member_no,${cols.concat(['group_id', 'source', 'created_at', 'updated_at']).join(',')}) VALUES(?,${marks(cols.length + 4)})`)
-        .bind(no, ...cols.map((k) => fields[k]), group ? group.id : null, 'import', created, now));
+      stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO members(member_no,${cols.concat(['group_id', 'source', 'staff_notes', 'created_at', 'updated_at']).join(',')}) VALUES(?,${marks(cols.length + 5)})`)
+        .bind(no, ...cols.map((k) => fields[k]), group ? group.id : null, 'import', str(row.staff_notes, 4000), created, now));
       if (group) stmts.push(env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) SELECT id,?,?,?,?,? FROM members WHERE member_no=?').bind(group.id, now, actor, 'Imported', now, no));
       result.created++;
     });
