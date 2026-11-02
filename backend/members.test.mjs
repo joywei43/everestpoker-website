@@ -452,4 +452,15 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal((await call('/sessions/' + x.id + '/edit', 'POST', { ...body, cash_out: '', busted: false }, boss.token)).status, 200);
   assert.equal((await call('/members/777777', 'GET', null, boss.token)).body.sessions.find((s) => s.id === x.id).cash_out, null, 'blank clears the cash-out');
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session');
+{ // Members sorted by last play; master moves one session to another member.
+  const list = (await call('/members?sort=last&limit=200', 'GET', null, boss.token)).body.members;
+  const lp = list.map((m) => m.last_play).filter((x) => x != null);
+  assert.ok(lp.length > 1 && lp.every((x, i) => i === 0 || lp[i - 1] >= x), 'most recent first');
+  assert.equal(list[list.length - 1].last_play, null, 'never played at the end');
+  const x = (await call('/members/777777', 'GET', null, boss.token)).body.sessions[0];
+  assert.equal((await call('/sessions/' + x.id + '/move', 'POST', { member_no: '444444' }, maria.token)).status, 403);
+  const mv = await call('/sessions/' + x.id + '/move', 'POST', { member_no: '444444', confirm: true }, boss.token);
+  assert.equal(mv.status, 200, JSON.stringify(mv.body));
+  assert.ok((await call('/members/444444', 'GET', null, boss.token)).body.sessions.some((s) => s.id === x.id));
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session');

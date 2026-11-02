@@ -227,6 +227,7 @@ function memberPicker(input, onPick) {
 }
 
 // ---------- Members list ----------
+let memberSort = (() => { try { return localStorage.getItem('everest-member-sort') || 'last'; } catch (e) { return 'last'; } })();
 async function viewMembers(view) {
   const gs = await groups();
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -235,22 +236,24 @@ async function viewMembers(view) {
     <div class="card"><form class="row" id="sf">
       <label class="sr" for="q">Search</label><input type="search" id="q" placeholder="EV-000123, nickname, name…" style="flex:1 1 240px" value="${esc(params.get('q') || '')}">
       <label class="sr" for="g">Group</label><select id="g"><option value="">All groups</option>${groupOptions(gs, params.get('group'))}<option value="unassigned" ${params.get('group') === 'unassigned' ? 'selected' : ''}>No group</option></select>
-      <button class="btn">Search</button></form>
+      <button class="btn">Search</button>
+      <div class="seg" role="group" aria-label="Sort"><button type="button" data-sort="last" aria-pressed="${memberSort === 'last'}">Last play</button><button type="button" data-sort="no" aria-pressed="${memberSort === 'no'}">Member no.</button></div></form>
       <div id="list" style="margin-top:12px"></div></div>
     ${memberDialog(gs)}`;
   let offset = 0, rows = [];
   const load = async (more) => {
     if (!more) { offset = 0; rows = []; }
     const q = view.querySelector('#q').value.trim(), g = view.querySelector('#g').value;
-    const res = await api(`/members?limit=50&offset=${offset}&q=${encodeURIComponent(q)}&group=${encodeURIComponent(g)}`);
+    const res = await api(`/members?limit=50&offset=${offset}&q=${encodeURIComponent(q)}&group=${encodeURIComponent(g)}&sort=${memberSort}`);
     rows = rows.concat(res.members); offset += res.members.length;
-    view.querySelector('#list').innerHTML = `<p class="muted small">${res.total} member${res.total === 1 ? '' : 's'}</p><div class="tbl"><table><thead><tr><th>Member no.</th><th>Name</th><th>Nickname</th><th>Group</th><th>Status</th><th>Telegram</th><th>Phone</th></tr></thead><tbody>
-      ${rows.map((m) => `<tr class="click" data-no="${esc(m.member_no)}" tabindex="0"><td class="mono">${esc(m.member_no)}</td><td><b>${esc(m.name)}</b></td><td>${esc(m.nick_label || m.nickname)}</td><td>${groupChip(m.group_name)}</td><td>${statusChip(m.status)}</td><td>${esc(m.telegram)}</td><td>${esc(m.phone)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No members yet. Import the Google Sheet or add one.</td></tr>'}
+    view.querySelector('#list').innerHTML = `<p class="muted small">${res.total} member${res.total === 1 ? '' : 's'}</p><div class="tbl"><table><thead><tr><th>Member no.</th><th>Name</th><th>Nickname</th><th>Group</th><th>Status</th><th>Last play</th><th>Telegram</th><th>Phone</th></tr></thead><tbody>
+      ${rows.map((m) => `<tr class="click" data-no="${esc(m.member_no)}" tabindex="0"><td class="mono">${esc(m.member_no)}</td><td><b>${esc(m.name)}</b></td><td>${esc(m.nick_label || m.nickname)}</td><td>${groupChip(m.group_name)}</td><td>${statusChip(m.status)}</td><td class="small" style="white-space:nowrap">${m.last_play ? fmt(m.last_play, { day: 'numeric', month: 'short' }) + ' ' + time(m.last_play) : '<span class="muted">—</span>'}</td><td>${esc(m.telegram)}</td><td>${esc(m.phone)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No members yet. Import the Google Sheet or add one.</td></tr>'}
       </tbody></table></div>${offset < res.total ? '<button class="btn" id="more" style="margin-top:10px">Load more</button>' : ''}`;
     view.querySelectorAll('tr.click').forEach((tr) => { const go = () => location.hash = '#/member/' + encodeURIComponent(tr.dataset.no); tr.onclick = go; tr.onkeydown = (e) => { if (e.key === 'Enter') go(); }; });
     const moreBtn = view.querySelector('#more'); if (moreBtn) moreBtn.onclick = () => load(true);
   };
   view.querySelector('#sf').onsubmit = (e) => { e.preventDefault(); load(false); };
+  view.querySelectorAll('[data-sort]').forEach((b) => b.onclick = () => { memberSort = b.dataset.sort; try { localStorage.setItem('everest-member-sort', memberSort); } catch (e) {} view.querySelectorAll('[data-sort]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); load(false); });
   view.querySelector('#newBtn').onclick = () => openMemberDialog(view, null, async (data) => {
     let res;
     try { res = await api('/members', 'POST', { ...data, staff: needStaff() }); }
@@ -366,7 +369,7 @@ async function viewMember(view, no) {
       <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
       ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)} ${restBadge(x.rest_seconds, x.active_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
         <td class="num">${isManager() ? `<button type="button" class="linkbtn" data-co="${x.id}" title="Enter or correct the cash-out">${x.cash_out == null ? 'Add' : (x.busted ? 'Busted' : peso(x.cash_out))}</button>` : (x.cash_out == null ? '—' : x.busted ? 'Busted' : peso(x.cash_out))}</td>
-        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-editsess="${x.id}" title="Correct times, buy-in or cash-out">Edit</button><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
+        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-editsess="${x.id}" title="Correct times, buy-in or cash-out">Edit</button><button type="button" class="btn sm" data-movesess="${x.id}" title="This session belongs to another member">Move</button><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
     <section class="card" style="display:flex;flex-direction:column;gap:14px">
       <div class="row between"><h2>Rewards received</h2><span class="chip dark">Staff only</span></div>
@@ -496,6 +499,16 @@ async function viewMember(view, no) {
       try { await api('/sessions/' + x.id + '/edit', 'POST', body); dlg.close(); reload(); } catch (err) { flash(dlg.querySelector('#sessMsg'), err.message, 'err'); }
     };
     dlg.showModal();
+  });
+  view.querySelectorAll('[data-movesess]').forEach((b) => b.onclick = async () => {
+    const x = data.sessions.find((s) => String(s.id) === b.dataset.movesess);
+    const to = (prompt(`Move this session to another member?\n${x.play_date} · ${x.table_name} S${x.seat} · buy-in ${peso(x.buy_in)}\n\nType the member number (6 digits):`) || '').trim();
+    if (!to) return;
+    let target; try { target = (await api('/members/' + encodeURIComponent(to))).member; } catch (e) { alert(e.movedTo ? 'That number now belongs to ' + e.movedTo + '.' : e.message); return; }
+    if (!confirm(`Move to ${target.member_no} ${target.nickname || target.name}?`)) return;
+    try { await api('/sessions/' + x.id + '/move', 'POST', { member_no: target.member_no }); }
+    catch (e) { if (e.code !== 'overlap' || !confirm(e.message + '\nMove anyway?')) { if (e.code !== 'overlap') alert(e.message); return; } try { await api('/sessions/' + x.id + '/move', 'POST', { member_no: target.member_no, confirm: true }); } catch (e2) { alert(e2.message); return; } }
+    reload();
   });
   view.querySelectorAll('[data-delsess]').forEach((b) => b.onclick = async () => {
     const x = data.sessions.find((s) => String(s.id) === b.dataset.delsess);
@@ -783,7 +796,7 @@ const ACTION_LABELS = {
   'ppm.change_seat': ['Change seat', 'blue'], 'ppm.change_table': ['Change table', 'blue'],
   'member.create': ['Member added', 'green'], 'member.update': ['Profile edited', 'blue'], 'member.group': ['Group change', 'amber'], 'member.number': ['Number change', 'amber'],
   'member.photo': ['Photo', ''], 'member.merge': ['Merged', 'red'], 'member.delete': ['Member deleted', 'red'], 'member.import': ['Import', 'blue'],
-  'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'session.edit': ['Session edited', 'amber'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
+  'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'session.edit': ['Session edited', 'amber'], 'session.move': ['Session moved', 'blue'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
   'reward.add': ['Reward', 'green'], 'reward.approve': ['Approved', 'green'], 'reward.void': ['Voided', 'red'],
   'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue']
 };

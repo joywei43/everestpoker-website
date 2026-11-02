@@ -451,11 +451,13 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const status = str(url.searchParams.get('status'), 20);
     if (STATUSES.includes(status)) { where.push('status=?'); args.push(status); }
     const sqlWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
-    const order = q ? "ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, member_no" : 'ORDER BY member_no';
-    const rows = await all(env.DB.prepare(`SELECT members.*, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=members.id) AS has_photo FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, normNo(q), q] : []), limit, offset));
+    // sort=last: most recent finished session first (never played at the end); default: member number.
+    const byLast = url.searchParams.get('sort') === 'last', tail = byLast ? 'last_play IS NULL, last_play DESC, member_no' : 'member_no';
+    const order = q ? `ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, ${tail}` : `ORDER BY ${tail}`;
+    const rows = await all(env.DB.prepare(`SELECT members.*, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=members.id) AS has_photo, (SELECT MAX(end_at) FROM play_sessions ps WHERE ps.member_id=members.id) AS last_play FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, normNo(q), q] : []), limit, offset));
     const total = await env.DB.prepare(`SELECT COUNT(*) n FROM members ${sqlWhere}`).bind(...args).first();
     const dups = await dupNicknames(env);
-    return reply({ members: rows.map((m) => publicMember(m, groups, dups)), total: total.n });
+    return reply({ members: rows.map((m) => ({ ...publicMember(m, groups, dups), last_play: m.last_play ?? null })), total: total.n });
   }
   if (parts[0] === 'members' && parts.length === 1 && method === 'POST') {
     const b = await readJson(req);
@@ -826,6 +828,23 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       audit(env, now, who(b), 'session.cash_out', row.member_id, `${row.play_date} ${row.cash_out == null ? '' : '₱' + row.cash_out + ' → '}₱${amount}${b.busted ? ' (busted)' : ''}`)
     ]);
     return reply({ ok: true });
+  }
+  // Master: move one finished session to another member (credited to that member's group at the time).
+  if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'move' && method === 'POST') {
+    if (!master) return masterOnly();
+    const b = await readJson(req, 2000);
+    const row = await env.DB.prepare('SELECT ps.*, m.member_no old_no FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id WHERE ps.id=?').bind(Number(parts[1])).first();
+    if (!row) return bad(reply, 'Session not found.', 404);
+    const to = await memberByNo(env, b.member_no || '');
+    if (!to) return bad(reply, 'Member not found.', 404);
+    if (to.id === row.member_id) return reply({ ok: true, unchanged: true });
+    const overlap = await env.DB.prepare('SELECT 1 x FROM play_sessions WHERE member_id=? AND id<>? AND start_at<? AND end_at>?').bind(to.id, row.id, row.end_at, row.start_at).first();
+    if (overlap && !b.confirm) return reply({ error: `${to.member_no} already has a session at that time.`, code: 'overlap' }, 409);
+    await env.DB.batch([
+      env.DB.prepare('UPDATE play_sessions SET member_id=?,group_id=? WHERE id=?').bind(to.id, await groupAt(env, to.id, row.start_at), row.id),
+      audit(env, now, who(b), 'session.move', to.id, `"${row.member_ref}" ${row.table_name} S${row.seat} ${row.play_date} moved ${row.old_no || 'from Unmatched'} → ${to.member_no}`)
+    ]);
+    return reply({ ok: true, member_no: to.member_no });
   }
   // Master: correct a finished session's times, play/rest time, buy-in and cash-out.
   if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'edit' && method === 'POST') {
