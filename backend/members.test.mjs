@@ -8,7 +8,7 @@ import { staffSql } from './create-staff.mjs';
 const sql = new DatabaseSync(':memory:');
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 const stmt = (q) => { let args = []; return {
-  bind(...v) { args = v; return this; },
+  bind(...v) { if (v.length > 100) throw new Error('D1 allows at most 100 bound parameters per query (got ' + v.length + ')'); args = v; return this; },
   async first() { return sql.prepare(q).get(...args) || null; },
   async all() { return { results: sql.prepare(q).all(...args) }; },
   async run() { const r = sql.prepare(q).run(...args); return { meta: { changes: Number(r.changes) } }; }
@@ -488,4 +488,14 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   let waits = []; await worker.scheduled({}, env, { waitUntil: (p) => waits.push(p) }); await Promise.all(waits);
   assert.ok((await call('/members/666666', 'GET', null, boss.token)).body.sessions.some((x) => x.start_at && x.seat === 5), 'scheduled check recorded it');
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check');
+{ // Regression: a busy night (more than 50 finished sessions in PPM) must still record new sessions.
+  let cur = (await call('/ppm', 'GET', null, boss.token)).body;
+  const many = Array.from({ length: 60 }, (_, k) => ({ seatId: (k % 9) + 1, memberId: 'Night' + k, startTime: '2026-11-03 01:' + String(k % 60).padStart(2, '0') + ':00', endTime: '2026-11-03 02:' + String(k % 60).padStart(2, '0') + ':00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 1000 }));
+  cur.tables[3].sessions = many;
+  let r = await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, boss.token);
+  assert.equal(r.body.sync.error, undefined, String(r.body.sync.error)); assert.equal(r.body.sync.inserted, 60);
+  cur.tables = r.body.tables; cur.tables[3].sessions.push({ seatId: 6, memberId: 'Hee (888888)', startTime: '2026-11-03 03:07:42', endTime: '2026-11-03 05:59:36', activeSeconds: 9135, restSeconds: 1176, buyInAmount: 14175, cashOutAmount: 14500 });
+  r = await call('/ppm', 'PUT', { version: r.body.version, tables: cur.tables }, boss.token);
+  assert.equal(r.body.sync.error, undefined, String(r.body.sync.error)); assert.equal(r.body.sync.inserted, 1, 'the 61st session is recorded too');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit)');

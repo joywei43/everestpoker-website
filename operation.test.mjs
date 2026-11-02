@@ -6,7 +6,7 @@ import { staffSql } from './create-staff.mjs';
 
 const sql = new DatabaseSync(':memory:');
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
-const stmt = (q) => { let a = []; return { bind(...v) { a = v; return this; }, async first() { return sql.prepare(q).get(...a) || null; }, async all() { return { results: sql.prepare(q).all(...a) }; }, async run() { const r = sql.prepare(q).run(...a); return { meta: { changes: Number(r.changes) } }; } }; };
+const stmt = (q) => { let a = []; return { bind(...v) { if (v.length > 100) throw new Error('D1 allows at most 100 bound parameters per query (got ' + v.length + ')'); a = v; return this; }, async first() { return sql.prepare(q).get(...a) || null; }, async all() { return { results: sql.prepare(q).all(...a) }; }, async run() { const r = sql.prepare(q).run(...a); return { meta: { changes: Number(r.changes) } }; } }; };
 const DB = { prepare: stmt, async batch(l) { sql.exec('BEGIN'); try { const o = []; for (const s of l) o.push(await s.run()); sql.exec('COMMIT'); return o; } catch (e) { sql.exec('ROLLBACK'); throw e; } } };
 const env = { DB, ADMIN_PASSWORD: 'x', MASTER_USERS: 'Boss' };
 const call = async (path, method = 'GET', data, token) => {

@@ -193,7 +193,7 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
   }
   if (!found.length) return { inserted: 0 };
   const seen = new Set();
-  for (const part of chunks(found.map((f) => f.key), 90)) {
+  for (const part of chunks(found.map((f) => f.key), 45)) {
     const rows = await all(env.DB.prepare(`SELECT session_key FROM play_sessions WHERE session_key IN (${marks(part.length)}) UNION SELECT session_key FROM deleted_sessions WHERE session_key IN (${marks(part.length)})`).bind(...part, ...part));
     rows.forEach((r) => seen.add(r.session_key));
   }

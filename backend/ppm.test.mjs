@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import worker from './worker.mjs';
 const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
-const DB={prepare(q){let args=[];return {bind(...v){args=v;return this},async first(){return sql.prepare(q).get(...args)||null},async run(){const r=sql.prepare(q).run(...args);return {meta:{changes:Number(r.changes)}}}}},async batch(stmts){sql.exec('BEGIN');try {const results=[];for(const s of stmts)results.push(await s.run());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e}}};
+const DB={prepare(q){let args=[];return {bind(...v){if(v.length>100)throw new Error('D1 allows at most 100 bound parameters');args=v;return this},async first(){return sql.prepare(q).get(...args)||null},async run(){const r=sql.prepare(q).run(...args);return {meta:{changes:Number(r.changes)}}}}},async batch(stmts){sql.exec('BEGIN');try {const results=[];for(const s of stmts)results.push(await s.run());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e}}};
 const env={DB,ADMIN_PASSWORD:'test'};
 const call=(path,method='GET',data,token)=>worker.fetch(new Request('https://api.test'+path,{method,headers:{Origin:'https://everestpokerroom.com',...(token?{Authorization:'Bearer '+token}: {})},...(data?{body:JSON.stringify(data)}:{})}),env);
 assert.equal((await call('/ppm')).status,401);

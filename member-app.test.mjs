@@ -7,7 +7,7 @@ import { staffSql } from './create-staff.mjs';
 const sql = new DatabaseSync(':memory:');
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 const stmt = (q) => { let args = []; return {
-  bind(...v) { args = v; return this; },
+  bind(...v) { if (v.length > 100) throw new Error('D1 allows at most 100 bound parameters per query (got ' + v.length + ')'); args = v; return this; },
   async first() { return sql.prepare(q).get(...args) || null; },
   async all() { return { results: sql.prepare(q).all(...args) }; },
   async run() { const r = sql.prepare(q).run(...args); return { meta: { changes: Number(r.changes) } }; }
