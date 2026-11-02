@@ -124,6 +124,32 @@ async function seatLinks(env, keys) {
   return map;
 }
 
+// Players sitting in PPM right now, with the member each one counts for (by typed number/nickname or a seat link).
+async function liveSeats(env) {
+  const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
+  const live = [];
+  for (const t of ppmRow ? JSON.parse(ppmRow.data) : []) {
+    for (const seat of t.seats || []) {
+      const ref = str(seat.memberId, 60);
+      if (!ref || seat.status === 'idle' || !seat.sessionStart) continue;
+      let active = Math.max(0, Number(seat.activeSeconds) || 0);
+      if (seat.status === 'seated' && seat.lastActiveStart) active += Math.max(0, (Date.now() - seat.lastActiveStart) / 1000);
+      live.push({ table: t.name || 'T' + t.id, seat: seat.id, ref, status: seat.status, started: ppmTime(seat.sessionStart), active_seconds: Math.round(active), key: seatKey(t.name || t.id, seat.id, ref, seat.sessionStart) });
+    }
+  }
+  const matched = await matchRefs(env, live.map((x) => x.ref));
+  const links = await seatLinks(env, live.map((x) => x.key));
+  for (const x of live) { x.auto_member = matched(x.ref); x.link_member = links.get(x.key) || null; x.member_id = x.auto_member || x.link_member; }
+  return live;
+}
+// Does the name typed in PPM look like this member? Used to ask "are you sure?" before linking.
+function nameFits(ref, m) {
+  const r = ref.toLowerCase().replace(/\s+/g, ' ').trim();
+  const names = [m.nickname, m.surname, m.family_name, m.middle_name, displayName(m), [m.family_name, m.surname].filter(Boolean).join(' '), m.member_no]
+    .filter(Boolean).map((v) => v.toLowerCase().replace(/\s+/g, ' ').trim());
+  return names.some((n) => n === r || (r.length >= 3 && (n.split(' ').includes(r) || r.split(' ').includes(n))));
+}
+
 // ---------- PPM -> play_sessions ----------
 // Called after every successful PPM save. Only sessions not seen before are written, so it is cheap and repeatable.
 export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)) {
@@ -358,7 +384,11 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const groupId = b.group_id ? str(b.group_id, 30) : null;
     if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
     const wanted = b.member_no ? normNo(b.member_no) : '';
-    if (wanted && (await memberByNo(env, wanted) || await memberByOldNo(env, wanted))) return bad(reply, 'Member number already used.', 409);
+    if (wanted && await memberByNo(env, wanted)) return bad(reply, 'Member number already used.', 409);
+    if (wanted && await memberByOldNo(env, wanted)) {
+      if (!master) return bad(reply, 'That number was used before. Ask the master account.', 409);
+      await env.DB.prepare('DELETE FROM member_number_history WHERE old_no=? COLLATE NOCASE').bind(wanted).run();
+    }
     const created = await createMember(env, now, fields, groupId, 'staff', who(b), wanted || null);
     return reply({ ok: true, member_no: created.member_no });
   }
@@ -440,7 +470,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const next = normNo(b.member_no);
       if (!/^[A-Z0-9][A-Z0-9-]{1,29}$/.test(next)) return bad(reply, 'Member number: 2–30 letters, numbers or dashes.');
       if (next === m.member_no.toUpperCase()) return reply({ ok: true, unchanged: true, member_no: m.member_no });
-      const taken = await env.DB.prepare('SELECT 1 x FROM members WHERE member_no=? COLLATE NOCASE AND id<>? UNION SELECT 1 FROM member_number_history WHERE old_no=? COLLATE NOCASE AND member_id<>?').bind(next, m.id, next, m.id).first();
+      // A number in use by another member is never allowed; a retired number may be reused by the master to fix a mistake.
+      const taken = await env.DB.prepare('SELECT 1 x FROM members WHERE member_no=? COLLATE NOCASE AND id<>?').bind(next, m.id).first();
       if (taken) return bad(reply, 'That member number is already used.', 409);
       // Game records, rewards, photo and group history are linked by the internal id, so they all stay.
       await env.DB.batch([
@@ -579,25 +610,12 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
   if (parts[0] === 'sessions' && parts[1] === 'unmatched' && method === 'GET') {
     const rows = await all(env.DB.prepare('SELECT member_ref, COUNT(*) sessions, SUM(active_seconds) secs, MIN(start_at) first, MAX(start_at) last FROM play_sessions WHERE member_id IS NULL GROUP BY member_ref ORDER BY last DESC LIMIT 300'));
     // Players still at the table whose name is not a member yet.
-    const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
-    const live = [];
-    for (const t of ppmRow ? JSON.parse(ppmRow.data) : []) {
-      for (const seat of t.seats || []) {
-        const ref = str(seat.memberId, 60);
-        if (!ref || seat.status === 'idle' || !seat.sessionStart) continue;
-        const started = ppmTime(seat.sessionStart);
-        let active = Math.max(0, Number(seat.activeSeconds) || 0);
-        if (seat.status === 'seated' && seat.lastActiveStart) active += Math.max(0, (Date.now() - seat.lastActiveStart) / 1000);
-        live.push({ table: t.name || 'T' + t.id, seat: seat.id, ref, status: seat.status, started, active_seconds: Math.round(active), key: seatKey(t.name || t.id, seat.id, ref, seat.sessionStart) });
-      }
-    }
-    const matched = await matchRefs(env, live.map((x) => x.ref));
-    const links = await seatLinks(env, live.map((x) => x.key));
-    const linkedIds = [...new Set([...links.values()])];
+    const live = await liveSeats(env);
+    const linkedIds = [...new Set(live.filter((x) => !x.auto_member && x.link_member).map((x) => x.link_member))];
     const names = new Map();
     for (const part of chunks(linkedIds, 90)) (await all(env.DB.prepare(`SELECT id,member_no,nickname,surname,middle_name,family_name FROM members WHERE id IN (${marks(part.length)})`).bind(...part))).forEach((m) => names.set(m.id, m));
-    const seated = live.filter((x) => !matched(x.ref)).map((x) => {
-      const m = links.has(x.key) ? names.get(links.get(x.key)) : null;
+    const seated = live.filter((x) => !x.auto_member).map((x) => {
+      const m = x.link_member ? names.get(x.link_member) : null;
       return { table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, seat_key: x.key, linked: m ? { member_no: m.member_no, name: displayName(m) } : null };
     }).sort((a, b) => a.table.localeCompare(b.table) || a.seat - b.seat);
     return reply({ refs: rows, seated });
@@ -608,11 +626,42 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (!key || !staff) return bad(reply, 'Seat and staff name are required.');
     const m = await memberByNo(env, str(b.member_no, 30));
     if (!m) return bad(reply, 'Member not found.', 404);
+    const live = await liveSeats(env);
+    const here = live.find((x) => x.key === key);
+    if (!here) return bad(reply, 'This player is no longer at the table. Refresh the page.', 409);
+    // Guard 1: one person cannot sit in two seats.
+    const other = live.find((x) => x.key !== key && x.member_id === m.id);
+    if (other) return reply({ error: `${m.member_no} (${displayName(m)}) is already at ${other.table} · S${other.seat} as "${other.ref}". Check the number.`, code: 'already_seated' }, 409);
+    // Guard 2: the typed name should look like the member; staff must confirm otherwise.
+    if (!b.confirm && !nameFits(here.ref, m)) return reply({ error: `PPM says "${here.ref}" but ${m.member_no} is ${displayName(m)}.`, code: 'name_mismatch', member: { member_no: m.member_no, name: displayName(m) } }, 409);
     await env.DB.batch([
       env.DB.prepare('INSERT OR REPLACE INTO ppm_seat_links(seat_key,member_id,created_at,created_by) VALUES(?,?,?,?)').bind(key, m.id, now, staff),
       audit(env, now, staff, 'sessions.link', m.id, `Seat ${key.split('|').slice(0, 3).join(' · ')}`)
     ]);
     return reply({ ok: true, member_no: m.member_no });
+  }
+  if (parts[0] === 'sessions' && parts[1] === 'unlink-seat' && method === 'POST') {
+    const b = await readJson(req, 2000);
+    const key = str(b.seat_key, 200);
+    const row = await env.DB.prepare('SELECT member_id FROM ppm_seat_links WHERE seat_key=?').bind(key).first();
+    if (!row) return reply({ ok: true, unchanged: true });
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM ppm_seat_links WHERE seat_key=?').bind(key),
+      audit(env, now, who(b), 'sessions.unlink', row.member_id, `Seat ${key.split('|').slice(0, 3).join(' · ')}`)
+    ]);
+    return reply({ ok: true });
+  }
+  // Undo a wrong link on a finished session (master): it goes back to Unmatched.
+  if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'unlink' && method === 'POST') {
+    if (!master) return masterOnly();
+    const b = await readJson(req, 2000);
+    const row = await env.DB.prepare('SELECT id,member_id,member_ref,play_date FROM play_sessions WHERE id=?').bind(Number(parts[1])).first();
+    if (!row || !row.member_id) return reply({ ok: true, unchanged: true });
+    await env.DB.batch([
+      env.DB.prepare('UPDATE play_sessions SET member_id=NULL,group_id=NULL WHERE id=?').bind(row.id),
+      audit(env, now, who(b), 'sessions.unlink', row.member_id, `"${row.member_ref}" · ${row.play_date}`)
+    ]);
+    return reply({ ok: true });
   }
   if (parts[0] === 'sessions' && parts[1] === 'link' && method === 'POST') {
     const b = await readJson(req, 5000);
@@ -620,8 +669,15 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (!ref || !staff) return bad(reply, 'PPM name and staff name are required.');
     const m = await memberByNo(env, str(b.member_no, 30));
     if (!m) return bad(reply, 'Member not found.', 404);
-    const rows = await all(env.DB.prepare('SELECT id,start_at FROM play_sessions WHERE member_id IS NULL AND member_ref=?').bind(ref));
+    const rows = await all(env.DB.prepare('SELECT id,start_at,end_at FROM play_sessions WHERE member_id IS NULL AND member_ref=?').bind(ref));
     if (!rows.length) return reply({ ok: true, linked: 0 });
+    // Guard 1: the member cannot have been playing somewhere else at the same time.
+    for (const r of rows) {
+      const clash = await env.DB.prepare('SELECT table_name,seat,member_ref,play_date FROM play_sessions WHERE member_id=? AND start_at<? AND end_at>? LIMIT 1').bind(m.id, r.end_at, r.start_at).first();
+      if (clash) return reply({ error: `${m.member_no} (${displayName(m)}) was already playing at ${clash.table_name} · S${clash.seat} as "${clash.member_ref}" at that time. Check the number.`, code: 'overlap' }, 409);
+    }
+    // Guard 2: name check, staff confirm if it does not look like the member.
+    if (!b.confirm && !nameFits(ref, m)) return reply({ error: `PPM says "${ref}" but ${m.member_no} is ${displayName(m)}.`, code: 'name_mismatch', member: { member_no: m.member_no, name: displayName(m) } }, 409);
     const history = await all(env.DB.prepare('SELECT member_id,group_id,effective_from FROM member_group_history WHERE member_id=? ORDER BY effective_from, id').bind(m.id));
     const stmts = rows.map((r) => env.DB.prepare('UPDATE play_sessions SET member_id=?,group_id=? WHERE id=? AND member_id IS NULL').bind(m.id, groupAtFrom(history, m.id, r.start_at), r.id));
     stmts.push(audit(env, now, staff, 'sessions.link', m.id, `"${ref}" · ${rows.length} sessions`));

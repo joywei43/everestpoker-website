@@ -99,7 +99,9 @@ assert.equal(hee.rewards, 6500); assert.equal(sum.unmatched_sessions, 1); assert
 // Unmatched PPM names can be linked to a member afterwards.
 const refs = (await call('/sessions/unmatched', 'GET', null, token)).body.refs;
 assert.equal(refs[0].member_ref, 'Walkin Bob');
-assert.equal((await call('/sessions/link', 'POST', { member_ref: 'Walkin Bob', member_no: 'EV-000002', staff: 'Maria' }, token)).body.linked, 1);
+r = await call('/sessions/link', 'POST', { member_ref: 'Walkin Bob', member_no: 'EV-000002', staff: 'Maria' }, token);
+assert.equal(r.status, 409); assert.equal(r.body.code, 'name_mismatch', 'Walkin Bob does not look like Tiger');
+assert.equal((await call('/sessions/link', 'POST', { member_ref: 'Walkin Bob', member_no: 'EV-000002', staff: 'Maria', confirm: true }, token)).body.linked, 1);
 assert.equal((await call('/sessions/unmatched', 'GET', null, token)).body.refs.length, 0);
 // Tiger had no group when he played; his first group takes those hours.
 assert.equal((await call('/members/EV-000002/group', 'POST', { group_id: 'sk', staff: 'K. Lim' }, token)).status, 200);
@@ -231,7 +233,7 @@ assert.equal(tigerAfter.stats.all.secs, tigerBefore.stats.all.secs, 'play time s
 assert.equal(tigerAfter.group_history.length, tigerBefore.group_history.length);
 assert.equal((await call('/members/EV-000002', 'GET', null, boss.token)).body.moved_to, 'VIP-007');
 assert.ok(tigerAfter.audit.some((a) => a.action === 'member.number' && a.detail === 'EV-000002 → VIP-007'));
-assert.equal((await call('/members', 'POST', { nickname: 'Copycat', member_no: 'EV-000002' }, boss.token)).status, 409, 'retired numbers are not reused');
+assert.equal((await call('/members', 'POST', { nickname: 'Copycat', member_no: 'EV-000002' }, maria.token)).status, 409, 'retired numbers are not reused by staff');
 const fresh = (await call('/members', 'POST', { nickname: 'Fresh' }, boss.token)).body.member_no;
 assert.notEqual(fresh, 'EV-000002');
 
@@ -241,12 +243,12 @@ assert.equal(r.body.member_no, 'EV-444444');
 assert.equal((await call('/members', 'POST', { nickname: 'Dup', member_no: 'ev444444' }, boss.token)).status, 409);
 assert.equal((await call('/members/444444', 'GET', null, boss.token)).body.member.nickname, 'Six');
 assert.equal((await call('/members?q=444444', 'GET', null, boss.token)).body.members[0].member_no, 'EV-444444');
-const t2 = structuredClone(tables); t2[0].sessions = [{ seatId: 5, memberId: 'Bob 6', startTime: '2026-10-30 20:00:00', endTime: '2026-10-30 22:00:00', activeSeconds: 7200, restSeconds: 0, buyInAmount: 1000 },
+const t2 = structuredClone(tables); t2[0].sessions = [{ seatId: 5, memberId: 'Bob 6', startTime: '2026-10-30 21:30:00', endTime: '2026-10-30 23:30:00', activeSeconds: 7200, restSeconds: 0, buyInAmount: 1000 },
   { seatId: 6, memberId: '444444', startTime: '2026-10-30 20:00:00', endTime: '2026-10-30 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 1000 }];
 const ppmNow = (await call('/ppm', 'GET', null, boss.token)).body;
 assert.equal((await call('/ppm', 'PUT', { version: ppmNow.version, tables: t2 }, boss.token)).status, 200);
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, 3600, 'PPM seat typed as six digits matches');
-assert.equal((await call('/sessions/link', 'POST', { member_ref: 'Bob 6', member_no: '444444' }, boss.token)).body.linked, 1, 'unmatched names link by six digits');
+assert.equal((await call('/sessions/link', 'POST', { member_ref: 'Bob 6', member_no: '444444', confirm: true }, boss.token)).body.linked, 1, 'unmatched names link by six digits');
 
 // Players still at the table: listed in Unmatched, can be linked before they leave.
 let ppmLive = (await call('/ppm', 'GET', null, boss.token)).body;
@@ -258,17 +260,47 @@ assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t3 }
 let um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
 assert.equal(um.seated.length, 1, 'only unmatched seated names; 444444 is a member');
 assert.equal(um.seated[0].ref, 'ELLY'); assert.ok(um.seated[0].active_seconds >= 650);
-assert.equal((await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '444444' }, maria.token)).body.member_no, 'EV-444444');
+// Guard: EV-444444 is already sitting at seat 2, so ELLY cannot be linked to that number.
+r = await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '444444' }, maria.token);
+assert.equal(r.status, 409); assert.equal(r.body.code, 'already_seated'); assert.match(r.body.error, /S2/);
+assert.equal((await call('/members', 'POST', { nickname: 'Eleanor', surname: 'Wu', member_no: '777777' }, boss.token)).status, 200);
+r = await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '777777' }, maria.token);
+assert.equal(r.body.code, 'name_mismatch', 'ELLY vs Eleanor asks for confirmation');
+assert.equal((await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '777777', confirm: true }, maria.token)).body.member_no, 'EV-777777');
 um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
-assert.equal(um.seated[0].linked.member_no, 'EV-444444');
-const before6 = (await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs;
+assert.equal(um.seated[0].linked.member_no, 'EV-777777');
+// A wrong seat link can be changed.
+assert.equal((await call('/sessions/unlink-seat', 'POST', { seat_key: um.seated[0].seat_key }, maria.token)).status, 200);
+assert.equal((await call('/sessions/unmatched', 'GET', null, maria.token)).body.seated[0].linked, null);
+await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '777777', confirm: true }, maria.token);
+const before6 = (await call('/members/EV-777777', 'GET', null, boss.token)).body.stats.all.secs;
 ppmLive = (await call('/ppm', 'GET', null, boss.token)).body;
 const t4 = structuredClone(ppmLive.tables);
 t4[1].sessions = [...(t4[1].sessions || []), { seatId: 1, memberId: 'ELLY', startTime: '2026-11-02 18:24:42', endTime: '2026-11-02 21:00:00', activeSeconds: 9000, restSeconds: 0, buyInAmount: 10000 }];
 t4[1].seats[0] = { ...t4[1].seats[0], status: 'idle', memberId: '', sessionStart: null };
 assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t4 }, boss.token)).status, 200);
-assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, before6 + 9000, 'hours go to the linked member when the player leaves');
+const ev7 = (await call('/members/EV-777777', 'GET', null, boss.token)).body;
+assert.equal(ev7.stats.all.secs, before6 + 9000, 'hours go to the linked member when the player leaves');
+// Master can undo a wrong link on a finished session; it returns to Unmatched.
+assert.equal((await call(`/sessions/${ev7.sessions[0].id}/unlink`, 'POST', {}, maria.token)).status, 403);
+assert.equal((await call(`/sessions/${ev7.sessions[0].id}/unlink`, 'POST', {}, boss.token)).status, 200);
+assert.ok((await call('/sessions/unmatched', 'GET', null, maria.token)).body.refs.some((x) => x.member_ref === 'ELLY'));
+// Overlap guard on finished sessions: EV-444444 played 18:24–21:00? no; Six played Bob 6 on 30 Oct 20–22, so 'ELLY' (2 Nov) is fine, but a clash is refused.
+const t5 = structuredClone((await call('/ppm', 'GET', null, boss.token)).body);
+t5.tables[2].sessions = [{ seatId: 3, memberId: 'Ghost', startTime: '2026-10-30 20:30:00', endTime: '2026-10-30 21:30:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 0 }];
+await call('/ppm', 'PUT', { version: t5.version, tables: t5.tables }, boss.token);
+r = await call('/sessions/link', 'POST', { member_ref: 'Ghost', member_no: '444444', confirm: true }, boss.token);
+assert.equal(r.status, 409); assert.equal(r.body.code, 'overlap');
+await call('/sessions/link', 'POST', { member_ref: 'ELLY', member_no: '777777', confirm: true }, boss.token);
 assert.ok(!(await call('/sessions/unmatched', 'GET', null, maria.token)).body.refs.some((x) => x.member_ref === 'ELLY'));
+// Master may give a retired number to someone else to fix a mistake; staff may not.
+assert.equal((await call('/members/EV-444444/number', 'POST', { member_no: '444445' }, boss.token)).status, 200);
+assert.equal((await call('/members', 'POST', { nickname: 'Fix', member_no: '444444' }, maria.token)).status, 409);
+assert.equal((await call('/members', 'POST', { nickname: 'Fix', member_no: '444444' }, boss.token)).status, 200);
+assert.equal((await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.token)).status, 409, 'number now in use');
+assert.equal((await call('/members/EV-444445/number', 'POST', { member_no: 'bad no!' }, boss.token)).status, 400);
+await call('/members/EV-444444/number', 'POST', { member_no: '444446' }, boss.token);
+await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.token);
 
 // Nationality: one spelling per country.
 assert.equal((await call('/members/EV-444444', 'PUT', { nationality: 'Taiwanese' }, boss.token)).status, 200);
@@ -281,4 +313,4 @@ sql.exec("UPDATE members SET nationality='台灣' WHERE member_no='EV-444444'");
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan', 'old rows cleaned on deploy');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality');
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo');

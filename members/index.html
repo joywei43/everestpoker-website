@@ -110,7 +110,7 @@ async function api(path, method = 'GET', body) {
   let data = {}; try { data = await res.json(); } catch (e) {}
   if (res.status === 401) { token = ''; sessionStorage.removeItem(TOKEN_KEY); render(); throw new Error('Please sign in again.'); }
   if (res.status === 301 && data.moved_to) { const e = new Error('moved'); e.movedTo = data.moved_to; throw e; }
-  if (!res.ok) throw new Error(data.error || 'Request failed (' + res.status + ')');
+  if (!res.ok) { const e = new Error(data.error || 'Request failed (' + res.status + ')'); e.code = data.code; e.data = data; throw e; }
   return data;
 }
 async function groups() { if (!groupsCache) groupsCache = (await api('/groups')).groups; return groupsCache; }
@@ -302,8 +302,8 @@ async function viewMember(view, no) {
       ${tile('Rewards given', peso(s30.rewards), perHour(s30.rewards, s30.secs) + ' per play hour' + (s30.rewards_pending ? ' · ' + peso(s30.rewards_pending) + ' waiting' : ''))}
     </div>
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM</span></div>
-      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th>Group</th></tr></thead><tbody>
-      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td><td>${groupChip(x.group_name)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No PPM sessions yet.</td></tr>'}
+      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
+      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="9" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
     <section class="card" style="display:flex;flex-direction:column;gap:14px">
       <div class="row between"><h2>Rewards received</h2><span class="chip dark">Staff only</span></div>
@@ -371,6 +371,10 @@ async function viewMember(view, no) {
     if (body.type === 'promo_cash' && !confirm(`Record a cash reward of ${peso(body.amount)} for ${m.name}?`)) return;
     try { await api('/members/' + encodeURIComponent(no) + '/rewards', 'POST', body); reload(); } catch (err) { flash(view.querySelector('#rmsg'), err.message, 'err'); }
   };
+  view.querySelectorAll('[data-unsess]').forEach((b) => b.onclick = async () => {
+    if (!confirm(`Unlink this session from ${m.name}? It goes back to Unmatched PPM so you can link the right member.`)) return;
+    try { await api('/sessions/' + b.dataset.unsess + '/unlink', 'POST', {}); reload(); } catch (err) { alert(err.message); }
+  });
   view.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => {
     try { await api('/rewards/' + b.dataset.approve + '/approve', 'POST', {}); reload(); } catch (err) { alert(err.message); }
   });
@@ -529,6 +533,15 @@ async function viewPromotions(view) {
 }
 
 // ---------- Unmatched PPM names ----------
+// Link, and if the typed name does not look like the member, ask once before linking anyway.
+async function linkWithCheck(path, body) {
+  try { return await api(path, 'POST', body); }
+  catch (e) {
+    if (e.code !== 'name_mismatch') throw e;
+    if (!confirm(e.message + '\n\nLink anyway?')) { const c = new Error('Not linked.'); c.cancelled = true; throw c; }
+    return api(path, 'POST', { ...body, confirm: true });
+  }
+}
 let unmatchedTimer = null;
 async function viewUnmatched(view) {
   clearTimeout(unmatchedTimer);
@@ -541,7 +554,7 @@ async function viewUnmatched(view) {
       <div class="tbl"><table><thead><tr><th>Table · Seat</th><th>Typed in PPM</th><th>Status</th><th class="num">Playing so far</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
       ${data.seated.map((x, i) => `<tr><td><b>${esc(x.table)}</b> · S${x.seat}</td><td><b>${esc(x.ref)}</b></td>
         <td>${x.status === 'rest' ? '<span class="chip amber">Resting</span>' : '<span class="chip green">Playing</span>'}</td><td class="num">${hm(x.active_seconds)}</td>
-        <td>${x.linked ? `<span class="chip blue">Linked to ${esc(x.linked.member_no)}</span> <span class="small muted">${esc(x.linked.name)}</span>`
+        <td>${x.linked ? `<div class="row" style="flex-wrap:nowrap"><span class="chip blue">Linked to ${esc(x.linked.member_no)}</span> <span class="small muted" style="flex:1">${esc(x.linked.name)}</span><button type="button" class="btn sm" data-unlink="${i}">Change</button></div>`
           : `<form class="row" data-s="${i}" style="flex-wrap:nowrap">${box('s' + i, '6-digit member no.')}<button class="btn sm">Link</button></form>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Everyone at the tables is a member.</td></tr>'}
       </tbody></table></div></section>
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Already left the table</h2></div>
@@ -554,17 +567,21 @@ async function viewUnmatched(view) {
     const input = f.querySelector('input'); memberPicker(input);
     f.onsubmit = async (e) => {
       e.preventDefault(); const x = data.seated[Number(f.dataset.s)];
-      try { const res = await api('/sessions/link-seat', 'POST', { seat_key: x.seat_key, member_no: input.value.trim() }); flash(msg, `${x.ref} (${x.table} · S${x.seat}) will count for ${res.member_no} when they leave.`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
-      catch (err) { flash(msg, err.message, 'err'); }
+      try { const res = await linkWithCheck('/sessions/link-seat', { seat_key: x.seat_key, member_no: input.value.trim() }); flash(msg, `${x.ref} (${x.table} · S${x.seat}) will count for ${res.member_no} when they leave.`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
+      catch (err) { flash(msg, err.message, err.cancelled ? '' : 'err'); }
     };
   });
   view.querySelectorAll('form[data-i]').forEach((f) => {
     const input = f.querySelector('input'); memberPicker(input);
     f.onsubmit = async (e) => {
       e.preventDefault(); const r = data.refs[Number(f.dataset.i)];
-      try { const res = await api('/sessions/link', 'POST', { member_ref: r.member_ref, member_no: input.value.trim() }); flash(msg, `Linked ${res.linked} sessions of "${r.member_ref}".`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
-      catch (err) { flash(msg, err.message, 'err'); }
+      try { const res = await linkWithCheck('/sessions/link', { member_ref: r.member_ref, member_no: input.value.trim() }); flash(msg, `Linked ${res.linked} sessions of "${r.member_ref}".`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
+      catch (err) { flash(msg, err.message, err.cancelled ? '' : 'err'); }
     };
+  });
+  view.querySelectorAll('[data-unlink]').forEach((b) => b.onclick = async () => {
+    const x = data.seated[Number(b.dataset.unlink)];
+    try { await api('/sessions/unlink-seat', 'POST', { seat_key: x.seat_key }); viewUnmatched(view); } catch (err) { flash(msg, err.message, 'err'); }
   });
   // Refresh while the page is open, but never while someone is typing a number.
   unmatchedTimer = setTimeout(function tick() {
