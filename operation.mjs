@@ -1,7 +1,7 @@
 // Daily operation: business day, live tables, hours, visitors, buy-in and cash-out.
 // Business day D starts at 12:00 Manila, or earlier if a table opened (or a session started) between 06:00 and 12:00 that day.
 // It ends when business day D+1 starts. Sessions belong to the business day in which they started.
-import { str, localDate, dayStart, ppmTime } from './members.mjs';
+import { str, localDate, dayStart, ppmTime, normNo } from './members.mjs';
 
 const HOUR = 3600, DAY = 86400;
 const all = async (stmt) => (await stmt.all()).results || [];
@@ -64,7 +64,8 @@ export async function handleOperation(req, env, now, reply, role) {
     const buyIn = seats.filter((s) => s.status !== 'idle').reduce((a, s) => a + (Number.isSafeInteger(s.buyInAmount) ? s.buyInAmount : 0), 0);
     const players = seats.filter((s) => s.status !== 'idle');
     for (const s of players) {
-      liveRefs.add(str(s.memberId, 60).toLowerCase());
+      const raw = str(s.memberId, 60).toLowerCase(), no = normNo(raw).toLowerCase();
+      liveRefs.add(/^ev-\d{6}$/.test(no) ? no : raw);
       let a = Math.max(0, Number(s.activeSeconds) || 0);
       if (s.status === 'seated' && s.lastActiveStart) a += Math.max(0, (Date.now() - s.lastActiveStart) / 1000);
       liveSeconds += a;

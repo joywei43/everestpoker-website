@@ -244,10 +244,11 @@ assert.equal((await call('/members', 'POST', { nickname: 'Dup', member_no: 'ev44
 assert.equal((await call('/members/444444', 'GET', null, boss.token)).body.member.nickname, 'Six');
 assert.equal((await call('/members?q=444444', 'GET', null, boss.token)).body.members[0].member_no, 'EV-444444');
 const t2 = structuredClone(tables); t2[0].sessions = [{ seatId: 5, memberId: 'Bob 6', startTime: '2026-10-30 21:30:00', endTime: '2026-10-30 23:30:00', activeSeconds: 7200, restSeconds: 0, buyInAmount: 1000 },
-  { seatId: 6, memberId: '444444', startTime: '2026-10-30 20:00:00', endTime: '2026-10-30 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 1000 }];
+  { seatId: 6, memberId: '444444', startTime: '2026-10-30 20:00:00', endTime: '2026-10-30 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 1000 },
+  { seatId: 7, memberId: 'Six (444444)', startTime: '2026-10-30 18:00:00', endTime: '2026-10-30 18:30:00', activeSeconds: 1800, restSeconds: 0, buyInAmount: 1000 }];
 const ppmNow = (await call('/ppm', 'GET', null, boss.token)).body;
 assert.equal((await call('/ppm', 'PUT', { version: ppmNow.version, tables: t2 }, boss.token)).status, 200);
-assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, 3600, 'PPM seat typed as six digits matches');
+assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, 5400, 'PPM seat typed as six digits, or picked as "Six (444444)", matches');
 assert.equal((await call('/sessions/link', 'POST', { member_ref: 'Bob 6', member_no: '444444', confirm: true }, boss.token)).body.linked, 1, 'unmatched names link by six digits');
 
 // Players still at the table: listed in Unmatched, can be linked before they leave.

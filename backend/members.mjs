@@ -74,8 +74,9 @@ async function loadGroups(env) {
 }
 // Staff type just the six digits: 444444 or ev444444 → EV-444444. Anything else (e.g. VIP-007) is kept as typed.
 export function normNo(v) {
-  const s = str(v, 30).toUpperCase();
-  const m = /^(?:EV-?)?(\d{1,6})$/.exec(s);
+  const s = str(v, 60).toUpperCase();
+  // "666666", "EV-666666", or PPM's "Nickname (666666)".
+  const m = /^(?:EV-?)?(\d{1,6})$/.exec(s) || /\((?:EV-?)?(\d{6})\)$/.exec(s);
   return m ? 'EV-' + m[1].padStart(6, '0') : s;
 }
 async function memberByNo(env, no) {
@@ -158,6 +159,7 @@ async function liveSeats(env) {
 }
 // Does the name typed in PPM look like this member? Used to ask "are you sure?" before linking.
 function nameFits(ref, m) {
+  if (normNo(ref) === m.member_no) return true;
   const r = ref.toLowerCase().replace(/\s+/g, ' ').trim();
   const names = [m.nickname, m.surname, m.family_name, m.middle_name, displayName(m), [m.family_name, m.surname].filter(Boolean).join(' '), m.member_no]
     .filter(Boolean).map((v) => v.toLowerCase().replace(/\s+/g, ' ').trim());
