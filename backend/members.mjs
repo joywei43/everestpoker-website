@@ -345,15 +345,30 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const player = (b, row) => {
       if (!b.players.has(row.member_id)) {
         const cg = row.current_group;
-        b.players.set(row.member_id, { member_no: row.member_no, name: displayName(row), nickname: row.nickname, seconds: 0, sessions: 0, days: 0, last: null, rewards: 0,
+        b.players.set(row.member_id, { member_no: row.member_no, name: displayName(row), nickname: row.nickname, seconds: 0, sessions: 0, days: 0, last: null, rewards: 0, playing_now: null,
           moved_to: cg !== row.group_id ? (cg ? (groups.get(cg) || {}).name || cg : 'No group') : null });
       }
       return b.players.get(row.member_id);
     };
     for (const g of groups.values()) bucket(g.id);
+    // Current members of each group, even with no finished play in this period.
+    const current = await all(env.DB.prepare("SELECT id AS member_id, member_no, surname, middle_name, family_name, nickname, group_id, group_id AS current_group FROM members WHERE status='active' AND group_id IS NOT NULL"));
+    for (const row of current) { const b = bucket(row.group_id); player(b, row); }
+    // Players at a table right now count for their current group, shown separately until they leave.
+    const live = await liveSeats(env);
+    const groupOfMember = new Map(current.map((c) => [c.member_id, c.group_id]));
+    for (const x of live) {
+      if (!x.member_id) continue;
+      const b = bucket(groupOfMember.get(x.member_id) || null);
+      b.live_seconds = (b.live_seconds || 0) + x.active_seconds; b.playing_now = (b.playing_now || 0) + 1;
+      const p = b.players.get(x.member_id); if (p) { p.playing_now = { table: x.table, seat: x.seat, seconds: x.active_seconds }; }
+    }
     for (const row of play) { const b = bucket(row.group_id); const p = player(b, row); p.seconds += row.secs; p.sessions += row.sessions; p.days += row.days; p.last = row.last; b.seconds += row.secs; }
     for (const row of rw) { const b = bucket(row.group_id); const p = player(b, row); p.rewards += row.amt; b.rewards += row.amt; }
-    const list = [...buckets.values()].map((b) => ({ ...b, players: [...b.players.values()].sort((x, y) => y.seconds - x.seconds), player_count: b.players.size }));
+    const list = [...buckets.values()].map((b) => {
+      const players = [...b.players.values()].sort((x, y) => y.seconds - x.seconds || (y.playing_now ? 1 : 0) - (x.playing_now ? 1 : 0) || x.member_no.localeCompare(y.member_no));
+      return { ...b, players, player_count: players.filter((p) => p.seconds > 0).length, member_count: current.filter((c) => (c.group_id || '') === (b.id || '')).length, live_seconds: b.live_seconds || 0, playing_now: b.playing_now || 0 };
+    });
     list.sort((a, b) => ((groups.get(a.id) || { sort: 99 }).sort - (groups.get(b.id) || { sort: 99 }).sort));
     return reply({ from: r.from, to: r.to, groups: list, total_seconds: list.reduce((s, b) => s + b.seconds, 0), total_rewards: list.reduce((s, b) => s + b.rewards, 0),
       pending_rewards: pendingRw.n, pending_amount: pendingRw.amt,
@@ -546,6 +561,18 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const groupId = b.group_id ? str(b.group_id, 30) : null;
       if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
       if (!who(b)) return bad(reply, 'Staff name is required.');
+      if (b.move_past) {
+        // Correction of a wrong assignment (master only): all past hours and rewards move to the new group too.
+        await env.DB.batch([
+          env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=?').bind(groupId, m.id),
+          env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=?').bind(groupId, m.id),
+          env.DB.prepare('DELETE FROM member_group_history WHERE member_id=?').bind(m.id),
+          env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, 0, who(b), 'Correction: all past hours moved' + (b.note ? ' · ' + str(b.note, 160) : ''), now),
+          env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
+          audit(env, now, who(b), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'} · correction, all past hours and rewards moved${b.note ? ' · ' + str(b.note, 160) : ''}`)
+        ]);
+        return reply({ ok: true, moved_past: true });
+      }
       if (groupId === m.group_id) return reply({ ok: true, unchanged: true });
       const firstAssignment = !(await env.DB.prepare('SELECT 1 x FROM member_group_history WHERE member_id=? LIMIT 1').bind(m.id).first());
       // Effective now: past hours and rewards stay with the old group, new ones go to the new group.

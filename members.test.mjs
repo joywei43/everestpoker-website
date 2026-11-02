@@ -338,6 +338,28 @@ await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.to
   assert.ok(e7.audit.some((a) => a.action === 'session.cash_out'));
 }
 
+// Group summary lists current members (even with 0 h) and players at a table now; master can correct a wrong group with past hours.
+{
+  const sm = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
+  const dee = sm.groups.find((g) => g.id === 'dee');
+  assert.ok(dee.member_count >= 1); assert.ok(dee.players.some((p) => p.member_no === 'EV-000003' || p.seconds === 0) || dee.players.length >= dee.member_count);
+  const owner = (await call('/members', 'POST', { nickname: 'Pat Guest', member_no: '121212', group_id: 'inhouse' }, boss.token)).body.member_no;
+  const pp = (await call('/ppm', 'GET', null, boss.token)).body; const tt = structuredClone(pp.tables);
+  tt[2].sessions = [{ seatId: 7, memberId: '121212', startTime: '2026-10-25 20:00:00', endTime: '2026-10-25 22:00:00', activeSeconds: 7200, restSeconds: 0, buyInAmount: 1000 }];
+  await call('/ppm', 'PUT', { version: pp.version, tables: tt }, boss.token);
+  let g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
+  const inBefore = g2.groups.find((g) => g.id === 'inhouse').seconds, patBefore = g2.groups.find((g) => g.id === 'patrick').seconds;
+  assert.equal((await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', move_past: true }, geraldine.token)).status, 403);
+  await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick' }, boss.token);
+  g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
+  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore, 'normal change: past hours stay');
+  assert.ok(g2.groups.find((g) => g.id === 'patrick').players.some((p) => p.member_no === owner && p.seconds === 0), 'current member listed with 0 h');
+  await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', move_past: true, note: 'set up wrong' }, boss.token);
+  g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
+  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore + 7200, 'correction moves past hours');
+  assert.equal(g2.groups.find((g) => g.id === 'inhouse').seconds, inBefore - 7200);
+}
+
 // Nationality: one spelling per country.
 assert.equal((await call('/members/EV-444444', 'PUT', { nationality: 'Taiwanese' }, boss.token)).status, 200);
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan');
@@ -349,4 +371,4 @@ sql.exec("UPDATE members SET nationality='台灣' WHERE member_no='EV-444444'");
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan', 'old rows cleaned on deploy');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L');
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections');

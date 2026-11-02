@@ -293,7 +293,8 @@ async function viewMember(view, no) {
         <div><div style="font-size:20px;font-weight:700">${m.group_name ? esc(m.group_name) : '<span style="color:var(--amber)">No group</span>'}</div>
           <div class="small muted">${m.group_owner ? (m.group_id === 'inhouse' ? 'In-House · owner ' : 'Host · ') + esc(m.group_owner) : 'Assign a group so this player has an owner.'}</div></div>
         ${isMaster() ? `<form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
-          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button></form>` : '<div class="small" style="color:var(--amber)">Only the master account can change the group.</div>'}
+          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button>
+          <label class="small" style="display:flex;gap:6px;align-items:flex-start;flex-basis:100%"><input type="checkbox" id="gpast" style="margin-top:2px"> Correction: the group was set wrong — move <b>all past hours and rewards</b> too</label></form>` : '<div class="small" style="color:var(--amber)">Only the master account can change the group.</div>'}
         <div class="small muted">New hours go to the new group from now on; past hours stay where they were.</div>
         <div id="gmsg"></div>
       </div>
@@ -373,9 +374,11 @@ async function viewMember(view, no) {
   if (view.querySelector('#gf')) view.querySelector('#gf').onsubmit = async (e) => {
     e.preventDefault(); const who = needStaff(); if (!who) return;
     const g = view.querySelector('#gsel').value || null;
-    if (g === (m.group_id || null)) return flash(view.querySelector('#gmsg'), 'Already in this group.');
-    if (!confirm(`Move ${m.name} to ${g ? gs.find((x) => x.id === g).name : 'no group'}? Hours from now on count for the new group.`)) return;
-    try { await api('/members/' + encodeURIComponent(no) + '/group', 'POST', { group_id: g, note: view.querySelector('#gnote').value, staff: who }); groupsCache = null; reload(); }
+    const past = view.querySelector('#gpast').checked;
+    if (g === (m.group_id || null) && !past) return flash(view.querySelector('#gmsg'), 'Already in this group.');
+    const gName = g ? gs.find((x) => x.id === g).name : 'no group';
+    if (!confirm(past ? `Correction: move ${m.name} to ${gName} and move ALL past hours and rewards to ${gName}?` : `Move ${m.name} to ${gName}? Hours from now on count for the new group; past hours stay where they were.`)) return;
+    try { await api('/members/' + encodeURIComponent(no) + '/group', 'POST', { group_id: g, note: view.querySelector('#gnote').value, staff: who, move_past: past }); groupsCache = null; reload(); }
     catch (err) { flash(view.querySelector('#gmsg'), err.message, 'err'); }
   };
   view.querySelector('#rf').onsubmit = async (e) => {
@@ -456,7 +459,7 @@ async function viewGroups(view) {
   const max = Math.max(1, ...data.groups.map((g) => g.seconds));
   const current = data.groups.find((g) => (g.id || 'none') === sel) || data.groups[0];
   const setParams = (p) => { const n = new URLSearchParams({ from, to, g: sel, ...p }); location.hash = '#/groups?' + n.toString(); };
-  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Player groups</h1><p class="sub">Hours are PPM play time, rest excluded, credited to the group the player belonged to when they sat down.</p></div>
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Player groups</h1><p class="sub">Hours are finished PPM sessions (rest excluded), credited to the group the player belonged to when they sat down. Players still at a table are shown as "Playing now" and added when they leave.</p></div>
       <form id="rangeF" class="row"><label class="f">From<input type="date" name="from" value="${from}"></label><label class="f">To<input type="date" name="to" value="${to}"></label>
         <button class="btn" style="align-self:flex-end">Apply</button><button type="button" class="btn" data-days="30" style="align-self:flex-end">30 days</button><button type="button" class="btn" data-month style="align-self:flex-end">This month</button></form></div>
     <div class="grid">
@@ -472,14 +475,15 @@ async function viewGroups(view) {
         <div class="row between" style="width:100%"><span style="font-size:18px;font-weight:700">${esc(g.name)}</span><span class="chip ${g.kind === 'inhouse' ? 'amber' : 'blue'}">${g.kind === 'inhouse' ? 'In-House · Marketing' : g.kind === 'host' ? 'Host' : '—'}</span></div>
         <div class="row between" style="width:100%;align-items:baseline"><span style="font-size:22px;font-weight:700">${hm(g.seconds)}</span><span class="small muted">${data.total_seconds ? Math.round(g.seconds / data.total_seconds * 100) : 0}% of total</span></div>
         <div class="bar" style="width:100%;flex:none"><i style="width:${Math.round(g.seconds / max * 100)}%"></i></div>
-        <div class="small muted">${g.player_count} player${g.player_count === 1 ? '' : 's'}${g.owner ? ' · owner ' + esc(g.owner) : ''}</div>
+        <div class="small muted">${g.member_count} member${g.member_count === 1 ? '' : 's'} · ${g.player_count} played${g.owner ? ' · owner ' + esc(g.owner) : ''}</div>
+        ${g.playing_now ? `<div class="small" style="color:var(--green);font-weight:600">● ${g.playing_now} at a table now · ${hm(g.live_seconds)} so far</div>` : ''}
         <div class="row between small" style="width:100%;border-top:1px solid var(--line2);padding-top:8px"><span class="muted">Rewards</span><span><b>${peso(g.rewards)}</b> <span class="muted">· ${perHour(g.rewards, g.seconds)}/h</span></span></div>
       </button>`).join('')}
     </div>
-    <section class="card"><div class="row between" style="margin-bottom:12px"><div><h2>${esc(current.name)} group</h2><div class="small muted">${current.player_count} player${current.player_count === 1 ? '' : 's'} · ${hm(current.seconds)} · rewards ${peso(current.rewards)}</div></div>
+    <section class="card"><div class="row between" style="margin-bottom:12px"><div><h2>${esc(current.name)} group</h2><div class="small muted">${current.member_count} members · ${current.player_count} played · ${hm(current.seconds)} finished${current.playing_now ? ' · ' + current.playing_now + ' at a table now' : ''} · rewards ${peso(current.rewards)}</div></div>
       <button class="btn" id="csv">Export CSV</button></div>
       <div class="tbl"><table><thead><tr><th>#</th><th>Player</th><th>Member no.</th><th class="num">Visit days</th><th class="num">Play time</th><th style="width:200px">Share of group</th><th class="num">Rewards</th><th class="num">Per hour</th><th>Last visit</th></tr></thead><tbody>
-      ${current.players.map((p, i) => { const pct = current.seconds ? Math.round(p.seconds / current.seconds * 100) : 0; return `<tr class="click" data-no="${esc(p.member_no)}"><td class="muted">${i + 1}</td><td><b>${esc(p.name)}</b>${p.nickname ? ` <span class="muted">“${esc(p.nickname)}”</span>` : ''}${p.moved_to ? `<div><span class="chip small">Now in ${esc(p.moved_to)}</span></div>` : ''}</td><td class="mono">${esc(p.member_no)}</td><td class="num">${p.days}</td><td class="num"><b>${hm(p.seconds)}</b></td><td><div class="row" style="flex-wrap:nowrap"><div class="bar"><i style="width:${pct}%"></i></div><span style="width:36px;text-align:right">${pct}%</span></div></td><td class="num"><b>${peso(p.rewards)}</b></td><td class="num muted">${perHour(p.rewards, p.seconds)}</td><td class="muted">${p.last ? day(p.last) : '—'}</td></tr>`; }).join('') || '<tr><td colspan="9" class="muted">No play or rewards in this period.</td></tr>'}
+      ${current.players.map((p, i) => { const pct = current.seconds ? Math.round(p.seconds / current.seconds * 100) : 0; return `<tr class="click" data-no="${esc(p.member_no)}"><td class="muted">${i + 1}</td><td><b>${esc(p.name)}</b>${p.nickname ? ` <span class="muted">“${esc(p.nickname)}”</span>` : ''}${p.moved_to ? `<div><span class="chip small">Now in ${esc(p.moved_to)}</span></div>` : ''}${p.playing_now ? `<div><span class="chip green small">Playing now · ${esc(p.playing_now.table)} S${p.playing_now.seat} · ${hm(p.playing_now.seconds)}</span></div>` : ''}</td><td class="mono">${esc(p.member_no)}</td><td class="num">${p.days}</td><td class="num"><b>${hm(p.seconds)}</b></td><td><div class="row" style="flex-wrap:nowrap"><div class="bar"><i style="width:${pct}%"></i></div><span style="width:36px;text-align:right">${pct}%</span></div></td><td class="num"><b>${peso(p.rewards)}</b></td><td class="num muted">${perHour(p.rewards, p.seconds)}</td><td class="muted">${p.last ? day(p.last) : '—'}</td></tr>`; }).join('') || '<tr><td colspan="9" class="muted">No play or rewards in this period.</td></tr>'}
       </tbody></table></div></section>`;
   view.querySelectorAll('.gcard').forEach((b) => b.onclick = () => setParams({ g: b.dataset.g }));
   view.querySelectorAll('tr.click').forEach((tr) => tr.onclick = () => location.hash = '#/member/' + encodeURIComponent(tr.dataset.no));
