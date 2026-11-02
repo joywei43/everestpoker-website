@@ -139,7 +139,7 @@ async function liveSeats(env) {
   }
   const matched = await matchRefs(env, live.map((x) => x.ref));
   const links = await seatLinks(env, live.map((x) => x.key));
-  for (const x of live) { x.auto_member = matched(x.ref); x.link_member = links.get(x.key) || null; x.member_id = x.auto_member || x.link_member; }
+  for (const x of live) { x.auto_member = matched(x.ref); x.link_member = links.get(x.key) || null; x.member_id = x.link_member || x.auto_member; } // a staff link overrides the automatic match
   return live;
 }
 // Does the name typed in PPM look like this member? Used to ask "are you sure?" before linking.
@@ -611,13 +611,15 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const rows = await all(env.DB.prepare('SELECT member_ref, COUNT(*) sessions, SUM(active_seconds) secs, MIN(start_at) first, MAX(start_at) last FROM play_sessions WHERE member_id IS NULL GROUP BY member_ref ORDER BY last DESC LIMIT 300'));
     // Players still at the table whose name is not a member yet.
     const live = await liveSeats(env);
-    const linkedIds = [...new Set(live.filter((x) => !x.auto_member && x.link_member).map((x) => x.link_member))];
+    const ids = [...new Set(live.flatMap((x) => [x.auto_member, x.link_member]).filter(Boolean))];
     const names = new Map();
-    for (const part of chunks(linkedIds, 90)) (await all(env.DB.prepare(`SELECT id,member_no,nickname,surname,middle_name,family_name FROM members WHERE id IN (${marks(part.length)})`).bind(...part))).forEach((m) => names.set(m.id, m));
-    const seated = live.filter((x) => !x.auto_member).map((x) => {
-      const m = x.link_member ? names.get(x.link_member) : null;
-      return { table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, seat_key: x.key, linked: m ? { member_no: m.member_no, name: displayName(m) } : null };
-    }).sort((a, b) => a.table.localeCompare(b.table) || a.seat - b.seat);
+    for (const part of chunks(ids, 90)) (await all(env.DB.prepare(`SELECT id,member_no,nickname,surname,middle_name,family_name FROM members WHERE id IN (${marks(part.length)})`).bind(...part))).forEach((m) => names.set(m.id, m));
+    const info = (id) => { const m = id ? names.get(id) : null; return m ? { member_no: m.member_no, name: displayName(m) } : null; };
+    // Every player at the table: not matched first, then linked by staff, then matched automatically by number or nickname.
+    const rank = (x) => (x.link_member ? 1 : x.auto_member ? 2 : 0);
+    const seated = live.map((x) => ({ table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, seat_key: x.key,
+      linked: info(x.link_member), auto: info(x.auto_member) }))
+      .sort((a, b) => rank(live.find((l) => l.key === a.seat_key)) - rank(live.find((l) => l.key === b.seat_key)) || a.table.localeCompare(b.table) || a.seat - b.seat);
     return reply({ refs: rows, seated });
   }
   if (parts[0] === 'sessions' && parts[1] === 'link-seat' && method === 'POST') {

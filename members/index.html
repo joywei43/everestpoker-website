@@ -12,6 +12,7 @@
 <style>
 :root{--ink:#121212;--ink2:#1D1C1A;--ink3:#2C2719;--gold:#D1A647;--gold-d:#BF9339;--bg:#EEF1F5;--card:#FFFFFF;--line:#DDE3EA;--line2:#EEF1F5;--text:#1B2430;--muted:#5B6675;--blue:#1F5FA8;--blue-d:#16467D;--blue-l:#E3EDF9;--green:#1E6B43;--green-l:#DFF3E7;--red:#B42318;--red-l:#FDECEA;--amber:#6B4A00;--amber-l:#FFF1D1;--note:#FFF8E6;--note-line:#EBD9A6}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 'IBM Plex Sans','Noto Sans TC',system-ui,sans-serif}
 a{color:var(--blue)}a:hover{color:var(--blue-d)}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -549,13 +550,15 @@ async function viewUnmatched(view) {
   const box = (id, ph) => `<div class="ac" style="flex:1"><label class="sr" for="${id}">Member</label><input type="text" id="${id}" inputmode="numeric" placeholder="${ph}" style="width:100%" autocomplete="off"></div>`;
   view.innerHTML = `<div><h1>Unmatched PPM names</h1><p class="sub">Names typed in PPM that are not a member number or a unique nickname. Their hours count for no one until you link them.</p></div>
     <div id="um"></div>
-    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>At the table now</h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
-      <p class="small muted" style="margin:0 0 10px">Link a player before they leave; their hours go to the member when they leave the seat.</p>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>At the table now <span class="small muted" style="font-weight:400">· ${data.seated.filter((x) => !x.auto && !x.linked).length} not matched of ${data.seated.length}</span></h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
+      <p class="small muted" style="margin:0 0 10px">Everyone seated in PPM. Link the ones without a member before they leave; their hours go to the member when they leave the seat. "Matched" means the PPM name is a member's number or nickname — fix it with "Wrong person?" if it is someone else.</p>
       <div class="tbl"><table><thead><tr><th>Table · Seat</th><th>Typed in PPM</th><th>Status</th><th class="num">Playing so far</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
       ${data.seated.map((x, i) => `<tr><td><b>${esc(x.table)}</b> · S${x.seat}</td><td><b>${esc(x.ref)}</b></td>
         <td>${x.status === 'rest' ? '<span class="chip amber">Resting</span>' : '<span class="chip green">Playing</span>'}</td><td class="num">${hm(x.active_seconds)}</td>
         <td>${x.linked ? `<div class="row" style="flex-wrap:nowrap"><span class="chip blue">Linked to ${esc(x.linked.member_no)}</span> <span class="small muted" style="flex:1">${esc(x.linked.name)}</span><button type="button" class="btn sm" data-unlink="${i}">Change</button></div>`
-          : `<form class="row" data-s="${i}" style="flex-wrap:nowrap">${box('s' + i, '6-digit member no.')}<button class="btn sm">Link</button></form>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Everyone at the tables is a member.</td></tr>'}
+          : x.auto ? `<div class="row" style="flex-wrap:nowrap" id="auto${i}"><span class="chip" title="Matched automatically: the PPM name is this member's number or nickname">Matched ${esc(x.auto.member_no)}</span> <span class="small muted" style="flex:1">${esc(x.auto.name)}</span><button type="button" class="btn sm" data-wrong="${i}">Wrong person?</button></div>
+              <form class="row" data-s="${i}" style="flex-wrap:nowrap" hidden>${box('s' + i, 'Correct 6-digit member no.')}<button class="btn sm">Link</button></form>`
+          : `<form class="row" data-s="${i}" style="flex-wrap:nowrap">${box('s' + i, '6-digit member no.')}<button class="btn sm">Link</button></form>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No one is seated in PPM right now.</td></tr>'}
       </tbody></table></div></section>
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Already left the table</h2></div>
     <div class="tbl"><table><thead><tr><th>Typed in PPM</th><th class="num">Sessions</th><th class="num">Play time</th><th>Last seen</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
@@ -578,6 +581,10 @@ async function viewUnmatched(view) {
       try { const res = await linkWithCheck('/sessions/link', { member_ref: r.member_ref, member_no: input.value.trim() }); flash(msg, `Linked ${res.linked} sessions of "${r.member_ref}".`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
       catch (err) { flash(msg, err.message, err.cancelled ? '' : 'err'); }
     };
+  });
+  view.querySelectorAll('[data-wrong]').forEach((b) => b.onclick = () => {
+    const i = b.dataset.wrong; view.querySelector('#auto' + i).hidden = true;
+    const f = view.querySelector(`form[data-s="${i}"]`); f.hidden = false; f.querySelector('input').focus();
   });
   view.querySelectorAll('[data-unlink]').forEach((b) => b.onclick = async () => {
     const x = data.seated[Number(b.dataset.unlink)];

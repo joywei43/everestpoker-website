@@ -258,8 +258,9 @@ t3[1].seats[0] = { ...t3[1].seats[0], status: 'seated', memberId: 'ELLY', sessio
 t3[1].seats[1] = { ...t3[1].seats[1], status: 'rest', memberId: '444444', sessionStart: '2026-11-02 19:00:00', activeSeconds: 100, restSeconds: 50, lastActiveStart: null, buyInAmount: 5000 };
 assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t3 }, boss.token)).status, 200);
 let um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
-assert.equal(um.seated.length, 1, 'only unmatched seated names; 444444 is a member');
-assert.equal(um.seated[0].ref, 'ELLY'); assert.ok(um.seated[0].active_seconds >= 650);
+assert.equal(um.seated.length, 2, 'every seated player is listed');
+assert.equal(um.seated[0].ref, 'ELLY', 'unmatched first'); assert.equal(um.seated[0].auto, null);
+assert.equal(um.seated[1].auto.member_no, 'EV-444444', 'typed 444444 shows its automatic match'); assert.ok(um.seated[0].active_seconds >= 650);
 // Guard: EV-444444 is already sitting at seat 2, so ELLY cannot be linked to that number.
 r = await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '444444' }, maria.token);
 assert.equal(r.status, 409); assert.equal(r.body.code, 'already_seated'); assert.match(r.body.error, /S2/);
@@ -273,6 +274,15 @@ assert.equal(um.seated[0].linked.member_no, 'EV-777777');
 assert.equal((await call('/sessions/unlink-seat', 'POST', { seat_key: um.seated[0].seat_key }, maria.token)).status, 200);
 assert.equal((await call('/sessions/unmatched', 'GET', null, maria.token)).body.seated[0].linked, null);
 await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '777777', confirm: true }, maria.token);
+
+// A wrong automatic match can be overridden by a staff link.
+um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
+const autoSeat = um.seated.find((x) => x.auto);
+assert.equal((await call('/members', 'POST', { nickname: 'Real Owner', member_no: '888888' }, boss.token)).status, 200);
+assert.equal((await call('/sessions/link-seat', 'POST', { seat_key: autoSeat.seat_key, member_no: '888888', confirm: true }, maria.token)).status, 200);
+um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
+assert.equal(um.seated.find((x) => x.seat_key === autoSeat.seat_key).linked.member_no, 'EV-888888');
+await call('/sessions/unlink-seat', 'POST', { seat_key: autoSeat.seat_key }, maria.token);
 const before6 = (await call('/members/EV-777777', 'GET', null, boss.token)).body.stats.all.secs;
 ppmLive = (await call('/ppm', 'GET', null, boss.token)).body;
 const t4 = structuredClone(ppmLive.tables);
