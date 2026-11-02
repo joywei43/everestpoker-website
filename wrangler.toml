@@ -12,3 +12,7 @@ MASTER_USERS = "JOY"
 binding = "DB"
 database_name = "everest-waiting"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# Every 5 minutes: record any finished PPM session that was not recorded at Leave.
+[triggers]
+crons = ["*/5 * * * *"]

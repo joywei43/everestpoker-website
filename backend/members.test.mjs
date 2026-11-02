@@ -475,4 +475,17 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.deepEqual([joy.table_name, joy.seat, joy.active_seconds, joy.buy_in, joy.blinds], ['T1', 7, 10224, 10000, '50 / 100']);
   assert.equal((await call('/sessions/import-ppm', 'POST', { rows }, boss.token)).body.imported, 0, 'importing twice adds nothing');
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV');
+{ // A PPM save reports where each finished session went; the 5-minute check records anything a save missed.
+  let cur = (await call('/ppm', 'GET', null, boss.token)).body;
+  cur.tables[1].sessions = [...cur.tables[1].sessions, { seatId: 4, memberId: 'JOY (666666)', startTime: '2026-11-03 06:00:00', endTime: '2026-11-03 07:00:00', activeSeconds: 3500, restSeconds: 0, buyInAmount: 8000, cashOutAmount: 9000 }];
+  const saved = await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, boss.token);
+  assert.equal(saved.status, 200); assert.equal(saved.body.sync.inserted, 1);
+  assert.deepEqual(saved.body.sync.sessions[0], { ref: 'JOY (666666)', table: cur.tables[1].name, seat: 4, member_no: 'EV-666666' });
+  // Simulate a session that reached PPM but was never copied (e.g. the copy failed), then the scheduled check.
+  const row = JSON.parse(sql.prepare('SELECT data FROM ppm WHERE id=1').get().data);
+  row[1].sessions.push({ seatId: 5, memberId: 'JOY (666666)', startTime: '2026-11-03 07:10:00', endTime: '2026-11-03 07:20:00', activeSeconds: 600, restSeconds: 0, buyInAmount: 1000 });
+  sql.prepare('UPDATE ppm SET data=? WHERE id=1').run(JSON.stringify(row));
+  let waits = []; await worker.scheduled({}, env, { waitUntil: (p) => waits.push(p) }); await Promise.all(waits);
+  assert.ok((await call('/members/666666', 'GET', null, boss.token)).body.sessions.some((x) => x.start_at && x.seat === 5), 'scheduled check recorded it');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check');

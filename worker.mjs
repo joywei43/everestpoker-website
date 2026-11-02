@@ -24,7 +24,11 @@ function validate(s){
  if(!keys.every(k=>s.counters[k]>Math.max(0,...s.queue.filter(p=>p.game===k).map(p=>p.num),s.calls[k]?.num||0)))return false;
  return ['1','2','3','4'].includes(String(s.count));
 }
-export default {async fetch(req,env){
+// Safety net: every few minutes, copy any finished PPM session that a save could not record.
+async function scheduledSync(env){const row=await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();if(!row)return;const now=Math.floor(Date.now()/1000);
+ try{const r=await ingestPpm(env,JSON.parse(row.data),now);if(r.inserted)await auditStmt(env,now,'system','ppm.sync_retry','Recorded '+r.inserted+' finished session(s) on the automatic check').run();}
+ catch(e){await auditStmt(env,now,'system','ppm.sync_error','Automatic check failed: '+String(e&&e.message||e).slice(0,200)).run();}}
+export default {async scheduled(event,env,ctx){ctx.waitUntil(scheduledSync(env));},async fetch(req,env){
  const origin=req.headers.get('Origin');const allowed=(env.ALLOWED_ORIGINS||'https://everestpokerroom.com,https://www.everestpokerroom.com').split(',').map(s=>s.trim());
  const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Vary':'Origin'};
  if(origin&&allowed.includes(origin))Object.assign(headers,{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'GET,PUT,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization'});
@@ -94,10 +98,10 @@ export default {async fetch(req,env){
    ]);
    if(!results[0].meta.changes)return reply({error:'Another staff member updated the room. Reload and retry.'},409);
    // Copy finished seat sessions into member play time. Never blocks the PPM save; missed rows are picked up on the next save.
-   try{await ingestPpm(env,ts,now);}catch(e){try{await auditStmt(env,now,user||'staff','ppm.sync_error','Could not copy finished PPM sessions: '+String(e&&e.message||e)).run();}catch(e2){}}
+   let sync={inserted:0};try{sync=await ingestPpm(env,ts,now);}catch(e){sync={error:String(e&&e.message||e).slice(0,200)};try{await auditStmt(env,now,user||'staff','ppm.sync_error','Could not copy finished PPM sessions: '+sync.error).run();}catch(e2){}}
    try{await recordTableRuns(env,ts,now);}catch(e){}
    try{const ch=ppmChanges(JSON.parse(row.data),ts);if(ch.length)await env.DB.batch(ch.slice(0,60).map(c=>auditStmt(env,now,user||'staff',c.action,c.detail)));}catch(e){}
-   return reply({version:body.version+1,tables:ts});
+   return reply({version:body.version+1,tables:ts,sync});
   }
   if(Number(req.headers.get('content-length'))>100000)return reply({error:'Too large'},413);
   const text=await req.text();if(text.length>100000)return reply({error:'Too large'},413);const body=JSON.parse(text);

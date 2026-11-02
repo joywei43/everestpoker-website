@@ -229,7 +229,10 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
     if (Number.isSafeInteger(co) && co >= 0) stmts.push(env.DB.prepare("INSERT OR IGNORE INTO session_results(session_id,cash_out,busted,entered_by,updated_at) SELECT id,?,?,'PPM',? FROM play_sessions WHERE session_key=?").bind(co, f.s.busted ? 1 : 0, now, f.key));
   }
   for (const part of chunks(stmts, 50)) await env.DB.batch(part);
-  return { inserted: fresh.length };
+  // Tell PPM where each new session went, so staff see it was recorded at Leave.
+  const nos = new Map();
+  for (const part of chunks(ids, 90)) (await all(env.DB.prepare(`SELECT id,member_no FROM members WHERE id IN (${marks(part.length)})`).bind(...part))).forEach((m) => nos.set(m.id, m.member_no));
+  return { inserted: fresh.length, sessions: fresh.slice(0, 20).map((f) => ({ ref: f.ref, table: str(f.t.name, 10), seat: Number(f.s.seatId) || 0, member_no: nos.get(memberOf(f.ref, f)) || null })) };
 }
 
 // ---------- request handling ----------
