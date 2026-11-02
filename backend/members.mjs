@@ -84,10 +84,13 @@ async function memberByNo(env, no) {
 async function memberByOldNo(env, no) {
   return env.DB.prepare('SELECT m.* FROM member_number_history h JOIN members m ON m.id=h.member_id WHERE h.old_no=? COLLATE NOCASE').bind(normNo(no)).first();
 }
-async function nextMemberNumber(env) {
-  const row = await env.DB.prepare("SELECT MAX(n) AS n FROM (SELECT CAST(SUBSTR(member_no,4) AS INTEGER) n FROM members WHERE member_no LIKE 'EV-%' UNION ALL SELECT CAST(SUBSTR(old_no,4) AS INTEGER) FROM member_number_history WHERE old_no LIKE 'EV-%')").first();
-  return (row && row.n ? row.n : 0) + 1;
+// EV numbers already used by a member or retired by a renumber; new members get the smallest free one.
+async function usedNumbers(env) {
+  const rows = await all(env.DB.prepare("SELECT CAST(SUBSTR(member_no,4) AS INTEGER) n FROM members WHERE member_no GLOB 'EV-[0-9]*' UNION SELECT CAST(SUBSTR(old_no,4) AS INTEGER) FROM member_number_history WHERE old_no GLOB 'EV-[0-9]*'"));
+  return new Set(rows.map((r) => r.n));
 }
+function smallestFree(used) { let n = 1; while (used.has(n)) n++; return n; }
+async function nextMemberNumber(env) { return smallestFree(await usedNumbers(env)); }
 const formatNo = (n) => 'EV-' + String(n).padStart(6, '0');
 
 // Group in force for a member at a given time, from history rows sorted by effective_from.
@@ -253,9 +256,10 @@ export async function handleRegister(req, env, now, reply, ipHash) {
 }
 
 async function createMember(env, now, fields, groupId, source, actor, wantedNo) {
-  let n = wantedNo ? null : await nextMemberNumber(env);
+  const used = wantedNo ? null : await usedNumbers(env);
   for (let tries = 0; tries < 5; tries++) {
-    const no = wantedNo || formatNo(n + tries);
+    let no = wantedNo;
+    if (!no) { const n = smallestFree(used); used.add(n); no = formatNo(n); }
     const cols = PROFILE_FIELDS.filter((k) => fields[k]);
     try {
       const results = await env.DB.batch([
@@ -436,7 +440,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const existingNos = new Set(), existingPassports = new Set();
     if (nos.length) (await all(env.DB.prepare(`SELECT lower(member_no) n FROM members WHERE lower(member_no) IN (${marks(nos.length)})`).bind(...nos.map((n) => n.toLowerCase())))).forEach((r) => existingNos.add(r.n));
     if (passports.length) (await all(env.DB.prepare(`SELECT passport_id p FROM members WHERE passport_id IN (${marks(passports.length)})`).bind(...passports))).forEach((r) => existingPassports.add(r.p));
-    let next = await nextMemberNumber(env);
+    const usedNos = await usedNumbers(env);
+    for (const r of rows) { const m = /^EV-(\d+)$/.exec(r.member_no ? normNo(r.member_no) : ''); if (m) usedNos.add(Number(m[1])); }
     const stmts = [];
     rows.forEach((row, i) => {
       const fields = pickFields(row);
@@ -447,7 +452,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const groupText = str(row.group, 30).toLowerCase();
       const group = groupText ? [...groups.values()].find((g) => g.id === groupText || g.name.toLowerCase() === groupText) : null;
       if (groupText && !group) result.errors.push({ row: i, error: 'Unknown group "' + row.group + '" — imported without group' });
-      if (!no) no = formatNo(next++);
+      if (!no) { const n = smallestFree(usedNos); usedNos.add(n); no = formatNo(n); }
       existingNos.add(no.toLowerCase()); if (fields.passport_id) existingPassports.add(fields.passport_id);
       const cols = PROFILE_FIELDS.filter((k) => fields[k]);
       const created = isDate(str(row.created, 10)) ? dayStart(str(row.created, 10)) : now;
@@ -462,6 +467,9 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     }
     return reply(result);
   }
+
+  // Smallest free member number, shown in the New member form.
+  if (parts[0] === 'members' && parts[1] === 'next-number' && method === 'GET') return reply({ member_no: formatNo(await nextMemberNumber(env)) });
 
   // ----- one member -----
   if (parts[0] === 'members' && parts[1]) {

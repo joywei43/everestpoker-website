@@ -233,7 +233,7 @@ function memberDialog(gs) {
   return `<dialog id="md"><form method="dialog" id="mf"><h2 id="mdTitle">New member</h2>
     <div class="form">${FIELDS.map(([k, label, type]) => k === 'nationality' ? natField() : `<label class="f">${label}<input type="${type || 'text'}" name="${k}" maxlength="120"></label>`).join('')}
       <label class="f" id="mdGroup">Group<select name="group_id"><option value="">No group yet</option>${groupOptions(gs)}</select></label>
-      <label class="f" id="mdNo">Member no. (optional)<span class="evno"><span aria-hidden="true">EV-</span><input type="text" name="member_no" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6 digits, blank = next number" aria-label="Member number, 6 digits after EV-"></span></label></div>
+      <label class="f" id="mdNo">Member no. (optional)<span class="evno"><span aria-hidden="true">EV-</span><input type="text" name="member_no" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6 digits" aria-label="Member number, 6 digits after EV-"></span></label></div>
     <div id="mdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save" id="mdSave">Save</button></div></form></dialog>`;
 }
 function openMemberDialog(view, member, save) {
@@ -241,6 +241,9 @@ function openMemberDialog(view, member, save) {
   f.reset(); view.querySelector('#mdTitle').textContent = member ? 'Edit profile' : 'New member';
   view.querySelector('#mdGroup').hidden = !!member; view.querySelector('#mdNo').hidden = !!member;
   if (member) FIELDS.forEach(([k]) => { if (k !== 'passport_id') f.elements[k].value = member[k] || ''; });
+  // New member: fill in the smallest free number; if staff leave it as is, the server assigns it (safe if two people add at once).
+  let suggested = '';
+  if (!member) api('/members/next-number').then((r) => { suggested = r.member_no.slice(3); if (!f.elements.member_no.value) f.elements.member_no.value = suggested; }).catch(() => {});
   if (member) f.elements.passport_id.placeholder = member.passport_last4 ? '•••• ' + member.passport_last4 + ' (leave blank to keep)' : '';
   const nat = (member && member.nationality) || '';
   f.elements.nat_sel.value = !nat ? '' : NATIONALITIES.includes(nat) ? nat : 'other';
@@ -255,7 +258,7 @@ function openMemberDialog(view, member, save) {
       data.group_id = f.elements.group_id.value || null;
       const digits = f.elements.member_no.value.replace(/\D/g, '');
       if (f.elements.member_no.value.trim() && digits.length !== 6) { flash(view.querySelector('#mdMsg'), 'Member number must be exactly 6 digits, e.g. 444444.', 'err'); return; }
-      data.member_no = digits;
+      data.member_no = digits === suggested ? '' : digits;
     }
     try { await save(data); d.close(); } catch (err) { flash(view.querySelector('#mdMsg'), err.message, 'err'); }
   };

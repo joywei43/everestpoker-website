@@ -372,6 +372,17 @@ await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.to
   assert.equal((await call('/members/900002', 'GET', null, boss.token)).body.member.nick_label, 'twin (South Korea)');
 }
 
+// New members get the smallest free number (gaps are filled, retired numbers skipped).
+{
+  const nx = (await call('/members/next-number', 'GET', null, maria.token)).body.member_no;
+  const used = new Set(sql.prepare("SELECT member_no FROM members").all().map((r) => r.member_no));
+  assert.ok(!used.has(nx), 'next number is free');
+  const created = (await call('/members', 'POST', { nickname: 'Gap filler' }, maria.token)).body.member_no;
+  assert.equal(created, nx, 'blank number takes the suggested one');
+  const n = Number(nx.slice(3));
+  for (let k = 1; k < n; k++) { const c = 'EV-' + String(k).padStart(6, '0'); assert.ok(used.has(c) || sql.prepare('SELECT 1 FROM member_number_history WHERE old_no=?').get(c), c + ' should be taken'); }
+}
+
 // Nationality: one spelling per country.
 assert.equal((await call('/members/EV-444444', 'PUT', { nationality: 'Taiwanese' }, boss.token)).status, 200);
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan');
@@ -383,4 +394,4 @@ sql.exec("UPDATE members SET nationality='台灣' WHERE member_no='EV-444444'");
 sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan', 'old rows cleaned on deploy');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality');
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number');
