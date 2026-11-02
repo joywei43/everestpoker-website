@@ -134,7 +134,8 @@ async function liveSeats(env) {
       if (!ref || seat.status === 'idle' || !seat.sessionStart) continue;
       let active = Math.max(0, Number(seat.activeSeconds) || 0);
       if (seat.status === 'seated' && seat.lastActiveStart) active += Math.max(0, (Date.now() - seat.lastActiveStart) / 1000);
-      live.push({ table: t.name || 'T' + t.id, seat: seat.id, ref, status: seat.status, started: ppmTime(seat.sessionStart), active_seconds: Math.round(active), key: seatKey(t.name || t.id, seat.id, ref, seat.sessionStart) });
+      live.push({ table: t.name || 'T' + t.id, seat: seat.id, ref, status: seat.status, started: ppmTime(seat.sessionStart), active_seconds: Math.round(active), rest_seconds: Math.round(Math.max(0, Number(seat.restSeconds) || 0) + (seat.status === 'rest' && seat.lastRestStart ? Math.max(0, (Date.now() - seat.lastRestStart) / 1000) : 0)),
+        buy_in: Number.isSafeInteger(seat.buyInAmount) ? seat.buyInAmount : null, game_type: str(t.gameType, 10), blinds: str(t.blinds, 20), key: seatKey(t.name || t.id, seat.id, ref, seat.sessionStart) });
     }
   }
   const matched = await matchRefs(env, live.map((x) => x.ref));
@@ -454,7 +455,10 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const history = await all(env.DB.prepare('SELECT group_id,effective_from,changed_by,note FROM member_group_history WHERE member_id=? ORDER BY effective_from DESC, id DESC').bind(m.id));
       const log = await all(env.DB.prepare('SELECT at,actor,action,detail FROM audit_log WHERE member_id=? ORDER BY at DESC, id DESC LIMIT 50').bind(m.id));
       const gname = (id) => (id ? (groups.get(id) || { name: id }).name : null);
+      // Still at the table: shown on the profile now, written to Game sessions when the seat is cleared.
+      const playing = (await liveSeats(env)).filter((x) => x.member_id === m.id).map((x) => ({ table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, rest_seconds: x.rest_seconds, buy_in: x.buy_in, game_type: x.game_type, blinds: x.blinds, linked: !!x.link_member }));
       return reply({
+        playing,
         member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups),
         stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share },
         sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id) })),

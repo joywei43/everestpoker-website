@@ -260,7 +260,9 @@ assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t3 }
 let um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
 assert.equal(um.seated.length, 2, 'every seated player is listed');
 assert.equal(um.seated[0].ref, 'ELLY', 'unmatched first'); assert.equal(um.seated[0].auto, null);
-assert.equal(um.seated[1].auto.member_no, 'EV-444444', 'typed 444444 shows its automatic match'); assert.ok(um.seated[0].active_seconds >= 650);
+assert.equal(um.seated[1].auto.member_no, 'EV-444444', 'typed 444444 shows its automatic match');
+const sixNow = (await call('/members/EV-444444', 'GET', null, boss.token)).body;
+assert.equal(sixNow.playing.length, 1, 'seated member shows as playing now'); assert.equal(sixNow.playing[0].table, 'T2'); assert.equal(sixNow.playing[0].status, 'rest'); assert.equal(sixNow.playing[0].buy_in, 5000); assert.ok(um.seated[0].active_seconds >= 650);
 // Guard: EV-444444 is already sitting at seat 2, so ELLY cannot be linked to that number.
 r = await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '444444' }, maria.token);
 assert.equal(r.status, 409); assert.equal(r.body.code, 'already_seated'); assert.match(r.body.error, /S2/);

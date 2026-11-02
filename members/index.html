@@ -302,7 +302,17 @@ async function viewMember(view, no) {
       ${tile('Total buy-in', peso(s30.buy_in), 'From PPM')}
       ${tile('Rewards given', peso(s30.rewards), perHour(s30.rewards, s30.secs) + ' per play hour' + (s30.rewards_pending ? ' · ' + peso(s30.rewards_pending) + ' waiting' : ''))}
     </div>
-    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM</span></div>
+    ${(data.playing || []).map((x) => `<section class="card" style="border:2px solid var(--gold);display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center">
+      <span class="chip ${x.status === 'rest' ? 'amber' : 'green'}">${x.status === 'rest' ? 'Resting now' : 'Playing now'}</span>
+      <div><div class="small muted">Table · Seat</div><b>${esc(x.table)} · S${x.seat}</b></div>
+      <div><div class="small muted">Game</div><b>${esc(x.game_type)} ${esc(x.blinds)}</b></div>
+      <div><div class="small muted">Since</div><b class="mono">${time(x.started)}</b></div>
+      <div><div class="small muted">Play time so far</div><b class="mono">${hhmm(x.active_seconds)}</b></div>
+      <div><div class="small muted">Rest</div><span class="mono muted">${hhmm(x.rest_seconds)}</span></div>
+      <div><div class="small muted">Buy-in</div><b>${x.buy_in === null ? '—' : peso(x.buy_in)}</b></div>
+      <div class="small muted" style="flex:1 1 220px">PPM name "${esc(x.ref)}"${x.linked ? ' · linked by staff' : ' · matched automatically'}. Added to Game sessions and totals when the seat is cleared.</div>
+    </section>`).join('')}
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM when the player leaves the seat</span></div>
       <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
       ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="9" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
