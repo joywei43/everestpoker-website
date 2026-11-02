@@ -248,4 +248,26 @@ assert.equal((await call('/ppm', 'PUT', { version: ppmNow.version, tables: t2 },
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, 3600, 'PPM seat typed as six digits matches');
 assert.equal((await call('/sessions/link', 'POST', { member_ref: 'Bob 6', member_no: '444444' }, boss.token)).body.linked, 1, 'unmatched names link by six digits');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers');
+// Players still at the table: listed in Unmatched, can be linked before they leave.
+let ppmLive = (await call('/ppm', 'GET', null, boss.token)).body;
+const t3 = structuredClone(ppmLive.tables);
+t3[1].isRunning = true;
+t3[1].seats[0] = { ...t3[1].seats[0], status: 'seated', memberId: 'ELLY', sessionStart: '2026-11-02 18:24:42', activeSeconds: 600, restSeconds: 0, lastActiveStart: Date.now() - 60000, buyInAmount: 10000 };
+t3[1].seats[1] = { ...t3[1].seats[1], status: 'rest', memberId: '444444', sessionStart: '2026-11-02 19:00:00', activeSeconds: 100, restSeconds: 50, lastActiveStart: null, buyInAmount: 5000 };
+assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t3 }, boss.token)).status, 200);
+let um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
+assert.equal(um.seated.length, 1, 'only unmatched seated names; 444444 is a member');
+assert.equal(um.seated[0].ref, 'ELLY'); assert.ok(um.seated[0].active_seconds >= 650);
+assert.equal((await call('/sessions/link-seat', 'POST', { seat_key: um.seated[0].seat_key, member_no: '444444' }, maria.token)).body.member_no, 'EV-444444');
+um = (await call('/sessions/unmatched', 'GET', null, maria.token)).body;
+assert.equal(um.seated[0].linked.member_no, 'EV-444444');
+const before6 = (await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs;
+ppmLive = (await call('/ppm', 'GET', null, boss.token)).body;
+const t4 = structuredClone(ppmLive.tables);
+t4[1].sessions = [...(t4[1].sessions || []), { seatId: 1, memberId: 'ELLY', startTime: '2026-11-02 18:24:42', endTime: '2026-11-02 21:00:00', activeSeconds: 9000, restSeconds: 0, buyInAmount: 10000 }];
+t4[1].seats[0] = { ...t4[1].seats[0], status: 'idle', memberId: '', sessionStart: null };
+assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t4 }, boss.token)).status, 200);
+assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, before6 + 9000, 'hours go to the linked member when the player leaves');
+assert.ok(!(await call('/sessions/unmatched', 'GET', null, maria.token)).body.refs.some((x) => x.member_ref === 'ELLY'));
+
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table');

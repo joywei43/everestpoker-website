@@ -521,22 +521,49 @@ async function viewPromotions(view) {
 }
 
 // ---------- Unmatched PPM names ----------
+let unmatchedTimer = null;
 async function viewUnmatched(view) {
+  clearTimeout(unmatchedTimer);
   const data = await api('/sessions/unmatched');
+  const box = (id, ph) => `<div class="ac" style="flex:1"><label class="sr" for="${id}">Member</label><input type="text" id="${id}" inputmode="numeric" placeholder="${ph}" style="width:100%" autocomplete="off"></div>`;
   view.innerHTML = `<div><h1>Unmatched PPM names</h1><p class="sub">Names typed in PPM that are not a member number or a unique nickname. Their hours count for no one until you link them.</p></div>
     <div id="um"></div>
-    <section class="card"><div class="tbl"><table><thead><tr><th>Typed in PPM</th><th class="num">Sessions</th><th class="num">Play time</th><th>Last seen</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>At the table now</h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
+      <p class="small muted" style="margin:0 0 10px">Link a player before they leave; their hours go to the member when they leave the seat.</p>
+      <div class="tbl"><table><thead><tr><th>Table · Seat</th><th>Typed in PPM</th><th>Status</th><th class="num">Playing so far</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
+      ${data.seated.map((x, i) => `<tr><td><b>${esc(x.table)}</b> · S${x.seat}</td><td><b>${esc(x.ref)}</b></td>
+        <td>${x.status === 'rest' ? '<span class="chip amber">Resting</span>' : '<span class="chip green">Playing</span>'}</td><td class="num">${hm(x.active_seconds)}</td>
+        <td>${x.linked ? `<span class="chip blue">Linked to ${esc(x.linked.member_no)}</span> <span class="small muted">${esc(x.linked.name)}</span>`
+          : `<form class="row" data-s="${i}" style="flex-wrap:nowrap">${box('s' + i, '6-digit member no.')}<button class="btn sm">Link</button></form>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Everyone at the tables is a member.</td></tr>'}
+      </tbody></table></div></section>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Already left the table</h2></div>
+    <div class="tbl"><table><thead><tr><th>Typed in PPM</th><th class="num">Sessions</th><th class="num">Play time</th><th>Last seen</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
     ${data.refs.map((r, i) => `<tr><td><b>${esc(r.member_ref)}</b></td><td class="num">${r.sessions}</td><td class="num">${hm(r.secs)}</td><td class="muted">${day(r.last)}</td>
-      <td><form class="row" data-i="${i}" style="flex-wrap:nowrap"><div class="ac" style="flex:1"><label class="sr" for="u${i}">Member</label><input type="text" id="u${i}" inputmode="numeric" placeholder="6-digit member no., e.g. 444444" style="width:100%"></div><button class="btn sm">Link</button></form></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Everything typed in PPM matches a member.</td></tr>'}
+      <td><form class="row" data-i="${i}" style="flex-wrap:nowrap">${box('u' + i, '6-digit member no., e.g. 444444')}<button class="btn sm">Link</button></form></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Nothing to link.</td></tr>'}
     </tbody></table></div></section>`;
+  const msg = view.querySelector('#um');
+  view.querySelectorAll('form[data-s]').forEach((f) => {
+    const input = f.querySelector('input'); memberPicker(input);
+    f.onsubmit = async (e) => {
+      e.preventDefault(); const x = data.seated[Number(f.dataset.s)];
+      try { const res = await api('/sessions/link-seat', 'POST', { seat_key: x.seat_key, member_no: input.value.trim() }); flash(msg, `${x.ref} (${x.table} · S${x.seat}) will count for ${res.member_no} when they leave.`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
+      catch (err) { flash(msg, err.message, 'err'); }
+    };
+  });
   view.querySelectorAll('form[data-i]').forEach((f) => {
     const input = f.querySelector('input'); memberPicker(input);
     f.onsubmit = async (e) => {
-      e.preventDefault(); const r = data.refs[Number(f.dataset.i)]; const who = needStaff(); if (!who) return;
-      try { const res = await api('/sessions/link', 'POST', { member_ref: r.member_ref, member_no: input.value.trim(), staff: who }); flash(view.querySelector('#um'), `Linked ${res.linked} sessions of "${r.member_ref}".`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
-      catch (err) { flash(view.querySelector('#um'), err.message, 'err'); }
+      e.preventDefault(); const r = data.refs[Number(f.dataset.i)];
+      try { const res = await api('/sessions/link', 'POST', { member_ref: r.member_ref, member_no: input.value.trim() }); flash(msg, `Linked ${res.linked} sessions of "${r.member_ref}".`, 'ok'); setTimeout(() => viewUnmatched(view), 600); }
+      catch (err) { flash(msg, err.message, 'err'); }
     };
   });
+  // Refresh while the page is open, but never while someone is typing a number.
+  unmatchedTimer = setTimeout(function tick() {
+    if (parseHash().page !== 'unmatched') return;
+    if (view.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') { unmatchedTimer = setTimeout(tick, 30000); return; }
+    viewUnmatched(view).catch(() => {});
+  }, 30000);
 }
 
 // ---------- Import from the Google Sheet ----------

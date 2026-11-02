@@ -159,3 +159,7 @@ CREATE TABLE IF NOT EXISTS member_photos(member_id INTEGER PRIMARY KEY REFERENCE
 
 -- Old member numbers after a master renumbers a member. PPM seats typed with an old number still match.
 CREATE TABLE IF NOT EXISTS member_number_history(old_no TEXT PRIMARY KEY COLLATE NOCASE, member_id INTEGER NOT NULL REFERENCES members(id), changed_at INTEGER NOT NULL, changed_by TEXT NOT NULL DEFAULT '');
+
+-- A name typed on a PPM seat that staff linked to a member while the player was still at the table.
+-- seat_key = table|seat|typed name|seat-in time, so it only applies to that one sitting.
+CREATE TABLE IF NOT EXISTS ppm_seat_links(seat_key TEXT PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES members(id), created_at INTEGER NOT NULL, created_by TEXT NOT NULL DEFAULT '');

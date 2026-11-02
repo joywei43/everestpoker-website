@@ -97,6 +97,33 @@ async function groupAt(env, memberId, t) {
   return groupAtFrom(history, memberId, t);
 }
 
+// Match names typed in PPM to members: member number (or six digits), an old number, then a nickname used by only one member.
+async function matchRefs(env, list) {
+  const refs = [...new Set(list.flatMap((r) => [r.toLowerCase(), normNo(r).toLowerCase()]))];
+  const byNo = new Map(), byNick = new Map();
+  for (const part of chunks(refs, 45)) {
+    const rows = await all(env.DB.prepare(`SELECT id,member_no,nickname FROM members WHERE lower(member_no) IN (${marks(part.length)}) OR lower(nickname) IN (${marks(part.length)})`).bind(...part, ...part));
+    for (const r of rows) {
+      byNo.set(r.member_no.toLowerCase(), r.id);
+      if (r.nickname) { const k = r.nickname.toLowerCase(); byNick.set(k, byNick.has(k) && byNick.get(k) !== r.id ? -1 : r.id); }
+    }
+  }
+  for (const part of chunks(refs, 90)) {
+    const rows = await all(env.DB.prepare(`SELECT old_no,member_id FROM member_number_history WHERE lower(old_no) IN (${marks(part.length)})`).bind(...part));
+    for (const r of rows) if (!byNo.has(r.old_no.toLowerCase())) byNo.set(r.old_no.toLowerCase(), r.member_id);
+  }
+  return (ref) => { const k = ref.toLowerCase(), n6 = normNo(ref).toLowerCase(); if (byNo.has(k)) return byNo.get(k); if (byNo.has(n6)) return byNo.get(n6); const n = byNick.get(k); return n && n > 0 ? n : null; };
+}
+const seatKey = (tableName, seatId, ref, start) => [tableName, seatId, ref, start].join('|').slice(0, 200);
+async function seatLinks(env, keys) {
+  const map = new Map();
+  for (const part of chunks([...new Set(keys)], 90)) {
+    if (!part.length) continue;
+    (await all(env.DB.prepare(`SELECT seat_key,member_id FROM ppm_seat_links WHERE seat_key IN (${marks(part.length)})`).bind(...part))).forEach((r) => map.set(r.seat_key, r.member_id));
+  }
+  return map;
+}
+
 // ---------- PPM -> play_sessions ----------
 // Called after every successful PPM save. Only sessions not seen before are written, so it is cheap and repeatable.
 export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)) {
@@ -121,22 +148,10 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
   fresh.splice(400);
   if (!fresh.length) return { inserted: 0 };
 
-  // Match PPM text to members: exact member number first, then a unique nickname.
-  const refs = [...new Set(fresh.flatMap((f) => [f.ref.toLowerCase(), normNo(f.ref).toLowerCase()]))];
-  const byNo = new Map(), byNick = new Map();
-  for (const part of chunks(refs, 45)) {
-    const rows = await all(env.DB.prepare(`SELECT id,member_no,nickname FROM members WHERE lower(member_no) IN (${marks(part.length)}) OR lower(nickname) IN (${marks(part.length)})`).bind(...part, ...part));
-    for (const r of rows) {
-      byNo.set(r.member_no.toLowerCase(), r.id);
-      if (r.nickname) { const k = r.nickname.toLowerCase(); byNick.set(k, byNick.has(k) ? -1 : r.id); }
-    }
-  }
-  for (const part of chunks(refs, 90)) {
-    const rows = await all(env.DB.prepare(`SELECT old_no,member_id FROM member_number_history WHERE lower(old_no) IN (${marks(part.length)})`).bind(...part));
-    for (const r of rows) if (!byNo.has(r.old_no.toLowerCase())) byNo.set(r.old_no.toLowerCase(), r.member_id);
-  }
-  const memberOf = (ref) => { const k = ref.toLowerCase(), n6 = normNo(ref).toLowerCase(); if (byNo.has(k)) return byNo.get(k); if (byNo.has(n6)) return byNo.get(n6); const n = byNick.get(k); return n && n > 0 ? n : null; };
-  const ids = [...new Set(fresh.map((f) => memberOf(f.ref)).filter(Boolean))];
+  const matched = await matchRefs(env, fresh.map((f) => f.ref));
+  const linked = await seatLinks(env, fresh.map((f) => seatKey(f.t.name || f.t.id, f.s.seatId, f.ref, f.s.startTime)));
+  const memberOf = (ref, f) => (f && linked.get(seatKey(f.t.name || f.t.id, f.s.seatId, f.ref, f.s.startTime))) || matched(ref);
+  const ids = [...new Set(fresh.map((f) => memberOf(f.ref, f)).filter(Boolean))];
   let history = [];
   for (const part of chunks(ids, 90)) {
     history = history.concat(await all(env.DB.prepare(`SELECT member_id,group_id,effective_from FROM member_group_history WHERE member_id IN (${marks(part.length)}) ORDER BY effective_from, id`).bind(...part)));
@@ -144,7 +159,7 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
   history.sort((a, b) => a.effective_from - b.effective_from);
 
   const stmts = fresh.map((f) => {
-    const memberId = memberOf(f.ref);
+    const memberId = memberOf(f.ref, f);
     const groupId = memberId ? groupAtFrom(history, memberId, f.start) : null; // group at seat-in time
     const active = Math.max(0, Math.floor(Number(f.s.activeSeconds) || 0));
     const rest = Math.max(0, Math.floor(Number(f.s.restSeconds) || 0));
@@ -153,8 +168,9 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(f.key, memberId, f.ref, groupId, localDate(f.start), str(f.t.name, 10), Number(f.s.seatId) || 0,
       str(f.t.gameType, 10), str(f.t.blinds, 20), f.start, f.end, active, rest, buyIn, f.s.transferNote ? str(f.s.transferNote, 120) : null, now);
   });
+  if (linked.size) stmts.push(env.DB.prepare('DELETE FROM ppm_seat_links WHERE created_at<?').bind(now - 3 * DAY));
   for (const part of chunks(stmts, 50)) await env.DB.batch(part);
-  return { inserted: stmts.length };
+  return { inserted: fresh.length };
 }
 
 // ---------- request handling ----------
@@ -535,7 +551,41 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
   // ----- PPM sessions that did not match a member -----
   if (parts[0] === 'sessions' && parts[1] === 'unmatched' && method === 'GET') {
     const rows = await all(env.DB.prepare('SELECT member_ref, COUNT(*) sessions, SUM(active_seconds) secs, MIN(start_at) first, MAX(start_at) last FROM play_sessions WHERE member_id IS NULL GROUP BY member_ref ORDER BY last DESC LIMIT 300'));
-    return reply({ refs: rows });
+    // Players still at the table whose name is not a member yet.
+    const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
+    const live = [];
+    for (const t of ppmRow ? JSON.parse(ppmRow.data) : []) {
+      for (const seat of t.seats || []) {
+        const ref = str(seat.memberId, 60);
+        if (!ref || seat.status === 'idle' || !seat.sessionStart) continue;
+        const started = ppmTime(seat.sessionStart);
+        let active = Math.max(0, Number(seat.activeSeconds) || 0);
+        if (seat.status === 'seated' && seat.lastActiveStart) active += Math.max(0, (Date.now() - seat.lastActiveStart) / 1000);
+        live.push({ table: t.name || 'T' + t.id, seat: seat.id, ref, status: seat.status, started, active_seconds: Math.round(active), key: seatKey(t.name || t.id, seat.id, ref, seat.sessionStart) });
+      }
+    }
+    const matched = await matchRefs(env, live.map((x) => x.ref));
+    const links = await seatLinks(env, live.map((x) => x.key));
+    const linkedIds = [...new Set([...links.values()])];
+    const names = new Map();
+    for (const part of chunks(linkedIds, 90)) (await all(env.DB.prepare(`SELECT id,member_no,nickname,surname,middle_name,family_name FROM members WHERE id IN (${marks(part.length)})`).bind(...part))).forEach((m) => names.set(m.id, m));
+    const seated = live.filter((x) => !matched(x.ref)).map((x) => {
+      const m = links.has(x.key) ? names.get(links.get(x.key)) : null;
+      return { table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, seat_key: x.key, linked: m ? { member_no: m.member_no, name: displayName(m) } : null };
+    }).sort((a, b) => a.table.localeCompare(b.table) || a.seat - b.seat);
+    return reply({ refs: rows, seated });
+  }
+  if (parts[0] === 'sessions' && parts[1] === 'link-seat' && method === 'POST') {
+    const b = await readJson(req, 5000);
+    const key = str(b.seat_key, 200), staff = who(b);
+    if (!key || !staff) return bad(reply, 'Seat and staff name are required.');
+    const m = await memberByNo(env, str(b.member_no, 30));
+    if (!m) return bad(reply, 'Member not found.', 404);
+    await env.DB.batch([
+      env.DB.prepare('INSERT OR REPLACE INTO ppm_seat_links(seat_key,member_id,created_at,created_by) VALUES(?,?,?,?)').bind(key, m.id, now, staff),
+      audit(env, now, staff, 'sessions.link', m.id, `Seat ${key.split('|').slice(0, 3).join(' · ')}`)
+    ]);
+    return reply({ ok: true, member_no: m.member_no });
   }
   if (parts[0] === 'sessions' && parts[1] === 'link' && method === 'POST') {
     const b = await readJson(req, 5000);
