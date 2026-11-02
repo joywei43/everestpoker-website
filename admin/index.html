@@ -79,12 +79,12 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 .bbj-date{font-size:clamp(14px,2.2vw,20px);opacity:.92}.bbj-main{font-size:clamp(28px,6vw,64px);line-height:1.1;margin:4px 0}.bbj-res{font-size:clamp(15px,2.6vw,26px)}
 .floor{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);gap:16px;align-items:start}@media(max-width:900px){.floor{grid-template-columns:1fr}}
 .floor-tables{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 18px}@media(max-width:560px){.floor-tables{grid-template-columns:1fr}}
-.ptable{position:relative;aspect-ratio:1.7;margin:20px 22px;cursor:pointer;border-radius:22px}
-.ptable .felt{position:absolute;inset:0;border-radius:22px;background:radial-gradient(ellipse at 50% 40%,#2F7A52,#1B4D33);border:6px solid #6B4A2A;box-shadow:inset 0 0 0 2px rgba(255,255,255,.12),0 4px 10px rgba(0,0,0,.18);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:2px;transition:box-shadow .15s}
+.ptable{position:relative;aspect-ratio:1.7;margin:20px 22px;cursor:pointer;border-radius:999px}
+.ptable .felt{position:absolute;inset:0;border-radius:999px;background:radial-gradient(ellipse at 50% 40%,#2F7A52,#1B4D33);border:6px solid #6B4A2A;box-shadow:inset 0 0 0 2px rgba(255,255,255,.12),0 4px 10px rgba(0,0,0,.18);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:2px;transition:box-shadow .15s}
 .ptable .felt b{font-size:18px}.ptable .felt span{font-size:12px;opacity:.9}.ptable .felt small{font-size:11px;opacity:.75}
 .ptable.off .felt{background:#8B96A3;border-color:#B5BDC7}.ptable.sel .felt{box-shadow:0 0 0 4px var(--gold),0 6px 16px rgba(0,0,0,.25)}
 .ptable:focus-visible{outline:3px solid var(--blue);outline-offset:6px}
-.ptable .dealer{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:#fff;border:1px solid #CDD5DF;font-size:10px;font-weight:700;display:grid;place-items:center;color:#333}
+.ptable .dealer{position:absolute;left:50%;top:-2px;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:#fff;border:1px solid #CDD5DF;font-size:10px;font-weight:700;display:grid;place-items:center;color:#333}
 .ptable .seat{position:absolute;transform:translate(-50%,-50%)}
 .seat-e{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#fff;border:1.5px dashed #AEB8C4;font-size:11px;color:#8792A0}
 .seat-p{padding:0;border:0;background:none;cursor:pointer;border-radius:50%}.seat-p:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
@@ -588,8 +588,8 @@ function loadPhotos(root) {
     } catch (e) { photoCache.delete(no); }
   });
 }
-// Rectangular table with 9 seats, clockwise from the dealer at the top: 1 top-right, 2–3 right, 4–6 bottom, 7–8 left, 9 top-left.
-const SEAT_POS = [[76, 0], [100, 30], [100, 70], [76, 100], [50, 100], [24, 100], [0, 70], [0, 30], [24, 0]];
+// Oval table with 9 seats, clockwise from the dealer at the top.
+const SEAT_POS = Array.from({ length: 9 }, (_, i) => { const a = (-90 + 36 * (i + 1)) * Math.PI / 180; return [50 + 48 * Math.cos(a), 50 + 46 * Math.sin(a)]; });
 function tableOval(t, selected) {
   const by = new Map((t.players || []).map((p) => [p.seat, p]));
   const seats = Array.from({ length: 9 }, (_, i) => {
