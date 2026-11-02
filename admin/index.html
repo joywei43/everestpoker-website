@@ -366,7 +366,7 @@ async function viewMember(view, no) {
       <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
       ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)} ${restBadge(x.rest_seconds, x.active_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
         <td class="num">${isManager() ? `<button type="button" class="linkbtn" data-co="${x.id}" title="Enter or correct the cash-out">${x.cash_out == null ? 'Add' : (x.busted ? 'Busted' : peso(x.cash_out))}</button>` : (x.cash_out == null ? '—' : x.busted ? 'Busted' : peso(x.cash_out))}</td>
-        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
+        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-editsess="${x.id}" title="Correct times, buy-in or cash-out">Edit</button><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
     <section class="card" style="display:flex;flex-direction:column;gap:14px">
       <div class="row between"><h2>Rewards received</h2><span class="chip dark">Staff only</span></div>
@@ -469,6 +469,33 @@ async function viewMember(view, no) {
     const v = raw.trim().toLowerCase();
     const body = !v ? { clear: true } : v === 'busted' || v === 'b' ? { busted: true } : { cash_out: Number(v.replace(/[,\s₱]/g, '')), busted: Number(v.replace(/[,\s₱]/g, '')) === 0 };
     try { await api('/sessions/' + b.dataset.co + '/cash-out', 'POST', body); reload(); } catch (err) { alert(err.message); }
+  });
+  view.querySelectorAll('[data-editsess]').forEach((b) => b.onclick = () => {
+    const x = data.sessions.find((s) => String(s.id) === b.dataset.editsess);
+    view.querySelector('#sessd')?.remove();
+    const dlg = document.createElement('dialog'); dlg.id = 'sessd';
+    const mins = (sec) => Math.round((sec || 0) / 60);
+    dlg.innerHTML = `<form method="dialog"><h2>Edit session · ${esc(x.table_name)} S${esc(x.seat)} · ${esc(x.game_type)} ${esc(x.blinds)}</h2><div class="form">
+        <label class="f">Start<input type="datetime-local" name="start" required value="${toLocalInput(x.start_at)}"></label>
+        <label class="f">End<input type="datetime-local" name="end" required value="${toLocalInput(x.end_at)}"></label>
+        <label class="f">Play time (minutes)<input type="number" min="0" name="active" value="${mins(x.active_seconds)}"></label>
+        <label class="f">Rest (minutes)<input type="number" min="0" name="rest" value="${mins(x.rest_seconds)}"></label>
+        <label class="f">Buy-in (₱)<input type="text" inputmode="numeric" name="buy" value="${x.buy_in ?? ''}"></label>
+        <label class="f">Cash-out (₱)<input type="text" inputmode="numeric" name="cash" value="${x.cash_out ?? ''}" placeholder="Blank = not entered"></label>
+        <label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="busted" ${x.busted ? 'checked' : ''}> Busted (lost the whole buy-in)</label></div>
+      <p class="small muted" style="margin:0" id="sessCalc"></p><div id="sessMsg"></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="sessSave">Save</button></div></form>`;
+    view.appendChild(dlg);
+    const f = dlg.querySelector('form'), num = (v) => { const t = String(v).replace(/[,\s₱]/g, ''); return t === '' ? null : Number(t); };
+    const calc = () => { const s0 = fromLocalInput(f.start.value), e0 = fromLocalInput(f.end.value), buy = num(f.buy.value), cash = f.busted.checked ? 0 : num(f.cash.value);
+      dlg.querySelector('#sessCalc').textContent = `Start → end: ${s0 && e0 ? hm(e0 - s0) : '—'}${cash != null && buy != null ? ' · W/L ' + signedPeso(cash - buy) : ''}`; f.cash.disabled = f.busted.checked; };
+    f.oninput = calc; calc();
+    dlg.querySelector('#sessSave').onclick = async (e) => {
+      e.preventDefault();
+      const body = { start_at: fromLocalInput(f.start.value), end_at: fromLocalInput(f.end.value), active_seconds: Math.round(Number(f.active.value || 0) * 60), rest_seconds: Math.round(Number(f.rest.value || 0) * 60), buy_in: num(f.buy.value), cash_out: f.busted.checked ? 0 : num(f.cash.value), busted: f.busted.checked };
+      try { await api('/sessions/' + x.id + '/edit', 'POST', body); dlg.close(); reload(); } catch (err) { flash(dlg.querySelector('#sessMsg'), err.message, 'err'); }
+    };
+    dlg.showModal();
   });
   view.querySelectorAll('[data-delsess]').forEach((b) => b.onclick = async () => {
     const x = data.sessions.find((s) => String(s.id) === b.dataset.delsess);
@@ -756,7 +783,7 @@ const ACTION_LABELS = {
   'ppm.change_seat': ['Change seat', 'blue'], 'ppm.change_table': ['Change table', 'blue'],
   'member.create': ['Member added', 'green'], 'member.update': ['Profile edited', 'blue'], 'member.group': ['Group change', 'amber'], 'member.number': ['Number change', 'amber'],
   'member.photo': ['Photo', ''], 'member.merge': ['Merged', 'red'], 'member.delete': ['Member deleted', 'red'], 'member.import': ['Import', 'blue'],
-  'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
+  'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'session.edit': ['Session edited', 'amber'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
   'reward.add': ['Reward', 'green'], 'reward.approve': ['Approved', 'green'], 'reward.void': ['Voided', 'red'],
   'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue']
 };

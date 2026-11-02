@@ -827,6 +827,34 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     ]);
     return reply({ ok: true });
   }
+  // Master: correct a finished session's times, play/rest time, buy-in and cash-out.
+  if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'edit' && method === 'POST') {
+    if (!master) return masterOnly();
+    const b = await readJson(req, 4000);
+    const row = await env.DB.prepare('SELECT ps.*, sr.cash_out, sr.busted FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.id=?').bind(Number(parts[1])).first();
+    if (!row) return bad(reply, 'Session not found.', 404);
+    const int = (v, max) => (v === '' || v == null ? null : Number.isSafeInteger(Number(v)) && Number(v) >= 0 && Number(v) <= max ? Number(v) : NaN);
+    const start = int(b.start_at, 4e9), end = int(b.end_at, 4e9), active = int(b.active_seconds, 7 * 86400), rest = int(b.rest_seconds, 7 * 86400), buy = int(b.buy_in, 1e9);
+    const busted = !!b.busted, cash = busted ? 0 : int(b.cash_out, 1e9);
+    if ([start, end, active, rest, buy, cash].some(Number.isNaN) || start == null || end == null || active == null) return bad(reply, 'Check the numbers: times, play time and amounts must be 0 or more.');
+    if (end < start || start > now + 3600) return bad(reply, 'End must be after start, and the session cannot be in the future.');
+    if (active + (rest || 0) > end - start + 60) return bad(reply, 'Play time + rest cannot be longer than start → end.');
+    const t = (x) => new Date((x + TZ_OFFSET) * 1000).toISOString().slice(0, 16).replace('T', ' ');
+    const changes = [];
+    if (start !== row.start_at || end !== row.end_at) changes.push(`time ${t(row.start_at)}–${t(row.end_at).slice(11)} → ${t(start)}–${t(end).slice(11)}`);
+    if (active !== row.active_seconds) changes.push(`play ${Math.round(row.active_seconds / 60)}m → ${Math.round(active / 60)}m`);
+    if ((rest || 0) !== row.rest_seconds) changes.push(`rest ${Math.round(row.rest_seconds / 60)}m → ${Math.round((rest || 0) / 60)}m`);
+    if (buy !== row.buy_in) changes.push(`buy-in ${row.buy_in ?? '—'} → ${buy ?? '—'}`);
+    if (cash !== (row.cash_out ?? null) || busted !== !!row.busted) changes.push(`cash-out ${row.cash_out ?? '—'}${row.busted ? ' busted' : ''} → ${cash ?? '—'}${busted ? ' busted' : ''}`);
+    if (!changes.length) return reply({ ok: true, unchanged: true });
+    await env.DB.batch([
+      env.DB.prepare('UPDATE play_sessions SET start_at=?,end_at=?,active_seconds=?,rest_seconds=?,buy_in=?,play_date=? WHERE id=?').bind(start, end, active, rest || 0, buy, localDate(start), row.id),
+      cash == null ? env.DB.prepare('DELETE FROM session_results WHERE session_id=?').bind(row.id)
+        : env.DB.prepare('INSERT INTO session_results(session_id,cash_out,busted,entered_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET cash_out=excluded.cash_out,busted=excluded.busted,entered_by=excluded.entered_by,updated_at=excluded.updated_at').bind(row.id, cash, busted ? 1 : 0, who(b) || 'master', now),
+      audit(env, now, who(b), 'session.edit', row.member_id, `"${row.member_ref}" ${row.table_name} S${row.seat} ${row.play_date}: ${changes.join(' · ')}`)
+    ]);
+    return reply({ ok: true });
+  }
   // Undo a wrong link on a finished session (master): it goes back to Unmatched.
   // Master: delete a game session entirely (e.g. recorded on a table opened by mistake). PPM will not add it again.
   if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'delete' && method === 'POST') {

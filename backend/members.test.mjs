@@ -441,4 +441,15 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   const left = (await call('/members/777777', 'GET', null, boss.token)).body.sessions;
   assert.equal(left.length, vs.length - 1, 'deleted session stays deleted'); assert.ok(!left.some((x) => x.buy_in === 12000));
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session');
+{ // Master edits a session's times, buy-in and cash-out.
+  const x = (await call('/members/777777', 'GET', null, boss.token)).body.sessions[0];
+  const body = { start_at: x.start_at, end_at: x.start_at + 7200, active_seconds: 6000, rest_seconds: 600, buy_in: 45000, cash_out: 14800 };
+  assert.equal((await call('/sessions/' + x.id + '/edit', 'POST', body, maria.token)).status, 403);
+  assert.equal((await call('/sessions/' + x.id + '/edit', 'POST', { ...body, active_seconds: 9000 }, boss.token)).status, 400, 'play time cannot exceed the session');
+  assert.equal((await call('/sessions/' + x.id + '/edit', 'POST', body, boss.token)).status, 200);
+  const y = (await call('/members/777777', 'GET', null, boss.token)).body.sessions.find((s) => s.id === x.id);
+  assert.deepEqual([y.buy_in, y.cash_out, y.active_seconds, y.rest_seconds, y.end_at - y.start_at], [45000, 14800, 6000, 600, 7200]);
+  assert.equal((await call('/sessions/' + x.id + '/edit', 'POST', { ...body, cash_out: '', busted: false }, boss.token)).status, 200);
+  assert.equal((await call('/members/777777', 'GET', null, boss.token)).body.sessions.find((s) => s.id === x.id).cash_out, null, 'blank clears the cash-out');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session');
