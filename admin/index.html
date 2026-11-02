@@ -627,6 +627,36 @@ async function playerCard(view, p, anchor) {
       ${d.member.staff_notes ? `<div class="pc-note">${esc(d.member.staff_notes)}</div>` : ''}<a class="btn sm" style="margin-top:10px" href="#/member/${encodeURIComponent(p.member.member_no)}">Open profile →</a>`;
   } catch (e) { card.querySelector('#pcBody').textContent = e.message; }
 }
+// Manila wall clock <-> unix seconds for datetime-local inputs.
+const toLocalInput = (t) => (t == null ? '' : new Date((t + 8 * 3600) * 1000).toISOString().slice(0, 16));
+const fromLocalInput = (v) => (v ? Math.floor(Date.parse(v + ':00Z') / 1000) - 8 * 3600 : null);
+async function loadRuns(view, dayStr) {
+  const box = view.querySelector('#runs'); if (!box) return;
+  let r; try { r = await api('/operation/runs?day=' + dayStr); } catch (e) { box.textContent = e.message; return; }
+  box.classList.remove('muted');
+  box.innerHTML = r.runs.length ? `<div class="tbl"><table><thead><tr><th>Table</th><th>Level</th><th>Opened</th><th>Closed</th><th class="num">Hours</th><th class="num">Sessions</th><th></th></tr></thead><tbody>
+    ${r.runs.map((x, i) => `<tr><td><b>${esc(x.table_name)}</b></td><td>${esc(x.game_type + ' ' + x.blinds)}</td><td>${dtShort(x.opened_at)}</td><td>${x.closed_at ? dtShort(x.closed_at) : `<span class="chip green">Open${x.ppm_running ? ' in PPM' : ''}</span>`}</td><td class="num">${hm(x.seconds)}</td><td class="num">${x.sessions}</td>
+      <td class="row" style="flex-wrap:nowrap;justify-content:flex-end"><button type="button" class="btn sm" data-edit="${i}">Edit times</button><button type="button" class="btn sm danger" data-del="${i}">Delete</button></td></tr>`).join('')}</tbody></table></div>`
+    : '<p class="muted">No table records for this business day.</p>';
+  box.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    const x = r.runs[b.dataset.del];
+    if (!confirm(`Delete this record?\n\n${x.table_name} · ${x.game_type} ${x.blinds}\n${dtShort(x.opened_at)} → ${x.closed_at ? dtShort(x.closed_at) : 'still open'} (${hm(x.seconds)})\n\nIts table hours are removed from Live Operation and the Operation Report.${x.sessions ? `\n${x.sessions} player sessions on this table are kept.` : ''}`)) return;
+    try { await api('/operation/runs/delete', 'POST', { run_key: x.run_key }); viewOperation(view).catch(() => {}); } catch (e) { alert(e.message); }
+  });
+  box.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => {
+    const x = r.runs[b.dataset.edit], dlg = view.querySelector('#rund'), f = view.querySelector('#runf');
+    view.querySelector('#runTitle').textContent = `${x.table_name} · ${x.game_type} ${x.blinds}`;
+    f.elements.opened.value = toLocalInput(x.opened_at); f.elements.closed.value = toLocalInput(x.closed_at);
+    flash(view.querySelector('#runMsg'), '');
+    view.querySelector('#runSave').onclick = async (e) => {
+      e.preventDefault();
+      try { await api('/operation/runs/update', 'POST', { run_key: x.run_key, opened_at: fromLocalInput(f.elements.opened.value), closed_at: fromLocalInput(f.elements.closed.value) }); dlg.close(); viewOperation(view).catch(() => {}); }
+      catch (err) { flash(view.querySelector('#runMsg'), err.message, 'err'); }
+    };
+    dlg.showModal();
+  });
+}
+const dtShort = (t) => fmt(t, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 async function viewOperation(view) {
   clearTimeout(operationTimer);
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -659,7 +689,11 @@ async function viewOperation(view) {
       ${big('Total buy-in', peso(mo.buy_in_total), d.is_today ? `${peso(mo.buy_in_finished)} finished + ${peso(mo.buy_in_live)} at tables now` : `${pl.sessions} sessions`)}
       ${big('Total cash-out', peso(mo.cash_out), `${mo.sessions_with_cash_out} sessions${mo.busted ? ' · ' + mo.busted + ' busted' : ''}${mo.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${mo.missing_cash_out} missing (${peso(mo.buy_in_without_cash_out)} buy-in)</span>` : ''}`)}
       ${big('Player hours', hm(pl.finished_seconds + pl.live_seconds), `${hm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hm(pl.live_seconds) + ' playing now' : ''} · ${restBadge(pl.rest_seconds, pl.finished_seconds)}`)}
-    </div>`;
+    </div>
+    ${isMaster() ? `<section class="card" id="runsCard"><div class="row between"><h2>Table records <span class="chip dark small">Master</span></h2><span class="small muted">Fix a table opened by mistake or wrong open/close times. Changes are logged.</span></div><div id="runs" class="small muted" style="margin-top:10px">Loading…</div></section>
+    <dialog id="rund"><form method="dialog" id="runf"><h2 id="runTitle"></h2><div class="form"><label class="f">Opened<input type="datetime-local" name="opened" required></label><label class="f">Closed<input type="datetime-local" name="closed"></label></div>
+      <p class="small muted" style="margin:0">Leave Closed empty only while the table is still open.</p><div id="runMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="runSave">Save</button></div></form></dialog>` : ''}`;
+  if (isMaster()) loadRuns(view, d.day);
   loadPhotos(view);
   const find = (key) => { const [tn, seat] = key.split('|'); const t = tables.find((x) => x.name === tn); return t && (t.players || []).find((p) => String(p.seat) === seat); };
   view.querySelectorAll('[data-table]').forEach((el) => {
@@ -668,7 +702,7 @@ async function viewOperation(view) {
     el.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); pick(); } };
   });
   view.querySelectorAll('[data-seat]').forEach((el) => el.onclick = (e) => { e.stopPropagation(); const p = find(el.dataset.seat); if (p) playerCard(view, p, el); });
-  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation' && !document.getElementById('pcard')) viewOperation(view).catch(() => {}); else if (parseHash().page === 'liveoperation') operationTimer = setTimeout(() => viewOperation(view).catch(() => {}), 30000); }, 30000);
+  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation' && !document.getElementById('pcard') && !(view.querySelector('#rund') || {}).open) viewOperation(view).catch(() => {}); else if (parseHash().page === 'liveoperation') operationTimer = setTimeout(() => viewOperation(view).catch(() => {}), 30000); }, 30000);
 }
 
 // ---------- Operation Report ----------

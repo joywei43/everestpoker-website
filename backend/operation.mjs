@@ -137,3 +137,44 @@ export async function handleOperation(req, env, now, reply, role) {
     history
   });
 }
+
+// Master: fix table hours. List the table runs of a business day, change their times, or delete a table opened by mistake.
+export async function handleTableRuns(req, env, path, now, reply, user, role) {
+  if (role !== 'master') return reply({ error: 'Only the master account can do this.' }, 403);
+  const method = req.method;
+  if (path === '/operation/runs' && method === 'GET') {
+    const bd = await businessDay(env, now, new URL(req.url).searchParams.get('day'));
+    const runs = await all(env.DB.prepare('SELECT run_key,table_name,opened_at,closed_at,game_type,blinds FROM table_runs WHERE opened_at<? AND (closed_at IS NULL OR closed_at>?) ORDER BY table_name,opened_at').bind(bd.end, bd.start));
+    const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
+    const running = new Set((ppmRow ? JSON.parse(ppmRow.data) : []).filter((t) => t.isRunning).map((t) => t.name));
+    const out = [];
+    for (const r of runs) {
+      const end = r.closed_at == null ? now : r.closed_at;
+      const n = await env.DB.prepare('SELECT COUNT(*) n FROM play_sessions WHERE table_name=? AND start_at>=? AND start_at<?').bind(r.table_name, r.opened_at, end).first();
+      out.push({ ...r, seconds: Math.max(0, end - r.opened_at), sessions: n.n, ppm_running: r.closed_at == null && running.has(r.table_name) });
+    }
+    return reply({ day: bd.day, start: bd.start, end: bd.end, runs: out });
+  }
+  if (!['/operation/runs/delete', '/operation/runs/update'].includes(path) || method !== 'POST') return null;
+  let b = {}; try { b = await req.json(); } catch { return reply({ error: 'Invalid JSON' }, 400); }
+  const run = await env.DB.prepare('SELECT * FROM table_runs WHERE run_key=?').bind(str(b.run_key, 200)).first();
+  if (!run) return reply({ error: 'Table run not found.' }, 404);
+  const who = str(user || 'master', 60), when = (t) => (t == null ? 'open' : new Date((t + 8 * HOUR) * 1000).toISOString().slice(0, 16).replace('T', ' '));
+  const log = (detail) => env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'table.run',NULL,?)").bind(now, who, str(detail, 500));
+  if (path === '/operation/runs/delete') {
+    if (run.closed_at == null) {
+      const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
+      const live = (ppmRow ? JSON.parse(ppmRow.data) : []).find((t) => t.name === run.table_name && t.isRunning);
+      if (live) return reply({ error: `${run.table_name} is still open in PPM. Close it there first (關桌), then delete this record.`, code: 'still_running' }, 409);
+    }
+    await env.DB.batch([env.DB.prepare('DELETE FROM table_runs WHERE run_key=?').bind(run.run_key), log(`Deleted ${run.table_name} ${when(run.opened_at)} → ${when(run.closed_at)} (${run.blinds} ${run.game_type})`)]);
+    return reply({ ok: true });
+  }
+  const opened = Number(b.opened_at), closed = b.closed_at == null || b.closed_at === '' ? null : Number(b.closed_at);
+  if (!Number.isSafeInteger(opened) || (closed != null && !Number.isSafeInteger(closed))) return reply({ error: 'Bad time.' }, 400);
+  if (opened > now || (closed != null && (closed <= opened || closed > now))) return reply({ error: 'Close must be after open, and neither can be in the future.' }, 400);
+  if (closed == null && run.closed_at != null) return reply({ error: 'A closed run needs a close time.' }, 400);
+  await env.DB.batch([env.DB.prepare('UPDATE table_runs SET opened_at=?,closed_at=? WHERE run_key=?').bind(opened, closed, run.run_key),
+    log(`Changed ${run.table_name} ${when(run.opened_at)} → ${when(run.closed_at)} to ${when(opened)} → ${when(closed)}`)]);
+  return reply({ ok: true });
+}

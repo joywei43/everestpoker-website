@@ -111,4 +111,15 @@ clock = at('2026-11-03 12:30:00');
 rep = (await call('/report?from=2026-11-03&to=2026-11-03', 'GET', null, boss)).body;
 assert.equal(rep.days[0].levels['50 / 100 NLH'].table_seconds, 3600 + 2 * 3600, 'T2 10:30–11:30 + T1 10:30–12:30');
 assert.equal(rep.days[0].levels['100 / 200 NLH'].table_seconds, 3600, 'T2 11:30–12:30');
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels');
+
+// Master fixes: list runs, change times, delete a table opened by mistake.
+assert.equal((await call('/operation/runs?day=2026-11-02', 'GET', null, maria2)).status, 403);
+let runs = (await call('/operation/runs?day=2026-11-02', 'GET', null, boss)).body.runs;
+const t3run = runs.find((r) => r.table_name === 'T3');
+assert.equal(t3run.seconds, 8 * 3600); assert.equal(t3run.sessions, 0);
+assert.equal((await call('/operation/runs/update', 'POST', { run_key: t3run.run_key, opened_at: at('2026-11-02 15:00:00') / 1000, closed_at: at('2026-11-02 14:00:00') / 1000 }, boss)).status, 400);
+assert.equal((await call('/operation/runs/update', 'POST', { run_key: t3run.run_key, opened_at: at('2026-11-02 15:00:00') / 1000, closed_at: at('2026-11-02 22:00:00') / 1000 }, boss)).status, 200);
+assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 21.5 * 3600 + 7 * 3600);
+assert.equal((await call('/operation/runs/delete', 'POST', { run_key: t3run.run_key }, boss)).status, 200);
+assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 21.5 * 3600, 'T3 removed');
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes');
