@@ -163,3 +163,22 @@ CREATE TABLE IF NOT EXISTS member_number_history(old_no TEXT PRIMARY KEY COLLATE
 -- A name typed on a PPM seat that staff linked to a member while the player was still at the table.
 -- seat_key = table|seat|typed name|seat-in time, so it only applies to that one sitting.
 CREATE TABLE IF NOT EXISTS ppm_seat_links(seat_key TEXT PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES members(id), created_at INTEGER NOT NULL, created_by TEXT NOT NULL DEFAULT '');
+
+-- Unify nationality spellings (Taiwanese / TW / 台灣 → Taiwan, …). Safe to run again.
+UPDATE members SET nationality='Taiwan' WHERE nationality<>'Taiwan' AND lower(trim(nationality)) IN ('taiwan','taiwanese','tw','twn','roc','republic of china','taiwan roc','台灣','臺灣','中華民國','台湾');
+UPDATE members SET nationality='Philippines' WHERE nationality<>'Philippines' AND lower(trim(nationality)) IN ('philippines','philippine','filipino','filipina','ph','phl','pilipinas','菲律賓','菲律宾');
+UPDATE members SET nationality='South Korea' WHERE nationality<>'South Korea' AND lower(trim(nationality)) IN ('south korea','korea','korean','republic of korea','rok','kr','kor','韓國','韩国','대한민국','한국');
+UPDATE members SET nationality='Japan' WHERE nationality<>'Japan' AND lower(trim(nationality)) IN ('japan','japanese','jp','jpn','日本');
+UPDATE members SET nationality='Hong Kong' WHERE nationality<>'Hong Kong' AND lower(trim(nationality)) IN ('hong kong','hongkong','hk','hkg','hong kong sar','香港');
+UPDATE members SET nationality='Macau' WHERE nationality<>'Macau' AND lower(trim(nationality)) IN ('macau','macao','mo','mac','澳門','澳门');
+UPDATE members SET nationality='China' WHERE nationality<>'China' AND lower(trim(nationality)) IN ('china','chinese','prc','cn','chn','people''s republic of china','mainland china','中國','中国','大陸','大陆');
+UPDATE members SET nationality='Singapore' WHERE nationality<>'Singapore' AND lower(trim(nationality)) IN ('singapore','singaporean','sg','sgp','新加坡');
+UPDATE members SET nationality='Thailand' WHERE nationality<>'Thailand' AND lower(trim(nationality)) IN ('thailand','thai','th','tha','泰國','泰国');
+UPDATE members SET nationality='Indonesia' WHERE nationality<>'Indonesia' AND lower(trim(nationality)) IN ('indonesia','indonesian','id','idn','印尼','印度尼西亞','印度尼西亚');
+UPDATE members SET nationality='Malaysia' WHERE nationality<>'Malaysia' AND lower(trim(nationality)) IN ('malaysia','malaysian','my','mys','馬來西亞','马来西亚');
+UPDATE members SET nationality='Vietnam' WHERE nationality<>'Vietnam' AND lower(trim(nationality)) IN ('vietnam','viet nam','vietnamese','vn','vnm','越南');
+UPDATE members SET nationality='India' WHERE nationality<>'India' AND lower(trim(nationality)) IN ('india','indian','in','ind','印度');
+UPDATE members SET nationality='United States' WHERE nationality<>'United States' AND lower(trim(nationality)) IN ('united states','united states of america','usa','us','u.s.','u.s.a.','america','american','美國','美国');
+UPDATE members SET nationality='Canada' WHERE nationality<>'Canada' AND lower(trim(nationality)) IN ('canada','canadian','ca','can','加拿大');
+UPDATE members SET nationality='Australia' WHERE nationality<>'Australia' AND lower(trim(nationality)) IN ('australia','australian','au','aus','澳洲','澳大利亞','澳大利亚');
+UPDATE members SET nationality='United Kingdom' WHERE nationality<>'United Kingdom' AND lower(trim(nationality)) IN ('united kingdom','uk','u.k.','gb','gbr','great britain','britain','british','england','english','英國','英国');

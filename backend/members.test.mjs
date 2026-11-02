@@ -270,4 +270,15 @@ assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t4 }
 assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.stats.all.secs, before6 + 9000, 'hours go to the linked member when the player leaves');
 assert.ok(!(await call('/sessions/unmatched', 'GET', null, maria.token)).body.refs.some((x) => x.member_ref === 'ELLY'));
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table');
+// Nationality: one spelling per country.
+assert.equal((await call('/members/EV-444444', 'PUT', { nationality: 'Taiwanese' }, boss.token)).status, 200);
+assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan');
+await call('/members/EV-444444', 'PUT', { nationality: '  korean ' }, boss.token);
+assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'South Korea');
+await call('/members/EV-444444', 'PUT', { nationality: 'Brazil' }, boss.token);
+assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Brazil', 'other countries kept as typed');
+sql.exec("UPDATE members SET nationality='台灣' WHERE member_no='EV-444444'");
+sql.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.member.nationality, 'Taiwan', 'old rows cleaned on deploy');
+
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality');

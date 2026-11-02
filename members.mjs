@@ -231,9 +231,36 @@ async function createMember(env, now, fields, groupId, source, actor, wantedNo) 
   throw new Error('Could not allocate a member number');
 }
 
+// One spelling per country, so reports never split "Taiwan" and "Taiwanese".
+export const NATIONALITIES = ['Taiwan', 'Philippines', 'South Korea', 'Japan', 'Hong Kong', 'Macau', 'China', 'Singapore', 'Thailand', 'Indonesia', 'Malaysia', 'Vietnam', 'India', 'United States', 'Canada', 'Australia', 'United Kingdom'];
+const NAT_ALIASES = {
+  'Taiwan': ['taiwan', 'taiwanese', 'tw', 'twn', 'roc', 'republic of china', 'taiwan roc', '台灣', '臺灣', '中華民國', '台湾'],
+  'Philippines': ['philippines', 'philippine', 'filipino', 'filipina', 'ph', 'phl', 'pilipinas', '菲律賓', '菲律宾'],
+  'South Korea': ['south korea', 'korea', 'korean', 'republic of korea', 'rok', 'kr', 'kor', '韓國', '韩国', '대한민국', '한국'],
+  'Japan': ['japan', 'japanese', 'jp', 'jpn', '日本'],
+  'Hong Kong': ['hong kong', 'hongkong', 'hk', 'hkg', 'hong kong sar', '香港'],
+  'Macau': ['macau', 'macao', 'mo', 'mac', '澳門', '澳门'],
+  'China': ['china', 'chinese', 'prc', 'cn', 'chn', "people's republic of china", 'mainland china', '中國', '中国', '大陸', '大陆'],
+  'Singapore': ['singapore', 'singaporean', 'sg', 'sgp', '新加坡'],
+  'Thailand': ['thailand', 'thai', 'th', 'tha', '泰國', '泰国'],
+  'Indonesia': ['indonesia', 'indonesian', 'id', 'idn', '印尼', '印度尼西亞', '印度尼西亚'],
+  'Malaysia': ['malaysia', 'malaysian', 'my', 'mys', '馬來西亞', '马来西亚'],
+  'Vietnam': ['vietnam', 'viet nam', 'vietnamese', 'vn', 'vnm', '越南'],
+  'India': ['india', 'indian', 'in', 'ind', '印度'],
+  'United States': ['united states', 'united states of america', 'usa', 'us', 'u.s.', 'u.s.a.', 'america', 'american', '美國', '美国'],
+  'Canada': ['canada', 'canadian', 'ca', 'can', '加拿大'],
+  'Australia': ['australia', 'australian', 'au', 'aus', '澳洲', '澳大利亞', '澳大利亚'],
+  'United Kingdom': ['united kingdom', 'uk', 'u.k.', 'gb', 'gbr', 'great britain', 'britain', 'british', 'england', 'english', '英國', '英国']
+};
+const NAT_LOOKUP = new Map(Object.entries(NAT_ALIASES).flatMap(([name, list]) => list.map((a) => [a, name])));
+export function normNationality(v) {
+  const s = str(v, 60);
+  return NAT_LOOKUP.get(s.toLowerCase().replace(/\s+/g, ' ').trim()) || s;
+}
 function pickFields(b) {
   const out = {};
   for (const k of PROFILE_FIELDS) if (k in b) out[k] = str(b[k], LIMITS[k]);
+  if ('nationality' in out) out.nationality = normNationality(out.nationality);
   return out;
 }
 

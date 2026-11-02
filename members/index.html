@@ -220,10 +220,13 @@ async function viewMembers(view) {
   });
   await load(false);
 }
+const NATIONALITIES = ['Taiwan', 'Philippines', 'South Korea', 'Japan', 'Hong Kong', 'Macau', 'China', 'Singapore', 'Thailand', 'Indonesia', 'Malaysia', 'Vietnam', 'India', 'United States', 'Canada', 'Australia', 'United Kingdom'];
+const natField = () => `<label class="f">Nationality<select name="nat_sel"><option value="">—</option>${NATIONALITIES.map((n) => `<option>${n}</option>`).join('')}<option value="other">Other…</option></select>
+  <input type="text" name="nationality" maxlength="60" placeholder="Type the country" hidden></label>`;
 const FIELDS = [['surname', 'Surname'], ['middle_name', 'Middle name'], ['family_name', 'Family name'], ['nickname', 'Nickname'], ['nationality', 'Nationality'], ['birthday', 'Birthday', 'date'], ['passport_id', 'Passport / ID'], ['email', 'Email', 'email'], ['phone', 'Phone'], ['whatsapp', 'WhatsApp'], ['telegram', 'Telegram'], ['line', 'LINE'], ['referral_id', 'Referral ID'], ['language', 'Language']];
 function memberDialog(gs) {
   return `<dialog id="md"><form method="dialog" id="mf"><h2 id="mdTitle">New member</h2>
-    <div class="form">${FIELDS.map(([k, label, type]) => `<label class="f">${label}<input type="${type || 'text'}" name="${k}" maxlength="120"></label>`).join('')}
+    <div class="form">${FIELDS.map(([k, label, type]) => k === 'nationality' ? natField() : `<label class="f">${label}<input type="${type || 'text'}" name="${k}" maxlength="120"></label>`).join('')}
       <label class="f" id="mdGroup">Group<select name="group_id"><option value="">No group yet</option>${groupOptions(gs)}</select></label>
       <label class="f" id="mdNo">Member no. (optional)<span class="evno"><span aria-hidden="true">EV-</span><input type="text" name="member_no" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="6 digits, blank = next number" aria-label="Member number, 6 digits after EV-"></span></label></div>
     <div id="mdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save" id="mdSave">Save</button></div></form></dialog>`;
@@ -234,10 +237,15 @@ function openMemberDialog(view, member, save) {
   view.querySelector('#mdGroup').hidden = !!member; view.querySelector('#mdNo').hidden = !!member;
   if (member) FIELDS.forEach(([k]) => { if (k !== 'passport_id') f.elements[k].value = member[k] || ''; });
   if (member) f.elements.passport_id.placeholder = member.passport_last4 ? '•••• ' + member.passport_last4 + ' (leave blank to keep)' : '';
+  const nat = (member && member.nationality) || '';
+  f.elements.nat_sel.value = !nat ? '' : NATIONALITIES.includes(nat) ? nat : 'other';
+  f.elements.nationality.hidden = f.elements.nat_sel.value !== 'other';
+  f.elements.nat_sel.onchange = () => { const other = f.elements.nat_sel.value === 'other'; f.elements.nationality.hidden = !other; if (other) { f.elements.nationality.value = ''; f.elements.nationality.focus(); } };
   flash(view.querySelector('#mdMsg'), '');
   view.querySelector('#mdSave').onclick = async (e) => {
     e.preventDefault(); const data = {};
     FIELDS.forEach(([k]) => { const v = f.elements[k].value.trim(); if (!member || k !== 'passport_id' || v) data[k] = v; });
+    if (f.elements.nat_sel.value !== 'other') data.nationality = f.elements.nat_sel.value;
     if (!member) {
       data.group_id = f.elements.group_id.value || null;
       const digits = f.elements.member_no.value.replace(/\D/g, '');
