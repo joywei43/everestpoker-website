@@ -34,6 +34,9 @@ button.go[disabled]{opacity:.6}
 .tick{width:56px;height:56px;border-radius:50%;background:var(--gold);color:#1B1406;display:flex;align-items:center;justify-content:center}
 .done p{margin:0;color:#3A3730}
 footer{padding:18px 16px 28px;text-align:center;font-size:12px;color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tg{margin-top:14px;display:flex;align-items:center;gap:10px;background:#229ED9;color:#fff;text-decoration:none;border-radius:14px;padding:14px 16px;font-weight:600}
+.tg span:first-of-type{flex:1}.tg:hover{background:#1D8BC0}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 </head>
@@ -53,12 +56,12 @@ footer{padding:18px 16px 28px;text-align:center;font-size:12px;color:var(--muted
 'use strict';
 const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
 const T = {
-  en: { title: 'Member registration', sub: 'Takes 30 seconds. Our staff will complete the rest at the counter.', name: 'Full name', nick: 'Nickname', bday: 'Date of birth', contact: 'Phone, WhatsApp or Telegram', optional: 'optional', agree: 'I am 21 or older, my information is true, and I agree to the Everest Poker Room house rules.', submit: 'Register', sending: 'Sending…', required: 'Please fill in your name and date of birth, and tick the box.', age: 'Members must be 21 years or older.', many: 'Too many registrations from this device. Please ask the staff.', fail: 'Sending failed. Please try again or ask the staff.', doneTitle: 'Thank you!', done1: 'Your registration has been received.', done2: 'Please show your ID at the counter to receive your member number.', again: 'Register another person', foot: '21 years old and above only. Gambling can be addictive. Know when to stop.' },
-  zh: { title: '會員註冊', sub: '只要 30 秒，其餘資料由櫃台協助完成。', name: '姓名', nick: '暱稱', bday: '出生日期', contact: '電話、WhatsApp 或 Telegram', optional: '選填', agree: '我已年滿 21 歲，所填資料屬實，並同意遵守 Everest Poker Room 的規定。', submit: '送出註冊', sending: '送出中…', required: '請填寫姓名與出生日期，並勾選同意。', age: '會員須年滿 21 歲。', many: '此裝置送出次數過多，請洽現場人員。', fail: '送出失敗，請再試一次或洽現場人員。', doneTitle: '感謝您的註冊！', done1: '我們已收到您的註冊資料。', done2: '請至櫃台出示證件，完成確認並取得會員號碼。', again: '幫其他人註冊', foot: '僅限 21 歲以上。博弈可能使人上癮，請適可而止。' },
-  ja: { title: '会員登録', sub: '30秒で完了。残りは受付でスタッフがご案内します。', name: '氏名', nick: 'ニックネーム', bday: '生年月日', contact: '電話・WhatsApp・Telegram', optional: '任意', agree: '21歳以上であり、記入内容が正しく、Everest Poker Room の規則に同意します。', submit: '登録する', sending: '送信中…', required: '氏名と生年月日を入力し、チェックを入れてください。', age: '会員は21歳以上である必要があります。', many: 'この端末からの送信が多すぎます。スタッフにお問い合わせください。', fail: '送信に失敗しました。もう一度お試しいただくか、スタッフにお問い合わせください。', doneTitle: 'ありがとうございます！', done1: '登録を受け付けました。', done2: '受付で身分証をご提示のうえ、会員番号をお受け取りください。', again: '別の方を登録する', foot: '21歳以上の方のみ。ギャンブルは依存症になることがあります。' },
-  ko: { title: '회원 등록', sub: '30초면 끝납니다. 나머지는 카운터에서 도와드립니다.', name: '이름', nick: '닉네임', bday: '생년월일', contact: '전화, WhatsApp 또는 Telegram', optional: '선택', agree: '만 21세 이상이며, 입력한 정보가 사실이고, Everest Poker Room 규정에 동의합니다.', submit: '등록하기', sending: '전송 중…', required: '이름과 생년월일을 입력하고 체크해주세요.', age: '회원은 만 21세 이상이어야 합니다.', many: '이 기기에서 너무 많이 제출되었습니다. 직원에게 문의해주세요.', fail: '전송에 실패했습니다. 다시 시도하거나 직원에게 문의해주세요.', doneTitle: '감사합니다!', done1: '등록이 접수되었습니다.', done2: '카운터에서 신분증을 보여주시고 회원 번호를 받으세요.', again: '다른 사람 등록하기', foot: '만 21세 이상만 이용 가능합니다. 도박은 중독될 수 있습니다.' },
-  th: { title: 'ลงทะเบียนสมาชิก', sub: 'ใช้เวลาเพียง 30 วินาที ส่วนที่เหลือเจ้าหน้าที่จะช่วยที่เคาน์เตอร์', name: 'ชื่อ-นามสกุล', nick: 'ชื่อเล่น', bday: 'วันเกิด', contact: 'โทรศัพท์ WhatsApp หรือ Telegram', optional: 'ไม่บังคับ', agree: 'ฉันอายุ 21 ปีขึ้นไป ข้อมูลเป็นความจริง และยอมรับกฎของ Everest Poker Room', submit: 'ลงทะเบียน', sending: 'กำลังส่ง…', required: 'กรุณากรอกชื่อและวันเกิด และทำเครื่องหมายยอมรับ', age: 'สมาชิกต้องมีอายุ 21 ปีขึ้นไป', many: 'ส่งข้อมูลจากอุปกรณ์นี้มากเกินไป กรุณาติดต่อเจ้าหน้าที่', fail: 'ส่งข้อมูลไม่สำเร็จ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่', doneTitle: 'ขอบคุณ!', done1: 'เราได้รับการลงทะเบียนของคุณแล้ว', done2: 'กรุณาแสดงบัตรประจำตัวที่เคาน์เตอร์เพื่อรับหมายเลขสมาชิก', again: 'ลงทะเบียนให้ผู้อื่น', foot: 'สำหรับผู้มีอายุ 21 ปีขึ้นไปเท่านั้น การพนันอาจทำให้เสพติด' },
-  vi: { title: 'Đăng ký thành viên', sub: 'Chỉ mất 30 giây. Nhân viên sẽ hoàn tất phần còn lại tại quầy.', name: 'Họ và tên', nick: 'Biệt danh', bday: 'Ngày sinh', contact: 'Điện thoại, WhatsApp hoặc Telegram', optional: 'không bắt buộc', agree: 'Tôi từ 21 tuổi trở lên, thông tin là đúng sự thật và tôi đồng ý với nội quy của Everest Poker Room.', submit: 'Đăng ký', sending: 'Đang gửi…', required: 'Vui lòng nhập họ tên, ngày sinh và đánh dấu đồng ý.', age: 'Thành viên phải từ 21 tuổi trở lên.', many: 'Thiết bị này đã gửi quá nhiều lần. Vui lòng liên hệ nhân viên.', fail: 'Gửi thất bại. Vui lòng thử lại hoặc liên hệ nhân viên.', doneTitle: 'Cảm ơn bạn!', done1: 'Chúng tôi đã nhận được đăng ký của bạn.', done2: 'Vui lòng xuất trình giấy tờ tùy thân tại quầy để nhận mã thành viên.', again: 'Đăng ký cho người khác', foot: 'Chỉ dành cho người từ 21 tuổi trở lên. Cờ bạc có thể gây nghiện.' }
+  en: { title: 'Member registration', sub: 'Takes 30 seconds. Our staff will complete the rest at the counter.', surname: 'Surname', given: 'Given name', tg: 'Live table status on Telegram', nick: 'Nickname', bday: 'Date of birth', contact: 'Phone, WhatsApp or Telegram', optional: 'optional', agree: 'I am 21 or older, my information is true, and I agree to the Everest Poker Room house rules.', submit: 'Register', sending: 'Sending…', required: 'Please fill in your surname, given name and date of birth, and tick the box.', age: 'Members must be 21 years or older.', many: 'Too many registrations from this device. Please ask the staff.', fail: 'Sending failed. Please try again or ask the staff.', doneTitle: 'Thank you!', done1: 'Your registration has been received.', done2: 'Please show your ID at the counter to receive your member number.', again: 'Register another person', foot: '21 years old and above only. Gambling can be addictive. Know when to stop.' },
+  zh: { title: '會員註冊', sub: '只要 30 秒，其餘資料由櫃台協助完成。', surname: '姓', given: '名', tg: 'Telegram 即時桌況', nick: '暱稱', bday: '出生日期', contact: '電話、WhatsApp 或 Telegram', optional: '選填', agree: '我已年滿 21 歲，所填資料屬實，並同意遵守 Everest Poker Room 的規定。', submit: '送出註冊', sending: '送出中…', required: '請填寫姓、名與出生日期，並勾選同意。', age: '會員須年滿 21 歲。', many: '此裝置送出次數過多，請洽現場人員。', fail: '送出失敗，請再試一次或洽現場人員。', doneTitle: '感謝您的註冊！', done1: '我們已收到您的註冊資料。', done2: '請至櫃台出示證件，完成確認並取得會員號碼。', again: '幫其他人註冊', foot: '僅限 21 歲以上。博弈可能使人上癮，請適可而止。' },
+  ja: { title: '会員登録', sub: '30秒で完了。残りは受付でスタッフがご案内します。', surname: '姓', given: '名', tg: 'Telegram でテーブル状況を見る', nick: 'ニックネーム', bday: '生年月日', contact: '電話・WhatsApp・Telegram', optional: '任意', agree: '21歳以上であり、記入内容が正しく、Everest Poker Room の規則に同意します。', submit: '登録する', sending: '送信中…', required: '姓・名・生年月日を入力し、チェックを入れてください。', age: '会員は21歳以上である必要があります。', many: 'この端末からの送信が多すぎます。スタッフにお問い合わせください。', fail: '送信に失敗しました。もう一度お試しいただくか、スタッフにお問い合わせください。', doneTitle: 'ありがとうございます！', done1: '登録を受け付けました。', done2: '受付で身分証をご提示のうえ、会員番号をお受け取りください。', again: '別の方を登録する', foot: '21歳以上の方のみ。ギャンブルは依存症になることがあります。' },
+  ko: { title: '회원 등록', sub: '30초면 끝납니다. 나머지는 카운터에서 도와드립니다.', surname: '성', given: '이름', tg: 'Telegram 실시간 테이블 현황', nick: '닉네임', bday: '생년월일', contact: '전화, WhatsApp 또는 Telegram', optional: '선택', agree: '만 21세 이상이며, 입력한 정보가 사실이고, Everest Poker Room 규정에 동의합니다.', submit: '등록하기', sending: '전송 중…', required: '성, 이름, 생년월일을 입력하고 체크해주세요.', age: '회원은 만 21세 이상이어야 합니다.', many: '이 기기에서 너무 많이 제출되었습니다. 직원에게 문의해주세요.', fail: '전송에 실패했습니다. 다시 시도하거나 직원에게 문의해주세요.', doneTitle: '감사합니다!', done1: '등록이 접수되었습니다.', done2: '카운터에서 신분증을 보여주시고 회원 번호를 받으세요.', again: '다른 사람 등록하기', foot: '만 21세 이상만 이용 가능합니다. 도박은 중독될 수 있습니다.' },
+  th: { title: 'ลงทะเบียนสมาชิก', sub: 'ใช้เวลาเพียง 30 วินาที ส่วนที่เหลือเจ้าหน้าที่จะช่วยที่เคาน์เตอร์', surname: 'นามสกุล', given: 'ชื่อ', tg: 'ดูสถานะโต๊ะสดบน Telegram', nick: 'ชื่อเล่น', bday: 'วันเกิด', contact: 'โทรศัพท์ WhatsApp หรือ Telegram', optional: 'ไม่บังคับ', agree: 'ฉันอายุ 21 ปีขึ้นไป ข้อมูลเป็นความจริง และยอมรับกฎของ Everest Poker Room', submit: 'ลงทะเบียน', sending: 'กำลังส่ง…', required: 'กรุณากรอกนามสกุล ชื่อ และวันเกิด และทำเครื่องหมายยอมรับ', age: 'สมาชิกต้องมีอายุ 21 ปีขึ้นไป', many: 'ส่งข้อมูลจากอุปกรณ์นี้มากเกินไป กรุณาติดต่อเจ้าหน้าที่', fail: 'ส่งข้อมูลไม่สำเร็จ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่', doneTitle: 'ขอบคุณ!', done1: 'เราได้รับการลงทะเบียนของคุณแล้ว', done2: 'กรุณาแสดงบัตรประจำตัวที่เคาน์เตอร์เพื่อรับหมายเลขสมาชิก', again: 'ลงทะเบียนให้ผู้อื่น', foot: 'สำหรับผู้มีอายุ 21 ปีขึ้นไปเท่านั้น การพนันอาจทำให้เสพติด' },
+  vi: { title: 'Đăng ký thành viên', sub: 'Chỉ mất 30 giây. Nhân viên sẽ hoàn tất phần còn lại tại quầy.', surname: 'Họ', given: 'Tên', tg: 'Tình trạng bàn trực tiếp trên Telegram', nick: 'Biệt danh', bday: 'Ngày sinh', contact: 'Điện thoại, WhatsApp hoặc Telegram', optional: 'không bắt buộc', agree: 'Tôi từ 21 tuổi trở lên, thông tin là đúng sự thật và tôi đồng ý với nội quy của Everest Poker Room.', submit: 'Đăng ký', sending: 'Đang gửi…', required: 'Vui lòng nhập họ, tên, ngày sinh và đánh dấu đồng ý.', age: 'Thành viên phải từ 21 tuổi trở lên.', many: 'Thiết bị này đã gửi quá nhiều lần. Vui lòng liên hệ nhân viên.', fail: 'Gửi thất bại. Vui lòng thử lại hoặc liên hệ nhân viên.', doneTitle: 'Cảm ơn bạn!', done1: 'Chúng tôi đã nhận được đăng ký của bạn.', done2: 'Vui lòng xuất trình giấy tờ tùy thân tại quầy để nhận mã thành viên.', again: 'Đăng ký cho người khác', foot: 'Chỉ dành cho người từ 21 tuổi trở lên. Cờ bạc có thể gây nghiện.' }
 };
 const LANG_KEY = 'everest_register_language';
 let lang = localStorage.getItem(LANG_KEY) || ({ zh: 'zh', ja: 'ja', ko: 'ko', th: 'th', vi: 'vi' }[(navigator.language || 'en').slice(0, 2)] || 'en');
@@ -79,26 +82,29 @@ function form(values = {}, error = '') {
   chrome();
   main.innerHTML = `<form id="rf" novalidate>
     <h2>${t('title')}</h2><p class="sub">${t('sub')}</p>
-    <label class="f">${t('name')}<input type="text" id="name" autocomplete="name" maxlength="120" required value="${esc(values.name)}"></label>
+    <div class="two">
+      <label class="f">${t('surname')}<input type="text" id="surname" autocomplete="family-name" maxlength="80" required value="${esc(values.surname)}"></label>
+      <label class="f">${t('given')}<input type="text" id="given" autocomplete="given-name" maxlength="80" required value="${esc(values.given)}"></label>
+    </div>
     <label class="f"><span>${t('nick')} <span class="opt">(${t('optional')})</span></span><input type="text" id="nick" autocomplete="nickname" maxlength="60" value="${esc(values.nick)}"></label>
     <label class="f">${t('bday')}<input type="date" id="bday" autocomplete="bday" required value="${esc(values.bday)}"></label>
-    <label class="f"><span>${t('contact')} <span class="opt">(${t('optional')})</span></span><input type="tel" id="contact" autocomplete="tel" maxlength="60" value="${esc(values.contact)}"></label>
     <label class="check"><input type="checkbox" id="agree" ${values.agree ? 'checked' : ''}><span>${t('agree')}</span></label>
     ${error ? `<div class="err" role="alert">${esc(error)}</div>` : ''}
-    <button class="go" id="go">${t('submit')}</button></form>`;
+    <button class="go" id="go">${t('submit')}</button></form>
+    <a class="tg" href="https://t.me/MidoriPoker" target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.5 4.1 2.9 11.3c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.3 4.8 3.6c.9.5 1.5.2 1.7-.8l3.1-14.8c.3-1.3-.5-1.9-1.5-1.5zM8.6 14.1l9.2-5.8c.4-.3.8-.1.5.2l-7.9 7.1-.3 3.3-1.5-4.8z"/></svg><span>${t('tg')}</span><span aria-hidden="true">›</span></a>`;
   document.getElementById('rf').onsubmit = submit;
 }
-const read = () => ({ name: document.getElementById('name').value.trim(), nick: document.getElementById('nick').value.trim(), bday: document.getElementById('bday').value, contact: document.getElementById('contact').value.trim(), agree: document.getElementById('agree').checked });
+const read = () => ({ surname: document.getElementById('surname').value.trim(), given: document.getElementById('given').value.trim(), nick: document.getElementById('nick').value.trim(), bday: document.getElementById('bday').value, agree: document.getElementById('agree').checked });
 async function submit(e) {
   e.preventDefault();
   const v = read();
-  if (!v.name || !v.bday || !v.agree) return form(v, t('required'));
+  if (!v.surname || !v.given || !v.bday || !v.agree) return form(v, t('required'));
   if (age(v.bday) < 21) return form(v, t('age'));
   const btn = document.getElementById('go'); btn.disabled = true; btn.textContent = t('sending');
   try {
-    // Contact goes in "phone"; staff move it to WhatsApp or Telegram in the console if needed.
+    // familyName is the given name, the same field the original registration form used.
     const res = await fetch(API + '/register', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ surname: v.name, nickName: v.nick, birthday: v.bday, phone: v.contact, language: lang, agreedTerms: true, agreedAge: true, agreedPolicy: true }) });
+      body: JSON.stringify({ surname: v.surname, familyName: v.given, nickName: v.nick, birthday: v.bday, language: lang, agreedTerms: true, agreedAge: true, agreedPolicy: true }) });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       return form(v, res.status === 429 ? t('many') : /21/.test(d.error || '') ? t('age') : t('fail'));
@@ -110,7 +116,8 @@ function done() {
   chrome();
   main.innerHTML = `<div class="done" role="status"><div class="tick"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></div>
     <h2>${t('doneTitle')}</h2><p>${t('done1')}</p><p><b>${t('done2')}</b></p>
-    <button class="go" id="again" style="margin-top:8px;width:100%">${t('again')}</button></div>`;
+    <button class="go" id="again" style="margin-top:8px;width:100%">${t('again')}</button></div>
+    <a class="tg" href="https://t.me/MidoriPoker" target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.5 4.1 2.9 11.3c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.3 4.8 3.6c.9.5 1.5.2 1.7-.8l3.1-14.8c.3-1.3-.5-1.9-1.5-1.5zM8.6 14.1l9.2-5.8c.4-.3.8-.1.5.2l-7.9 7.1-.3 3.3-1.5-4.8z"/></svg><span>${t('tg')}</span><span aria-hidden="true">›</span></a>`;
   document.getElementById('again').onclick = () => form();
 }
 sel.onchange = () => { const v = document.getElementById('rf') ? read() : null; lang = sel.value; localStorage.setItem(LANG_KEY, lang); v ? form(v) : done(); };
