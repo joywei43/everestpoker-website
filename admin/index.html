@@ -7,7 +7,7 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <title>Everest Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Ultra&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <script src="../waiting-list/config.js"></script>
 <style>
 :root{--ink:#121212;--ink2:#1D1C1A;--ink3:#2C2719;--gold:#D1A647;--gold-d:#BF9339;--bg:#EEF1F5;--card:#FFFFFF;--line:#DDE3EA;--line2:#EEF1F5;--text:#1B2430;--muted:#5B6675;--blue:#1F5FA8;--blue-d:#16467D;--blue-l:#E3EDF9;--green:#1E6B43;--green-l:#DFF3E7;--red:#B42318;--red-l:#FDECEA;--amber:#6B4A00;--amber-l:#FFF1D1;--note:#FFF8E6;--note-line:#EBD9A6}
@@ -75,6 +75,32 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (min-width:700px){.wide{grid-column:span 2}}
 @media (max-width:640px){main{padding:16px}nav.side{gap:12px}.navlinks{flex-direction:row;flex-wrap:wrap}.staffbox{margin-top:0}}
+.bbj{background:#0B0B0B;color:#fff;border-radius:14px;padding:18px 16px 16px;text-align:center;font-family:'Ultra',Georgia,serif;letter-spacing:.5px;margin-bottom:16px}
+.bbj-date{font-size:clamp(14px,2.2vw,20px);opacity:.92}.bbj-main{font-size:clamp(28px,6vw,64px);line-height:1.1;margin:4px 0}.bbj-res{font-size:clamp(15px,2.6vw,26px)}
+.floor{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);gap:16px;align-items:start}@media(max-width:900px){.floor{grid-template-columns:1fr}}
+.floor-tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px 14px}
+.ptable{position:relative;aspect-ratio:1.55;margin:18px 20px;cursor:pointer;border-radius:999px}
+.ptable .felt{position:absolute;inset:0;border-radius:999px;background:radial-gradient(ellipse at 50% 40%,#2F7A52,#1B4D33);border:6px solid #6B4A2A;box-shadow:inset 0 0 0 2px rgba(255,255,255,.12),0 4px 10px rgba(0,0,0,.18);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:2px;transition:box-shadow .15s}
+.ptable .felt b{font-size:18px}.ptable .felt span{font-size:12px;opacity:.9}.ptable .felt small{font-size:11px;opacity:.75}
+.ptable.off .felt{background:#8B96A3;border-color:#B5BDC7}.ptable.sel .felt{box-shadow:0 0 0 4px var(--gold),0 6px 16px rgba(0,0,0,.25)}
+.ptable:focus-visible{outline:3px solid var(--blue);outline-offset:6px}
+.ptable .dealer{position:absolute;left:50%;top:-2px;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:#fff;border:1px solid #CDD5DF;font-size:10px;font-weight:700;display:grid;place-items:center;color:#333}
+.ptable .seat{position:absolute;transform:translate(-50%,-50%)}
+.seat-e{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#fff;border:1.5px dashed #AEB8C4;font-size:11px;color:#8792A0}
+.seat-p{padding:0;border:0;background:none;cursor:pointer;border-radius:50%}.seat-p:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.av{display:inline-grid;place-items:center;border-radius:50%;background:#F4E7C6;color:#6B4A00;font-weight:700;overflow:hidden;flex:none;border:3px solid var(--green)}
+.av.rest{border-color:#E2B04A}.av.guest{background:#E7ECF2;color:#4A5563}.av img{width:100%;height:100%;object-fit:cover}
+.floor-side{background:var(--bg);border-radius:12px;padding:14px;min-height:200px}
+.plist{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.prow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit}
+.prow:hover{border-color:var(--gold)}.prow .pn{flex:1;min-width:0;display:flex;flex-direction:column}.prow .pn b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow small{color:var(--muted);font-size:12px}.prow .pv{display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+.pcard{position:absolute;z-index:60;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 40px rgba(15,27,45,.22);padding:14px 16px}
+.pc-x{position:absolute;right:8px;top:6px;border:0;background:none;font-size:22px;cursor:pointer;color:var(--muted)}
+.pc-now{margin:10px 0;font-size:13px}.pc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pc-st{background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.6}
+.pcard .k{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}.pc-t{width:100%;font-size:12px;border-collapse:collapse}.pc-t td{padding:3px 4px;border-bottom:1px solid var(--line2)}
+.floor-side .k{font-size:12px;color:var(--muted)}
+.pc-note{margin-top:8px;background:var(--note);border:1px solid var(--note-line);border-radius:8px;padding:6px 8px;font-size:12px;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -543,7 +569,64 @@ async function viewGroups(view) {
 }
 
 // ---------- Daily operation ----------
-let operationTimer = null;
+let operationTimer = null, floorTable = null;
+const photoCache = new Map();
+const initials = (n) => String(n || '?').trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+const ordinalDate = (s) => { const d = new Date(s + 'T00:00:00Z'), n = d.getUTCDate(), suf = n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' })[n % 10] || 'TH'; return d.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }).toUpperCase() + ' ' + n + suf + ', ' + d.getUTCFullYear(); };
+const peso2 = (n) => '₱' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function avatar(p, size = 40) {
+  const m = p.member, label = m ? (m.nickname || m.name) : p.ref;
+  const cls = 'av ' + (p.status === 'rest' ? 'rest' : 'on') + (m ? '' : ' guest');
+  return `<span class="${cls}" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.36)}px" ${m && m.has_photo ? `data-photo="${esc(m.member_no)}"` : ''}>${esc(initials(label))}</span>`;
+}
+function loadPhotos(root) {
+  root.querySelectorAll('[data-photo]').forEach(async (el) => {
+    const no = el.dataset.photo;
+    try {
+      if (!photoCache.has(no)) photoCache.set(no, api('/members/' + encodeURIComponent(no) + '/photo').then((r) => r.data));
+      const src = await photoCache.get(no); el.textContent = ''; const img = new Image(); img.alt = ''; img.src = src; el.appendChild(img);
+    } catch (e) { photoCache.delete(no); }
+  });
+}
+// Oval table with 9 seats; the dealer sits at the top.
+function tableOval(t, selected) {
+  const by = new Map((t.players || []).map((p) => [p.seat, p]));
+  const seats = Array.from({ length: 9 }, (_, i) => {
+    const a = (-90 + 36 * (i + 1)) * Math.PI / 180, x = 50 + 47 * Math.cos(a), y = 50 + 44 * Math.sin(a), p = by.get(i + 1);
+    return `<span class="seat" style="left:${x.toFixed(1)}%;top:${y.toFixed(1)}%">${p ? `<button type="button" class="seat-p" data-seat="${esc(t.name)}|${p.seat}" title="Seat ${p.seat} · ${esc(p.member ? (p.member.nickname || p.member.name) : p.ref)}">${avatar(p, 34)}</button>` : `<span class="seat-e">${i + 1}</span>`}</span>`;
+  }).join('');
+  return `<div class="ptable ${t.running ? '' : 'off'} ${selected ? 'sel' : ''}" role="button" tabindex="0" data-table="${esc(t.name)}" aria-label="${esc(t.name)}: ${t.seated + t.resting} of 9 seated">
+    <div class="felt"><b>${esc(t.name)}</b><span>${t.running ? esc(t.game_type + ' ' + t.blinds) : 'Closed'}</span><small>${t.running ? `${t.seated + t.resting}/9 · ${hm(t.run_seconds)}` : ''}</small></div>
+    <span class="dealer" aria-hidden="true">D</span>${seats}</div>`;
+}
+async function playerCard(view, p, anchor) {
+  view.querySelector('#pcard')?.remove();
+  const card = document.createElement('div'); card.id = 'pcard'; card.className = 'pcard'; card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', 'Player');
+  const name = p.member ? (p.member.nickname || p.member.name) : p.ref;
+  const now = `<div class="pc-now"><span class="chip ${p.status === 'rest' ? 'amber' : 'green'}">${p.status === 'rest' ? 'Resting' : 'Playing'}</span> ${esc(p.table)} · Seat ${p.seat} · buy-in <b>${peso(p.buy_in)}</b> · ${hm(p.active_seconds)}${p.rest_seconds ? ' · rest ' + hm(p.rest_seconds) : ''}</div>`;
+  card.innerHTML = `<button type="button" class="pc-x" aria-label="Close">×</button><div class="row" style="gap:12px;flex-wrap:nowrap">${avatar(p, 52)}<div><b style="font-size:17px">${esc(name)}</b>
+    <div class="small muted">${p.member ? `<span class="mono">${esc(p.member.member_no)}</span>${p.member.name && p.member.name !== name ? ' · ' + esc(p.member.name) : ''}${p.member.nationality ? ' · ' + esc(p.member.nationality) : ''}${p.member.group_name ? ' · ' + esc(p.member.group_name) : ''}` : 'Not matched to a member'}</div></div></div>${now}<div id="pcBody" class="small muted">${p.member ? 'Loading history…' : `<a href="#/unmatchedppm">Link this player in Unmatched PPM →</a>`}</div>`;
+  document.body.appendChild(card);
+  const r = anchor.getBoundingClientRect(), w = Math.min(360, window.innerWidth - 24);
+  card.style.width = w + 'px';
+  card.style.left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2)) + 'px';
+  card.style.top = (window.scrollY + Math.min(r.bottom + 8, window.innerHeight - 340)) + 'px';
+  const close = () => { card.remove(); document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', esc_); };
+  const outside = (e) => { if (!card.contains(e.target)) close(); };
+  const esc_ = (e) => { if (e.key === 'Escape') close(); };
+  setTimeout(() => { document.addEventListener('mousedown', outside); document.addEventListener('keydown', esc_); }, 0);
+  card.querySelector('.pc-x').onclick = close;
+  loadPhotos(card);
+  if (!p.member) return;
+  try {
+    const d = await api('/members/' + encodeURIComponent(p.member.member_no));
+    const st = (x, label) => `<div class="pc-st"><div class="k">${label}</div><b>${x.days}</b> day${x.days === 1 ? '' : 's'} · <b>${hm(x.secs)}</b><br>W/L <b style="color:${x.win_loss > 0 ? 'var(--green)' : x.win_loss < 0 ? 'var(--red)' : 'inherit'}">${x.with_cash_out ? signedPeso(x.win_loss) : '—'}</b> · ${restBadge(x.rest_secs, x.secs)}<br>Buy-in ${peso(x.buy_in)} · rewards ${peso(x.rewards)}</div>`;
+    card.querySelector('#pcBody').classList.remove('muted');
+    card.querySelector('#pcBody').innerHTML = `<div class="pc-grid">${st(d.stats.last30, 'Last 30 days')}${st(d.stats.all, 'All time')}</div>
+      <div class="k" style="margin-top:10px">Recent sessions</div><table class="pc-t">${d.sessions.slice(0, 5).map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.table_name)} · ${esc(x.blinds)}</td><td class="num">${hm(x.active_seconds)}</td><td class="num" style="color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td></tr>`).join('') || '<tr><td class="muted">First visit</td></tr>'}</table>
+      ${d.member.staff_notes ? `<div class="pc-note">${esc(d.member.staff_notes)}</div>` : ''}<a class="btn sm" style="margin-top:10px" href="#/member/${encodeURIComponent(p.member.member_no)}">Open profile →</a>`;
+  } catch (e) { card.querySelector('#pcBody').textContent = e.message; }
+}
 async function viewOperation(view) {
   clearTimeout(operationTimer);
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -553,29 +636,39 @@ async function viewOperation(view) {
   const dt = (t) => t ? fmt(t, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
   const prevDay = d.history[0] ? d.history[0].day : null;
   const nextDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(d.day + 'T00:00:00Z') + 864e5));
-  const big = (k, val, sub, extra = '') => `<div class="tile" ${extra}><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub}</div></div>`;
+  const big = (k, val, sub) => `<div class="tile"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub}</div></div>`;
+  const tables = d.tables || [];
+  if (!tables.find((t) => t.name === floorTable)) floorTable = (tables.find((t) => t.running && (t.players || []).length) || tables.find((t) => t.running) || tables[0] || {}).name || null;
+  const sel = tables.find((t) => t.name === floorTable);
+  const bbj = d.bbj ? `<section class="bbj" aria-label="Bad Beat Jackpot"><div class="bbj-date">${esc(ordinalDate(d.bbj.day))}</div><div class="bbj-main">MAIN: ${peso2(d.bbj.main)}</div><div class="bbj-res">1st Reserved: ${peso2(d.bbj.reserve)}</div></section>`
+    : (isManager() ? `<div class="msg">Bad Beat Jackpot board: enter Main and 1st Reserved in <a href="#/operationreport">Operation Report</a> (click a day).</div>` : '');
   view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Live Operation</h1>
       <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A day starts at 12:00, or when the first table opens that morning.</p></div>
-    <div class="row">${prevDay ? `<a class="btn" href="#/liveoperation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/liveoperation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/liveoperation">Today</a>`}</div></div>
-    ${d.is_today ? `<section class="card"><div class="row between" style="margin-bottom:10px"><h2>Tables now <span class="small muted" style="font-weight:400">· ${d.open_tables} open · ${v.at_table_now} players</span></h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
-      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${d.tables.map((t) => `<div class="tile" style="${t.running ? 'border-color:var(--green)' : 'opacity:.6'}">
-        <div class="row between"><b style="font-size:18px">${esc(t.name)}</b><span class="chip ${t.running ? 'green' : ''}">${t.running ? 'Open' : 'Closed'}</span></div>
-        ${t.running ? `<div style="margin-top:6px"><b>${esc(t.game_type)} ${esc(t.blinds)}</b></div>
-        <div class="seats" role="img" aria-label="${t.seated} playing, ${t.resting} resting, ${t.empty} empty" style="display:flex;gap:4px;margin:8px 0">${'<i class="st on"></i>'.repeat(t.seated)}${'<i class="st rest"></i>'.repeat(t.resting)}${'<i class="st"></i>'.repeat(Math.max(0, t.empty))}</div>
-        <div class="small muted">${t.seated + t.resting}/9 seated${t.resting ? ' · ' + t.resting + ' resting' : ''}${t.waiting ? ' · ' + t.waiting + ' waiting' : ''}</div>
-        <div class="small muted">Running ${hm(t.run_seconds)} · on table ${peso(t.buy_in_on_table)}</div>` : '<div class="small muted" style="margin-top:6px">Not running</div>'}</div>`).join('')}</div></section>` : ''}
+    <div class="row">${prevDay ? `<a class="btn" href="#/liveoperation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/liveoperation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/liveoperation">Today</a>`}<a class="btn" href="#/operationreport">Operation Report →</a></div></div>
+    ${bbj}
+    ${d.is_today ? `<section class="card"><div class="row between" style="margin-bottom:12px"><h2>Floor <span class="small muted" style="font-weight:400">· ${d.open_tables} open · ${v.at_table_now} players</span></h2><span class="small muted">Live from PPM · refreshes every 30 s · tap a table, then a player</span></div>
+      <div class="floor"><div class="floor-tables">${tables.map((t) => tableOval(t, t.name === floorTable)).join('')}</div>
+      <aside class="floor-side" id="side">${sel ? `<div class="row between"><div><b style="font-size:20px">${esc(sel.name)}</b> <span class="chip ${sel.running ? 'green' : ''}">${sel.running ? 'Open' : 'Closed'}</span>
+          <div class="small muted">${sel.running ? `${esc(sel.game_type)} ${esc(sel.blinds)} · running ${hm(sel.run_seconds)}${sel.waiting ? ' · ' + sel.waiting + ' waiting' : ''}` : 'Not running'}</div></div>
+          <div style="text-align:right"><div class="k">On the table</div><b style="font-size:18px">${peso(sel.buy_in_on_table)}</b></div></div>
+        <div class="plist">${(sel.players || []).map((p) => `<button type="button" class="prow" data-seat="${esc(sel.name)}|${p.seat}">${avatar(p, 40)}<span class="pn"><b>${esc(p.member ? (p.member.nickname || p.member.name) : p.ref)}</b><small>Seat ${p.seat} · ${p.member ? esc(p.member.member_no) + (p.member.group_name ? ' · ' + esc(p.member.group_name) : '') : 'not matched'}</small></span>
+            <span class="pv"><b>${peso(p.buy_in)}</b><small>${hm(p.active_seconds)}${p.status === 'rest' ? ' · resting' : ''} ${restBadge(p.rest_seconds, p.active_seconds)}</small></span></button>`).join('') || '<p class="muted small" style="margin:12px 0 0">Nobody at this table.</p>'}</div>` : '<p class="muted">No tables.</p>'}</aside></div></section>` : ''}
     <div class="grid">
       ${big('Operating time', hm(o.seconds), o.since ? `First table ${time(o.since)}${o.until ? ' · last closed ' + time(o.until) : ' · still open'} · table hours ${hm(o.table_seconds)}` : 'No table has run yet')}
       ${big('Visitors', String(v.total), `${v.members} members · ${v.unmatched} not matched${v.at_table_now ? ' · ' + v.at_table_now + ' at a table now' : ''}${v.new_members ? ' · ' + v.new_members + ' new sign-ups' : ''}`)}
       ${big('Total buy-in', peso(mo.buy_in_total), d.is_today ? `${peso(mo.buy_in_finished)} finished + ${peso(mo.buy_in_live)} at tables now` : `${pl.sessions} sessions`)}
       ${big('Total cash-out', peso(mo.cash_out), `${mo.sessions_with_cash_out} sessions${mo.busted ? ' · ' + mo.busted + ' busted' : ''}${mo.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${mo.missing_cash_out} missing (${peso(mo.buy_in_without_cash_out)} buy-in)</span>` : ''}`)}
       ${big('Player hours', hm(pl.finished_seconds + pl.live_seconds), `${hm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hm(pl.live_seconds) + ' playing now' : ''} · ${restBadge(pl.rest_seconds, pl.finished_seconds)}`)}
-    </div>
-    <section class="card"><h2 style="margin-bottom:10px">Last 7 business days</h2><div class="tbl"><table><thead><tr><th>Day</th><th class="num">Visitors</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th></tr></thead><tbody>
-      ${d.history.map((h) => `<tr class="click" data-day="${h.day}"><td>${esc(h.day)}</td><td class="num">${h.visitors}</td><td class="num">${hm(h.secs)}</td><td class="num">${peso(h.buy_in)}</td><td class="num">${peso(h.cash_out)}</td></tr>`).join('')}
-    </tbody></table></div><p class="small muted" style="margin:8px 0 0">Buy-in and cash-out are what PPM recorded at the tables; the cage system will reconcile them with cash.</p></section>`;
-  view.querySelectorAll('tr[data-day]').forEach((tr) => tr.onclick = () => { location.hash = '#/liveoperation?day=' + tr.dataset.day; });
-  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation') viewOperation(view).catch(() => {}); }, 30000);
+    </div>`;
+  loadPhotos(view);
+  const find = (key) => { const [tn, seat] = key.split('|'); const t = tables.find((x) => x.name === tn); return t && (t.players || []).find((p) => String(p.seat) === seat); };
+  view.querySelectorAll('[data-table]').forEach((el) => {
+    const pick = () => { floorTable = el.dataset.table; viewOperation(view).catch(() => {}); };
+    el.onclick = (e) => { if (!e.target.closest('[data-seat]')) pick(); };
+    el.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); pick(); } };
+  });
+  view.querySelectorAll('[data-seat]').forEach((el) => el.onclick = (e) => { e.stopPropagation(); const p = find(el.dataset.seat); if (p) playerCard(view, p, el); });
+  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation' && !document.getElementById('pcard')) viewOperation(view).catch(() => {}); else if (parseHash().page === 'liveoperation') operationTimer = setTimeout(() => viewOperation(view).catch(() => {}), 30000); }, 30000);
 }
 
 // ---------- Operation Report ----------
@@ -608,7 +701,7 @@ async function viewReport(view) {
     </form></section>
     <div class="grid">
       ${tile('Revenue', peso(T.revenue), `${T.entered_days} of ${T.open_days} open day${T.open_days === 1 ? '' : 's'} entered${revHr != null ? ' · ' + peso(revHr) + ' per table hour' : ''}${revVisit != null ? ' · ' + peso(revVisit) + ' per visit' : ''}`)}
-      ${tile('Bad Beat Jackpot', peso(d.bbj_pool.after), `Pool at ${esc(d.to)} · in ${peso(T.bbj_in)} · paid out ${peso(T.bbj_out)} · pool before ${peso(d.bbj_pool.before)}`)}
+      ${tile('Bad Beat Jackpot', d.bbj.main == null ? '—' : peso2(d.bbj.main), d.bbj.as_of ? `Main · 1st Reserved ${opt(d.bbj.reserve, peso2)} · as of ${esc(d.bbj.as_of)}${d.bbj.growth != null ? ' · grew ' + peso2(d.bbj.growth) + ' in this range' : ''}${d.bbj.paid ? ' · paid out ' + peso2(d.bbj.paid) : ''}` : 'Not entered yet — click a day below')}
       ${tile('Table hours', hm(T.table_seconds), `${T.open_days} open day${T.open_days === 1 ? '' : 's'} · avg ${hm(per(T.table_seconds, T.open_days) || 0)} a day · operating ${hm(T.operating_seconds)}`)}
       ${tile('Visitors', String(T.visits), `visits (days added up) · ${T.unique_visitors} different players · ${T.unique_members} members · ${T.new_members} new members`)}
       ${tile('Player hours', hm(T.play_seconds), `${T.sessions} sessions · ${restBadge(T.rest_seconds, T.play_seconds)}`)}
@@ -617,21 +710,22 @@ async function viewReport(view) {
     <section class="card"><h2 style="margin-bottom:10px">By level</h2><div class="tbl"><table><thead><tr><th>Level</th><th class="num">Days</th><th class="num">Table hours</th><th style="width:30%"></th><th class="num">Player hours</th><th class="num">Sessions</th><th class="num">Players per table</th></tr></thead><tbody>
       ${levels.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td><div class="bar" style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${(100 * v.table_seconds / maxLv).toFixed(1)}%"></i></div></td><td class="num">${hm(v.play_seconds)}</td><td class="num">${v.sessions}</td><td class="num">${v.table_seconds ? (v.play_seconds / v.table_seconds).toFixed(1) : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No tables ran in this range.</td></tr>'}
     </tbody></table></div><p class="small muted" style="margin:8px 0 0">Players per table = player hours ÷ table hours (average seats in use). Level changes in PPM are split from today on.</p></section>
-    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Daily</h2><span class="small muted">Click a day to enter revenue and the jackpot</span></div><div class="tbl"><table><thead><tr>
-      <th>Day</th><th class="num">Revenue</th><th class="num">BBJ in</th><th class="num">BBJ out</th><th>Tables</th><th class="num">Table hours</th><th class="num">Operating</th><th class="num">Visitors</th><th class="num">New</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>Levels</th><th>Note</th></tr></thead><tbody>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Daily</h2><span class="small muted">Click a day to enter revenue and the jackpot board</span></div><div class="tbl"><table><thead><tr>
+      <th>Day</th><th class="num">Revenue</th><th class="num">BBJ Main</th><th class="num">1st Reserved</th><th class="num">BBJ +/−</th><th>Tables</th><th class="num">Table hours</th><th class="num">Operating</th><th class="num">Visitors</th><th class="num">New</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>Levels</th><th>Note</th></tr></thead><tbody>
       ${d.days.slice().reverse().map((r) => { const open = r.table_seconds || r.sessions; return `<tr class="click" data-day="${r.day}" tabindex="0" style="${open ? '' : 'opacity:.55'}">
         <td style="white-space:nowrap"><b>${esc(r.day)}</b> <span class="small muted">${wd(r.day)}</span></td>
         <td class="num">${r.revenue == null ? (open ? '<span class="chip amber">Enter</span>' : '—') : '<b>' + peso(r.revenue) + '</b>'}</td>
-        <td class="num">${opt(r.bbj_in)}</td><td class="num">${r.bbj_out ? '<b style="color:var(--red)">' + peso(r.bbj_out) + '</b>' : opt(r.bbj_out)}</td>
+        <td class="num">${opt(r.bbj_main, peso2)}</td><td class="num">${opt(r.bbj_reserve, peso2)}</td><td class="num">${r.bbj_paid ? `<b style="color:var(--red)" title="Paid out">Hit ${peso2(r.bbj_paid)}</b>` : r.bbj_growth == null ? '—' : (r.bbj_growth >= 0 ? '+' : '−') + peso2(Math.abs(r.bbj_growth))}</td>
         <td>${r.tables.map(esc).join(' ') || '—'}</td><td class="num">${hm(r.table_seconds)}</td><td class="num">${hm(r.operating_seconds)}</td>
         <td class="num">${r.visitors}</td><td class="num">${r.new_members || ''}</td><td class="num">${hm(r.play_seconds)}</td><td class="num">${peso(r.buy_in)}</td><td class="num">${peso(r.cash_out)}</td>
         <td class="small">${Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `<span style="white-space:nowrap">${esc(k)} · ${hm(v.table_seconds)}</span>`).join('<br>') || '—'}</td>
         <td class="small muted" style="min-width:140px">${esc(r.note)}${r.updated_by ? `<div>by ${esc(r.updated_by)}</div>` : ''}</td></tr>`; }).join('')}
-    </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td class="num">${peso(T.bbj_in)}</td><td class="num">${peso(T.bbj_out)}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>
+    </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td class="num">${opt(d.bbj.main, peso2)}</td><td class="num">${opt(d.bbj.reserve, peso2)}</td><td class="num">${d.bbj.growth == null ? '' : '+' + peso2(d.bbj.growth)}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>
     <dialog id="rd"><form method="dialog" id="rdf"><h2 id="rdTitle"></h2>
       <div class="form"><label class="f">Revenue (₱)<input type="text" inputmode="numeric" name="revenue" placeholder="e.g. 85000"></label>
-        <label class="f">BBJ collected (₱)<input type="text" inputmode="numeric" name="bbj_in" placeholder="Into the jackpot today"></label>
-        <label class="f">BBJ paid out (₱)<input type="text" inputmode="numeric" name="bbj_out" placeholder="0 if it was not hit"></label>
+        <label class="f">BBJ Main (₱)<input type="text" inputmode="decimal" name="bbj_main" placeholder="e.g. 273,962.25"></label>
+        <label class="f">BBJ 1st Reserved (₱)<input type="text" inputmode="decimal" name="bbj_reserve" placeholder="e.g. 74,555.25"></label>
+        <label class="f">BBJ paid out (₱)<input type="text" inputmode="decimal" name="bbj_paid" placeholder="Only if it was hit"></label>
         <label class="f" style="grid-column:1/-1">Note<input type="text" name="note" maxlength="500" placeholder="e.g. BBJ hit on T3, holiday, tournament day"></label></div>
       <p class="small muted" id="rdInfo" style="margin:0"></p>
       <div id="rdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="rdSave">Save</button></div></form></dialog>`;
@@ -642,24 +736,24 @@ async function viewReport(view) {
   const num = (v) => { const t = String(v).replace(/[,\s₱]/g, ''); return t === '' ? null : Number(t); };
   const openDay = (r) => {
     view.querySelector('#rdTitle').textContent = `${r.day} (${wd(r.day)})`;
-    for (const k of ['revenue', 'bbj_in', 'bbj_out']) f.elements[k].value = r[k] == null ? '' : r[k];
+    for (const k of ['revenue', 'bbj_main', 'bbj_reserve', 'bbj_paid']) f.elements[k].value = r[k] == null ? '' : r[k];
     f.elements.note.value = r.note || '';
     view.querySelector('#rdInfo').textContent = `PPM: ${r.tables.join(' ') || 'no tables'} · table hours ${hm(r.table_seconds)} · ${r.visitors} visitors · buy-in ${peso(r.buy_in)}`;
     flash(view.querySelector('#rdMsg'), '');
     view.querySelector('#rdSave').onclick = async (e) => {
       e.preventDefault();
-      const body = { revenue: num(f.elements.revenue.value), bbj_in: num(f.elements.bbj_in.value), bbj_out: num(f.elements.bbj_out.value), note: f.elements.note.value.trim() };
-      if (['revenue', 'bbj_in', 'bbj_out'].some((k) => body[k] != null && !(body[k] >= 0))) { flash(view.querySelector('#rdMsg'), 'Amounts must be numbers, 0 or more. Leave blank if not known yet.', 'err'); return; }
+      const body = { revenue: num(f.elements.revenue.value), bbj_main: num(f.elements.bbj_main.value), bbj_reserve: num(f.elements.bbj_reserve.value), bbj_paid: num(f.elements.bbj_paid.value), note: f.elements.note.value.trim() };
+      if (['revenue', 'bbj_main', 'bbj_reserve', 'bbj_paid'].some((k) => body[k] != null && !(body[k] >= 0))) { flash(view.querySelector('#rdMsg'), 'Amounts must be numbers, 0 or more. Leave blank if not known yet.', 'err'); return; }
       try { await api('/report/day/' + r.day, 'PUT', body); dlg.close(); viewReport(view); } catch (err) { flash(view.querySelector('#rdMsg'), err.message, 'err'); }
     };
     dlg.showModal(); f.elements.revenue.focus();
   };
   view.querySelectorAll('tr[data-day]').forEach((tr) => { const r = d.days.find((x) => x.day === tr.dataset.day); tr.onclick = () => openDay(r); tr.onkeydown = (e) => { if (e.key === 'Enter') openDay(r); }; });
   view.querySelector('#csv').onclick = () => {
-    const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ in PHP', 'BBJ out PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Note', 'Entered by']]
-      .concat(d.days.map((r) => [r.day, wd(r.day), r.revenue ?? '', r.bbj_in ?? '', r.bbj_out ?? '', r.tables.join(' '), (r.table_seconds / 3600).toFixed(2), (r.operating_seconds / 3600).toFixed(2), r.visitors, r.members, r.new_members, r.sessions, (r.play_seconds / 3600).toFixed(2), r.buy_in, r.cash_out,
+    const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ Main PHP', 'BBJ 1st Reserved PHP', 'BBJ paid out PHP', 'BBJ change PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Note', 'Entered by']]
+      .concat(d.days.map((r) => [r.day, wd(r.day), r.revenue ?? '', r.bbj_main ?? '', r.bbj_reserve ?? '', r.bbj_paid ?? '', r.bbj_growth ?? '', r.tables.join(' '), (r.table_seconds / 3600).toFixed(2), (r.operating_seconds / 3600).toFixed(2), r.visitors, r.members, r.new_members, r.sessions, (r.play_seconds / 3600).toFixed(2), r.buy_in, r.cash_out,
         Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `${k} ${(v.table_seconds / 3600).toFixed(2)}`).join('; '), r.note, r.updated_by]))
-      .concat([['Total', '', T.revenue, T.bbj_in, T.bbj_out, '', (T.table_seconds / 3600).toFixed(2), (T.operating_seconds / 3600).toFixed(2), T.visits, '', T.new_members, T.sessions, (T.play_seconds / 3600).toFixed(2), T.buy_in, T.cash_out, '', '', '']]);
+      .concat([['Total', '', T.revenue, d.bbj.main ?? '', d.bbj.reserve ?? '', d.bbj.paid || '', d.bbj.growth ?? '', '', (T.table_seconds / 3600).toFixed(2), (T.operating_seconds / 3600).toFixed(2), T.visits, '', T.new_members, T.sessions, (T.play_seconds / 3600).toFixed(2), T.buy_in, T.cash_out, '', '', '']]);
     const csv = lines.map((row) => row.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-operation-report-${d.from}-to-${d.to}.csv`; a.click();
   };

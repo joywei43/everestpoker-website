@@ -1,7 +1,7 @@
 // Daily operation: business day, live tables, hours, visitors, buy-in and cash-out.
 // Business day D starts at 12:00 Manila, or earlier if a table opened (or a session started) between 06:00 and 12:00 that day.
 // It ends when business day D+1 starts. Sessions belong to the business day in which they started.
-import { str, localDate, dayStart, ppmTime, normNo } from './members.mjs';
+import { str, localDate, dayStart, ppmTime, normNo, liveSeatPlayers } from './members.mjs';
 
 const HOUR = 3600, DAY = 86400;
 const all = async (stmt) => (await stmt.all()).results || [];
@@ -82,6 +82,14 @@ export async function handleOperation(req, env, now, reply, role) {
       opened_at: t.isRunning && t.openedAt ? ppmTime(t.openedAt) : null, run_seconds: Math.round(elapsed), buy_in_on_table: buyIn, waiting: queue.filter((q) => q.game === game).length });
   }
 
+  // Who is sitting where right now, with their member profile.
+  if (bd.is_today) {
+    const players = await liveSeatPlayers(env);
+    for (const t of tables) t.players = players.filter((p) => p.table === t.name).sort((a, b) => a.seat - b.seat);
+  }
+  const bbjRow = await env.DB.prepare('SELECT day,main_cents,reserve_cents FROM bbj_daily WHERE day<=? AND (main_cents IS NOT NULL OR reserve_cents IS NOT NULL) ORDER BY day DESC LIMIT 1').bind(bd.day).first();
+  const bbj = bbjRow ? { day: bbjRow.day, main: bbjRow.main_cents == null ? null : bbjRow.main_cents / 100, reserve: bbjRow.reserve_cents == null ? null : bbjRow.reserve_cents / 100 } : null;
+
   // Finished sessions that started in this business day.
   const fin = await env.DB.prepare(`SELECT COUNT(*) sessions, COALESCE(SUM(ps.active_seconds),0) secs, COALESCE(SUM(ps.rest_seconds),0) rest_secs, COALESCE(SUM(ps.buy_in),0) buy_in,
       COUNT(sr.session_id) with_cash_out, COALESCE(SUM(sr.cash_out),0) cash_out, COALESCE(SUM(CASE WHEN sr.session_id IS NULL AND ps.buy_in IS NOT NULL THEN 1 ELSE 0 END),0) missing_cash_out,
@@ -119,7 +127,7 @@ export async function handleOperation(req, env, now, reply, role) {
   }
 
   return reply({
-    day: bd.day, start: bd.start, end: bd.end, is_today: bd.is_today, now,
+    day: bd.day, start: bd.start, end: bd.end, is_today: bd.is_today, now, bbj,
     open_tables: tables.filter((t) => t.running).length, tables: bd.is_today ? tables : [],
     operating: { since: firstOpen, until: lastClose, seconds: firstOpen ? Math.max(0, (lastClose || until) - firstOpen) : 0, table_seconds: tableSeconds, per_table: perTable },
     play: { finished_seconds: fin.secs, live_seconds: bd.is_today ? Math.round(liveSeconds) : 0, rest_seconds: fin.rest_secs, sessions: fin.sessions },

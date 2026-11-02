@@ -157,6 +157,18 @@ async function liveSeats(env) {
   for (const x of live) { x.auto_member = matched(x.ref); x.link_member = links.get(x.key) || null; x.member_id = x.link_member || x.auto_member; } // a staff link overrides the automatic match
   return live;
 }
+// Live seats with the member each one counts for (for Live Operation).
+export async function liveSeatPlayers(env) {
+  const live = await liveSeats(env);
+  const ids = [...new Set(live.map((x) => x.member_id).filter(Boolean))];
+  const byId = new Map();
+  for (const part of chunks(ids, 90)) {
+    if (!part.length) continue;
+    const rows = await all(env.DB.prepare(`SELECT m.*, g.name group_name, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=m.id) has_photo FROM members m LEFT JOIN member_groups g ON g.id=m.group_id WHERE m.id IN (${marks(part.length)})`).bind(...part));
+    for (const m of rows) byId.set(m.id, { member_no: m.member_no, name: displayName(m), nickname: m.nickname, nationality: m.nationality, group_name: m.group_name, has_photo: !!m.has_photo, status: m.status });
+  }
+  return live.map(({ key, auto_member, link_member, member_id, ...x }) => ({ ...x, member: member_id ? byId.get(member_id) || null : null }));
+}
 // Does the name typed in PPM look like this member? Used to ask "are you sure?" before linking.
 function nameFits(ref, m) {
   if (normNo(ref) === m.member_no) return true;

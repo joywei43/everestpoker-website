@@ -60,6 +60,8 @@ assert.equal(op.start, at('2026-11-02 12:00:00') / 1000, 'opens at noon');
 assert.equal(op.open_tables, 1);
 const t1 = op.tables.find((t) => t.name === 'T1');
 assert.equal(t1.seated, 1); assert.equal(t1.resting, 1); assert.equal(t1.buy_in_on_table, 23000);
+assert.deepEqual(t1.players.map((p) => [p.seat, p.ref, p.status, p.buy_in, p.member && p.member.member_no]), [[1, '000001', 'seated', 15000, 'EV-000001'], [2, 'Ann', 'rest', 8000, null]]);
+assert.equal(t1.players[0].member.nickname, 'Wei'); assert.ok(t1.players[0].active_seconds >= 6000);
 assert.equal(op.operating.since, at('2026-11-02 13:00:00') / 1000);
 assert.equal(op.operating.seconds, 12 * 3600, '13:00 → 01:00');
 assert.equal(op.operating.table_seconds, 12 * 3600 + 8 * 3600, 'T1 12 h + T3 8 h');
@@ -84,21 +86,25 @@ assert.equal(op.history[0].day, '2026-11-02'); assert.equal(op.history[0].buy_in
 // Operation Report: managers enter revenue and BBJ per day; the rest comes from PPM.
 await relogin(); const maria2 = (await call('/login', 'POST', { username: 'Maria', password: 'maria-pass' })).body.token;
 assert.equal((await call('/report', 'GET', null, maria2)).status, 403, 'report: managers only');
-assert.equal((await call('/report/day/2026-11-02', 'PUT', { revenue: 85000, bbj_in: 4200, bbj_out: 0, note: 'Busy Sunday' }, boss)).status, 200);
-assert.equal((await call('/report/day/2026-11-01', 'PUT', { bbj_in: 1000, bbj_out: 300 }, boss)).status, 200);
+assert.equal((await call('/report/day/2026-10-31', 'PUT', { bbj_main: '270,000.00', bbj_reserve: '74,000' }, boss)).status, 200);
+assert.equal((await call('/report/day/2026-11-02', 'PUT', { revenue: 85000, bbj_main: '273,962.25', bbj_reserve: 74555.25, note: 'Busy Sunday' }, boss)).status, 200);
+assert.equal((await call('/report/day/2026-11-01', 'PUT', { bbj_main: 1000, bbj_reserve: 74100, bbj_paid: 271000 }, boss)).status, 200);
 assert.equal((await call('/report/day/2026-11-02', 'PUT', { revenue: -5 }, boss)).status, 400);
 assert.equal((await call('/report/day/2026-12-31', 'PUT', { revenue: 5 }, boss)).status, 400, 'no future days');
 let rep = (await call('/report?from=2026-11-01&to=2026-11-03', 'GET', null, boss)).body;
 assert.deepEqual(rep.days.map((d) => d.day), ['2026-11-01', '2026-11-02', '2026-11-03']);
 const r2 = rep.days[1];
-assert.equal(r2.revenue, 85000); assert.equal(r2.bbj_in, 4200); assert.equal(r2.note, 'Busy Sunday'); assert.equal(r2.updated_by, 'Boss');
+assert.equal(r2.revenue, 85000); assert.equal(r2.bbj_main, 273962.25); assert.equal(r2.bbj_reserve, 74555.25); assert.equal(r2.note, 'Busy Sunday'); assert.equal(r2.updated_by, 'Boss');
 assert.equal(r2.table_seconds, 21.5 * 3600 + 8 * 3600, 'T1 13:00 → 10:30 next morning, T3 8 h');
 assert.deepEqual(r2.tables, ['T1', 'T3']);
 assert.equal(r2.visitors, 3); assert.equal(r2.members, 2); assert.equal(r2.sessions, 3); assert.equal(r2.buy_in, 35000); assert.equal(r2.cash_out, 32000);
 assert.equal(r2.levels['50 / 100 NLH'].table_seconds, r2.table_seconds);
-assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.bbj_in, 5200); assert.equal(rep.totals.bbj_out, 300); assert.equal(rep.totals.entered_days, 1);
-assert.equal(rep.bbj_pool.before, 0); assert.equal(rep.bbj_pool.after, 4900);
-assert.equal((await call('/report?from=2026-11-02&to=2026-11-03', 'GET', null, boss)).body.bbj_pool.before, 700, 'pool carried from earlier days');
+assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.entered_days, 1);
+// 10-31 board 344,000 → 11-01 board 75,100 after paying 271,000 (growth 2,100) → 11-02 board 348,517.50 (growth 273,417.50).
+assert.equal(rep.days[0].bbj_growth, 2100); assert.equal(rep.days[1].bbj_growth, 273417.5);
+assert.deepEqual(rep.bbj, { as_of: '2026-11-02', main: 273962.25, reserve: 74555.25, before: 344000, paid: 271000, growth: 275517.5 });
+const op2 = (await call('/operation?day=2026-11-02', 'GET', null, boss)).body;
+assert.deepEqual(op2.bbj, { day: '2026-11-02', main: 273962.25, reserve: 74555.25 }, 'Live Operation shows the latest board');
 // A level change while the table runs splits the table hours.
 clock = at('2026-11-03 11:30:00'); tables[1].blinds = '100 / 200'; await save();
 clock = at('2026-11-03 12:30:00');

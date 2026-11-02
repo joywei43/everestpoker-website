@@ -193,3 +193,6 @@ CREATE INDEX IF NOT EXISTS table_runs_open ON table_runs(opened_at);
 
 -- Operation Report: per business day, entered by managers. Amounts in pesos; NULL = not entered yet.
 CREATE TABLE IF NOT EXISTS daily_reports(day TEXT PRIMARY KEY, revenue INTEGER, bbj_in INTEGER, bbj_out INTEGER, note TEXT NOT NULL DEFAULT '', updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
+
+-- Bad Beat Jackpot board per business day, in centavos: Main, 1st Reserved, and any amount paid out that day.
+CREATE TABLE IF NOT EXISTS bbj_daily(day TEXT PRIMARY KEY, main_cents INTEGER, reserve_cents INTEGER, paid_cents INTEGER, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);

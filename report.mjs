@@ -8,6 +8,7 @@ const all = async (stmt) => (await stmt.all()).results || [];
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
 const addDays = (d, n) => localDate(dayStart(d) + n * DAY + HOUR);
 const money = (v) => (v === '' || v == null ? null : Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 1e11 ? Math.round(Number(v)) : NaN);
+const cents = (v) => { if (v === '' || v == null) return null; const n = Number(String(v).replace(/[,\s₱]/g, '')); return Number.isFinite(n) && n >= 0 && n <= 1e11 ? Math.round(n * 100) : NaN; };
 const levelOf = (blinds, game) => `${blinds || ''} ${game || ''}`.trim() || 'Unknown';
 
 // Business day D opens at 12:00, or at the first table opening / seat-in between 06:00 and 12:00 that day.
@@ -34,14 +35,18 @@ export async function handleReport(req, env, path, now, reply, user, role) {
     if (!isDate(day)) return reply({ error: 'Bad date.' }, 400);
     if (day > (await businessDay(env, now)).day) return reply({ error: 'That business day has not started yet.' }, 400);
     let b = {}; try { b = await req.json(); } catch { return reply({ error: 'Invalid JSON' }, 400); }
-    const revenue = money(b.revenue), bbjIn = money(b.bbj_in), bbjOut = money(b.bbj_out);
-    if ([revenue, bbjIn, bbjOut].some((v) => Number.isNaN(v))) return reply({ error: 'Amounts must be 0 or more.' }, 400);
+    const revenue = money(b.revenue), main = cents(b.bbj_main), reserve = cents(b.bbj_reserve), paid = cents(b.bbj_paid);
+    if ([revenue, main, reserve, paid].some((v) => Number.isNaN(v))) return reply({ error: 'Amounts must be 0 or more.' }, 400);
+    const who = str(user || 'staff', 60), show = (c) => (c == null ? '—' : (c / 100).toFixed(2));
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO daily_reports(day,revenue,bbj_in,bbj_out,note,updated_by,updated_at) VALUES(?,?,?,?,?,?,?)
-        ON CONFLICT(day) DO UPDATE SET revenue=excluded.revenue,bbj_in=excluded.bbj_in,bbj_out=excluded.bbj_out,note=excluded.note,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
-        .bind(day, revenue, bbjIn, bbjOut, str(b.note, 500), str(user || 'staff', 60), now),
+      env.DB.prepare(`INSERT INTO daily_reports(day,revenue,bbj_in,bbj_out,note,updated_by,updated_at) VALUES(?,?,NULL,NULL,?,?,?)
+        ON CONFLICT(day) DO UPDATE SET revenue=excluded.revenue,note=excluded.note,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(day, revenue, str(b.note, 500), who, now),
+      env.DB.prepare(`INSERT INTO bbj_daily(day,main_cents,reserve_cents,paid_cents,updated_by,updated_at) VALUES(?,?,?,?,?,?)
+        ON CONFLICT(day) DO UPDATE SET main_cents=excluded.main_cents,reserve_cents=excluded.reserve_cents,paid_cents=excluded.paid_cents,updated_by=excluded.updated_by,updated_at=excluded.updated_at`)
+        .bind(day, main, reserve, paid, who, now),
       env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.day',NULL,?)")
-        .bind(now, str(user || 'staff', 60), `${day}: revenue ${revenue ?? '—'}, BBJ in ${bbjIn ?? '—'}, BBJ out ${bbjOut ?? '—'}`)
+        .bind(now, who, `${day}: revenue ${revenue ?? '—'}, BBJ main ${show(main)}, 1st reserved ${show(reserve)}, paid ${show(paid)}`)
     ]);
     return reply({ ok: true });
   }
@@ -63,15 +68,32 @@ export async function handleReport(req, env, path, now, reply, user, role) {
   const dayOf = (t) => { for (const d of days) if (t >= d.start && t < d.end) return d; return null; };
 
   const rows = {};
-  for (const d of days) rows[d.day] = { day: d.day, revenue: null, bbj_in: null, bbj_out: null, note: '', updated_by: '', table_seconds: 0, operating_seconds: 0, tables: [],
+  for (const d of days) rows[d.day] = { day: d.day, revenue: null, bbj_main: null, bbj_reserve: null, bbj_paid: null, bbj_growth: null, note: '', updated_by: '', table_seconds: 0, operating_seconds: 0, tables: [],
     visitors: 0, members: 0, new_members: 0, sessions: 0, play_seconds: 0, rest_seconds: 0, buy_in: 0, cash_out: 0, missing_cash_out: 0, levels: {} };
   const level = (r, name) => (r.levels[name] ||= { table_seconds: 0, play_seconds: 0, sessions: 0 });
 
   // Manager entries.
   for (const e of await all(env.DB.prepare('SELECT * FROM daily_reports WHERE day>=? AND day<=?').bind(from, to))) {
-    Object.assign(rows[e.day], { revenue: e.revenue, bbj_in: e.bbj_in, bbj_out: e.bbj_out, note: e.note, updated_by: e.updated_by });
+    Object.assign(rows[e.day], { revenue: e.revenue, note: e.note, updated_by: e.updated_by });
   }
-  const pool = await env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN day<? THEN COALESCE(bbj_in,0)-COALESCE(bbj_out,0) END),0) before, COALESCE(SUM(COALESCE(bbj_in,0)-COALESCE(bbj_out,0)),0) after FROM daily_reports WHERE day<=?').bind(from, to).first();
+  // Bad Beat Jackpot: the board amounts each day. Growth = change in Main + 1st Reserved since the last board, plus anything paid out.
+  const pesos = (c) => (c == null ? null : c / 100);
+  const prevBoard = await env.DB.prepare('SELECT day,main_cents,reserve_cents FROM bbj_daily WHERE day<? AND (main_cents IS NOT NULL OR reserve_cents IS NOT NULL) ORDER BY day DESC LIMIT 1').bind(from).first();
+  const boardTotal = (r) => (r && (r.main_cents != null || r.reserve_cents != null) ? (r.main_cents || 0) + (r.reserve_cents || 0) : null);
+  let lastTotal = boardTotal(prevBoard), latest = null, paidSum = 0;
+  for (const e of await all(env.DB.prepare('SELECT * FROM bbj_daily WHERE day>=? AND day<=? ORDER BY day').bind(from, to))) {
+    const r = rows[e.day], total = boardTotal(e);
+    Object.assign(r, { bbj_main: pesos(e.main_cents), bbj_reserve: pesos(e.reserve_cents), bbj_paid: pesos(e.paid_cents) });
+    if (!r.updated_by) r.updated_by = e.updated_by;
+    paidSum += e.paid_cents || 0;
+    if (total != null) { if (lastTotal != null) r.bbj_growth = pesos(total - lastTotal + (e.paid_cents || 0)); lastTotal = total; latest = e; }
+  }
+  const startTotal = boardTotal(prevBoard), endTotal = latest ? boardTotal(latest) : startTotal;
+  const bbj = {
+    as_of: latest ? latest.day : prevBoard ? prevBoard.day : null,
+    main: pesos(latest ? latest.main_cents : prevBoard ? prevBoard.main_cents : null), reserve: pesos(latest ? latest.reserve_cents : prevBoard ? prevBoard.reserve_cents : null),
+    before: pesos(startTotal), paid: pesos(paidSum), growth: startTotal != null && endTotal != null ? pesos(endTotal - startTotal + paidSum) : null
+  };
 
   // Table time, split by business day and level.
   const runs = await all(env.DB.prepare('SELECT table_name,opened_at,closed_at,game_type,blinds FROM table_runs WHERE opened_at<? AND (closed_at IS NULL OR closed_at>?)').bind(end, start));
@@ -123,9 +145,9 @@ export async function handleReport(req, env, path, now, reply, user, role) {
   }
   const totals = {
     days: list.length, open_days: list.filter((r) => r.table_seconds || r.sessions).length, entered_days: list.filter((r) => r.revenue != null).length,
-    revenue: sum('revenue'), bbj_in: sum('bbj_in'), bbj_out: sum('bbj_out'), table_seconds: sum('table_seconds'), operating_seconds: sum('operating_seconds'),
+    revenue: sum('revenue'), table_seconds: sum('table_seconds'), operating_seconds: sum('operating_seconds'),
     visits: sum('visitors'), unique_visitors: everyone.size, unique_members: everyMember.size, new_members: sum('new_members'), sessions: sum('sessions'),
     play_seconds: sum('play_seconds'), rest_seconds: sum('rest_seconds'), buy_in: sum('buy_in'), cash_out: sum('cash_out'), missing_cash_out: sum('missing_cash_out'), levels
   };
-  return reply({ from, to, today, days: list, totals, bbj_pool: { before: pool.before, after: pool.after } });
+  return reply({ from, to, today, days: list, totals, bbj });
 }
