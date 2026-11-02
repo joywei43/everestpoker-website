@@ -120,7 +120,7 @@ export async function handleReport(req, env, path, now, reply, user, role) {
 
   // Table time, split by business day and level.
   const runs = await all(env.DB.prepare('SELECT table_name,opened_at,closed_at,game_type,blinds FROM table_runs WHERE opened_at<? AND (closed_at IS NULL OR closed_at>?)').bind(end, start));
-  const span = {}, used = {};
+  const span = {}, used = {}, tableLevels = {};
   for (const r of runs) {
     const runEnd = Math.min(r.closed_at == null ? now : r.closed_at, now);
     for (const d of days) {
@@ -129,6 +129,7 @@ export async function handleReport(req, env, path, now, reply, user, role) {
       const row = rows[d.day];
       row.table_seconds += e - s;
       row.table_seconds_by[r.table_name] = (row.table_seconds_by[r.table_name] || 0) + (e - s);
+      const tl = (tableLevels[r.table_name] ||= {}); tl[levelOf(r.blinds, r.game_type)] = (tl[levelOf(r.blinds, r.game_type)] || 0) + (e - s);
       level(row, levelOf(r.blinds, r.game_type)).table_seconds += e - s;
       (used[d.day] ||= new Set()).add(r.table_name);
       const sp = (span[d.day] ||= [s, e]); sp[0] = Math.min(sp[0], s); sp[1] = Math.max(sp[1], e);
@@ -168,6 +169,12 @@ export async function handleReport(req, env, path, now, reply, user, role) {
     t.table_seconds += v.table_seconds; t.play_seconds += v.play_seconds; t.sessions += v.sessions; if (v.table_seconds || v.sessions) t.days++;
   }
   for (const r of list) for (const [k, sec] of Object.entries(r.table_seconds_by)) { const t = (byTable[k] ||= { revenue: 0, table_seconds: 0, days: 0 }); t.table_seconds += sec; t.days++; }
+  // Big-blind hours: table hours × the big blind of the level played, so revenue can be shown as BB per hour.
+  const bigBlind = (level) => { const m = /\/\s*(\d+)/.exec(level); return m ? Number(m[1]) : 0; };
+  for (const [k, t] of Object.entries(byTable)) {
+    t.levels = tableLevels[k] || {};
+    t.bb_hours = Object.entries(t.levels).reduce((a, [lv, sec]) => a + (sec / 3600) * bigBlind(lv), 0);
+  }
   const totals = {
     days: list.length, open_days: list.filter((r) => r.table_seconds || r.sessions).length, entered_days: list.filter((r) => r.revenue != null).length,
     revenue: sum('revenue'), table_seconds: sum('table_seconds'), operating_seconds: sum('operating_seconds'),

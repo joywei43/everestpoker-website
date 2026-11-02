@@ -100,7 +100,7 @@ assert.deepEqual(r2.tables, ['T1', 'T3']);
 assert.equal(r2.visitors, 3); assert.equal(r2.members, 2); assert.equal(r2.sessions, 3); assert.equal(r2.buy_in, 35000); assert.equal(r2.cash_out, 32000);
 assert.equal(r2.levels['50 / 100 NLH'].table_seconds, r2.table_seconds);
 assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.entered_days, 1);
-assert.deepEqual(rep.totals.tables.T3, { revenue: 35000, table_seconds: 8 * 3600, days: 1 });
+{ const t3 = rep.totals.tables.T3; assert.equal(t3.revenue, 35000); assert.equal(t3.table_seconds, 8 * 3600); assert.equal(t3.days, 1); assert.equal(t3.bb_hours, 800, '8 h × BB 100'); }
 // Clearing one table keeps the other; the BBJ board is untouched.
 assert.equal((await call('/report/day/2026-11-02', 'PUT', { tables: { T3: '' } }, boss)).status, 200);
 let chk = (await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0];
