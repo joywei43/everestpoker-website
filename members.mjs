@@ -257,6 +257,35 @@ export async function handleRegister(req, env, now, reply, ipHash) {
   return reply({ ok: true, member_no: created.member_no });
 }
 
+// Keep a member's place on the waiting list when their number changes.
+async function renumberWaitlist(env, from, to) {
+  const room = await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();
+  if (!room || !room.data.includes(from)) return;
+  const st = JSON.parse(room.data); let hit = false;
+  for (const q of [...(st.queue || []), ...Object.values(st.calls || {})]) if (q && q.member_no === from) { q.member_no = to; hit = true; }
+  if (hit) await env.DB.prepare('UPDATE room SET version=version+1,data=? WHERE id=1 AND version=?').bind(JSON.stringify(st), room.version).run();
+}
+
+// Existing members who look like the same person: same nickname, phone, passport, or full name + birthday.
+async function possibleDuplicates(env, f) {
+  const conds = [], args = [];
+  if (f.nickname) { conds.push('lower(nickname)=lower(?)'); args.push(f.nickname); }
+  const phone = String(f.phone || '').replace(/\D/g, '');
+  if (phone.length >= 7) { conds.push("replace(replace(replace(replace(replace(phone,' ',''),'-',''),'+',''),'(',''),')','') LIKE ?"); args.push('%' + phone.slice(-9)); }
+  if (f.passport_id) { conds.push('lower(passport_id)=lower(?)'); args.push(f.passport_id); }
+  if (f.birthday && (f.surname || f.family_name)) { conds.push('(birthday=? AND lower(surname)=lower(?) AND lower(family_name)=lower(?))'); args.push(f.birthday, f.surname || '', f.family_name || ''); }
+  if (!conds.length) return [];
+  const rows = await all(env.DB.prepare(`SELECT * FROM members WHERE ${conds.join(' OR ')} ORDER BY member_no LIMIT 5`).bind(...args));
+  return rows.map((m) => {
+    const why = [];
+    if (f.nickname && m.nickname.toLowerCase() === f.nickname.toLowerCase()) why.push('nickname');
+    if (phone.length >= 7 && m.phone.replace(/\D/g, '').endsWith(phone.slice(-9))) why.push('phone');
+    if (f.passport_id && m.passport_id.toLowerCase() === f.passport_id.toLowerCase()) why.push('passport');
+    if (f.birthday && m.birthday === f.birthday && (f.surname || f.family_name)) why.push('name + birthday');
+    return { member_no: m.member_no, name: displayName(m), nickname: m.nickname, nationality: m.nationality, why };
+  });
+}
+
 async function createMember(env, now, fields, groupId, source, actor, wantedNo) {
   const used = wantedNo ? null : await usedNumbers(env);
   for (let tries = 0; tries < 5; tries++) {
@@ -422,6 +451,10 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (!fields.surname && !fields.family_name && !fields.nickname) return bad(reply, 'Name or nickname is required.');
     const groupId = b.group_id ? str(b.group_id, 30) : null;
     if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
+    if (!b.confirm_duplicate) {
+      const dups = await possibleDuplicates(env, fields);
+      if (dups.length) return reply({ error: 'This player may already be a member.', code: 'possible_duplicate', matches: dups }, 409);
+    }
     const wanted = b.member_no ? normNo(b.member_no) : '';
     if (wanted && await memberByNo(env, wanted)) return bad(reply, 'Member number already used.', 409);
     if (wanted && await memberByOldNo(env, wanted)) {
@@ -517,6 +550,57 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       });
     }
 
+    // Master: merge this (duplicate) member into another. Everything moves; this number becomes an alias of the kept one.
+    if (parts[2] === 'merge' && method === 'POST') {
+      if (!master) return masterOnly();
+      const b = await readJson(req, 2000);
+      const keep = await memberByNo(env, b.into);
+      if (!keep) return bad(reply, 'The member to keep was not found.', 404);
+      if (keep.id === m.id) return bad(reply, 'Choose a different member to keep.');
+      const fill = {};
+      for (const k of PROFILE_FIELDS) if (!keep[k] && m[k]) fill[k] = m[k];
+      const notes = [keep.staff_notes, m.staff_notes ? `[from ${m.member_no}] ${m.staff_notes}` : ''].filter(Boolean).join('\n').slice(0, 4000);
+      const keepPhoto = await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(keep.id).first();
+      const moved = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM play_sessions WHERE member_id=?) sessions, (SELECT COUNT(*) FROM rewards WHERE member_id=?) rewards').bind(m.id, m.id).first();
+      const sets = Object.keys(fill).map((k) => `${k}=?`).concat(['staff_notes=?', 'updated_at=?']);
+      await env.DB.batch([
+        env.DB.prepare('UPDATE play_sessions SET member_id=? WHERE member_id=?').bind(keep.id, m.id),
+        env.DB.prepare('UPDATE rewards SET member_id=? WHERE member_id=?').bind(keep.id, m.id),
+        env.DB.prepare('UPDATE ppm_seat_links SET member_id=? WHERE member_id=?').bind(keep.id, m.id),
+        env.DB.prepare('UPDATE member_number_history SET member_id=? WHERE member_id=?').bind(keep.id, m.id),
+        env.DB.prepare('INSERT OR REPLACE INTO member_number_history(old_no,member_id,changed_at,changed_by) VALUES(?,?,?,?)').bind(m.member_no, keep.id, now, who(b)),
+        keepPhoto ? env.DB.prepare('DELETE FROM member_photos WHERE member_id=?').bind(m.id) : env.DB.prepare('UPDATE member_photos SET member_id=? WHERE member_id=?').bind(keep.id, m.id),
+        env.DB.prepare('UPDATE audit_log SET member_id=? WHERE member_id=?').bind(keep.id, m.id),
+        env.DB.prepare('DELETE FROM member_group_history WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM member_sessions WHERE member_id=?').bind(m.id),
+        env.DB.prepare(`UPDATE members SET ${sets.join(',')} WHERE id=?`).bind(...Object.values(fill), notes, now, keep.id),
+        env.DB.prepare('DELETE FROM members WHERE id=?').bind(m.id),
+        audit(env, now, who(b), 'member.merge', keep.id, `${m.member_no} (${displayName(m)}) merged in: ${moved.sessions} sessions, ${moved.rewards} rewards`)
+      ]);
+      await renumberWaitlist(env, m.member_no, keep.member_no);
+      return reply({ ok: true, member_no: keep.member_no, moved });
+    }
+    // Master: delete a member. Game records go back to Unmatched (by the name PPM had); rewards are removed.
+    if (parts[2] === 'delete' && method === 'POST') {
+      if (!master) return masterOnly();
+      const b = await readJson(req, 2000);
+      const has = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM play_sessions WHERE member_id=?) sessions, (SELECT COUNT(*) FROM rewards WHERE member_id=?) rewards').bind(m.id, m.id).first();
+      if ((has.sessions || has.rewards) && !b.confirm) return reply({ error: `${m.member_no} has ${has.sessions} game records and ${has.rewards} rewards.`, code: 'has_records', ...has }, 409);
+      await env.DB.batch([
+        env.DB.prepare('UPDATE play_sessions SET member_id=NULL WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM rewards WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM ppm_seat_links WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM member_number_history WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM member_photos WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM member_group_history WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM member_sessions WHERE member_id=?').bind(m.id),
+        env.DB.prepare('UPDATE audit_log SET member_id=NULL WHERE member_id=?').bind(m.id),
+        env.DB.prepare('DELETE FROM members WHERE id=?').bind(m.id),
+        audit(env, now, who(b), 'member.delete', null, `${m.member_no} (${displayName(m)}) deleted: ${has.sessions} game records unlinked, ${has.rewards} rewards removed`)
+      ]);
+      return reply({ ok: true, ...has });
+    }
+
     if (parts[2] === 'number' && method === 'POST') {
       if (!master) return masterOnly();
       const b = await readJson(req, 2000);
@@ -533,13 +617,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         env.DB.prepare('UPDATE members SET member_no=?,updated_at=? WHERE id=?').bind(next, now, m.id),
         audit(env, now, who(b), 'member.number', m.id, `${m.member_no} → ${next}`)
       ]);
-      // Keep the member's place on the waiting list under the new number.
-      const room = await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();
-      if (room && room.data.includes(m.member_no)) {
-        const st = JSON.parse(room.data); let hit = false;
-        for (const q of [...(st.queue || []), ...Object.values(st.calls || {})]) if (q && q.member_no === m.member_no) { q.member_no = next; hit = true; }
-        if (hit) await env.DB.prepare('UPDATE room SET version=version+1,data=? WHERE id=1 AND version=?').bind(JSON.stringify(st), room.version).run();
-      }
+      await renumberWaitlist(env, m.member_no, next);
       return reply({ ok: true, member_no: next });
     }
 

@@ -366,8 +366,10 @@ await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.to
   await call('/members', 'POST', { nickname: 'Twin', nationality: 'Taiwanese', member_no: '900001' }, boss.token);
   let hits = (await call('/members?q=twin', 'GET', null, boss.token)).body.members;
   assert.equal(hits[0].nick_label, 'Twin', 'unique nickname shown as is');
-  await call('/members', 'POST', { nickname: 'twin', nationality: 'Korean', member_no: '900002' }, boss.token);
-  await call('/members', 'POST', { nickname: 'TWIN', member_no: '900003' }, boss.token);
+  const dup = await call('/members', 'POST', { nickname: 'twin', nationality: 'Korean', member_no: '900002' }, boss.token);
+  assert.equal(dup.status, 409); assert.equal(dup.body.code, 'possible_duplicate'); assert.equal(dup.body.matches[0].member_no, 'EV-900001'); assert.deepEqual(dup.body.matches[0].why, ['nickname']);
+  await call('/members', 'POST', { nickname: 'twin', nationality: 'Korean', member_no: '900002', confirm_duplicate: true }, boss.token);
+  await call('/members', 'POST', { nickname: 'TWIN', member_no: '900003', confirm_duplicate: true }, boss.token);
   hits = (await call('/members?q=twin', 'GET', null, boss.token)).body.members;
   assert.deepEqual(hits.map((h) => h.nick_label).sort(), ['TWIN (EV-900003)', 'Twin (Taiwan)', 'twin (South Korea)']);
   assert.equal((await call('/members/900002', 'GET', null, boss.token)).body.member.nick_label, 'twin (South Korea)');
@@ -399,4 +401,30 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   const no = (await call('/members', 'POST', { nickname: 'Hyun', staff_notes: 'Prefers Table 3' }, boss.token)).body.member_no;
   assert.equal((await call('/members/' + no, 'GET', null, boss.token)).body.member.staff_notes, 'Prefers Table 3');
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create');
+{ // Possible duplicates by phone; master merge and delete.
+  await call('/members', 'POST', { nickname: 'Patrick P', phone: '+63 917 555 1234', member_no: '333333', group_id: 'patrick', staff_notes: 'VIP' }, boss.token);
+  const d = await call('/members', 'POST', { nickname: 'Pat', phone: '09175551234' }, boss.token);
+  assert.equal(d.body.code, 'possible_duplicate'); assert.deepEqual(d.body.matches[0].why, ['phone']);
+  await call('/members', 'POST', { nickname: 'Pat', email: 'pat@x.com', member_no: '100000', group_id: 'patrick', confirm_duplicate: true, staff_notes: 'Came Friday' }, boss.token);
+  const pt = structuredClone((await call('/ppm', 'GET', null, boss.token)).body);
+  pt.tables[3].sessions = [{ seatId: 1, memberId: '100000', startTime: '2026-10-29 20:00:00', endTime: '2026-10-29 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 1000 }];
+  assert.equal((await call('/ppm', 'PUT', { version: pt.version, tables: pt.tables }, boss.token)).status, 200);
+  await call('/members/100000/rewards', 'POST', { type: 'free_chip', amount: 500, staff: 'Boss' }, boss.token);
+  assert.equal((await call('/members/100000/merge', 'POST', { into: '333333' }, maria.token)).status, 403, 'master only');
+  const mg = await call('/members/100000/merge', 'POST', { into: '333333', staff: 'Boss' }, boss.token);
+  assert.equal(mg.status, 200, JSON.stringify(mg.body));
+  const kept = (await call('/members/333333', 'GET', null, boss.token)).body;
+  assert.equal(kept.stats.all.secs, 3600, 'game time moved'); assert.equal(kept.member.email, 'pat@x.com', 'blank fields filled');
+  assert.match(kept.member.staff_notes, /VIP[\s\S]*Came Friday/);
+  assert.equal((await call('/members/100000', 'GET', null, boss.token)).body.moved_to, 'EV-333333', 'old number points to the kept member');
+  // Delete: needs confirmation when there are records; records go back to Unmatched.
+  assert.equal((await call('/members/333333/delete', 'POST', {}, maria.token)).status, 403);
+  const del = await call('/members/333333/delete', 'POST', { staff: 'Boss' }, boss.token);
+  assert.equal(del.body.code, 'has_records'); assert.equal(del.body.sessions, 1);
+  assert.equal((await call('/members/333333/delete', 'POST', { staff: 'Boss', confirm: true }, boss.token)).status, 200);
+  assert.equal((await call('/members/333333', 'GET', null, boss.token)).status, 404);
+  assert.equal((await call('/members/100000', 'GET', null, boss.token)).status, 404, 'alias removed too');
+  const empty = (await call('/members', 'POST', { nickname: 'Oops' }, boss.token)).body.member_no;
+  assert.equal((await call('/members/' + empty + '/delete', 'POST', { staff: 'Boss' }, boss.token)).status, 200, 'no records: deleted at once');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete');

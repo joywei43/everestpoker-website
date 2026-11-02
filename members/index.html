@@ -221,7 +221,15 @@ async function viewMembers(view) {
   };
   view.querySelector('#sf').onsubmit = (e) => { e.preventDefault(); load(false); };
   view.querySelector('#newBtn').onclick = () => openMemberDialog(view, null, async (data) => {
-    const res = await api('/members', 'POST', { ...data, staff: needStaff() }); location.hash = '#/member/' + encodeURIComponent(res.member_no);
+    let res;
+    try { res = await api('/members', 'POST', { ...data, staff: needStaff() }); }
+    catch (err) {
+      if (err.code !== 'possible_duplicate') throw err;
+      const list = err.data.matches.map((x) => `• ${x.member_no}  ${x.nickname || x.name}${x.nationality ? ' (' + x.nationality + ')' : ''} — same ${x.why.join(', ')}`).join('\n');
+      if (!confirm(`This player may already be a member:\n\n${list}\n\nOK = create a new member anyway\nCancel = go back (search the existing member instead)`)) throw new Error('Not created. Check the existing member above first.');
+      res = await api('/members', 'POST', { ...data, staff: needStaff(), confirm_duplicate: true });
+    }
+    location.hash = '#/member/' + encodeURIComponent(res.member_no);
   });
   await load(false);
 }
@@ -282,7 +290,7 @@ async function viewMember(view, no) {
   const byType = Object.keys(TYPES).map((t) => ({ t, amt: rw30.filter((r) => r.type === t).reduce((a, r) => a + r.amount, 0) })).filter((x) => x.amt > 0).sort((a, b) => b.amt - a.amt);
   const maxType = Math.max(1, ...byType.map((x) => x.amt));
   view.innerHTML = `<div class="row between"><div class="muted"><a href="#/members">Members</a> / <span class="mono">${esc(m.member_no)}</span></div>
-      <div class="row">${isMaster() ? '<button class="btn" id="renum">Change member no.</button>' : ''}<button class="btn" id="edit">Edit profile</button></div></div>
+      <div class="row">${isMaster() ? '<button class="btn" id="merge" title="This is a duplicate: move everything to the member you keep">Merge into…</button><button class="btn danger" id="delm">Delete</button><button class="btn" id="renum">Change member no.</button>' : ''}<button class="btn" id="edit">Edit profile</button></div></div>
     <section class="card" style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
       <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:none">
         <div class="ph" id="ph" role="img" aria-label="Member photo">${esc((m.nickname || m.name || '?').trim().slice(0, 2).toUpperCase())}</div>
@@ -373,6 +381,28 @@ async function viewMember(view, no) {
   };
   const rm = view.querySelector('#phRm');
   if (rm) rm.onclick = async () => { if (!confirm('Remove this photo?')) return; try { await api('/members/' + encodeURIComponent(no) + '/photo/remove', 'POST', {}); reload(); } catch (err) { alert(err.message); } };
+  const merge = view.querySelector('#merge');
+  if (merge) merge.onclick = async () => {
+    const into = (prompt(`Merge ${m.member_no} ${m.name} into which member?\nType the member number you want to KEEP (6 digits).\n\nGame records, rewards, photo and remark move there. Blank profile fields are filled from this one.\n${m.member_no} is removed and its number keeps working in PPM for the kept member.`) || '').trim();
+    if (!into) return;
+    let keep; try { keep = (await api('/members/' + encodeURIComponent(into))).member; } catch (err) { alert(err.movedTo ? 'That number now belongs to ' + err.movedTo + '. Type that number instead.' : err.message); return; }
+    if (keep.member_no === m.member_no) { alert('Choose a different member to keep.'); return; }
+    if (!confirm(`Keep ${keep.member_no} ${keep.name}${keep.nickname ? ' (' + keep.nickname + ')' : ''}\nRemove ${m.member_no} ${m.name}${m.nickname ? ' (' + m.nickname + ')' : ''}\n\nThis cannot be undone. Merge now?`)) return;
+    try { const r = await api('/members/' + encodeURIComponent(no) + '/merge', 'POST', { into: keep.member_no }); alert(`Merged: ${r.moved.sessions} game records and ${r.moved.rewards} rewards moved to ${r.member_no}.`); location.hash = '#/member/' + encodeURIComponent(r.member_no); }
+    catch (err) { alert(err.message); }
+  };
+  const delm = view.querySelector('#delm');
+  if (delm) delm.onclick = async () => {
+    if (!confirm(`Delete ${m.member_no} ${m.name}?\n\nIf this is a duplicate of another member, use "Merge into…" instead so nothing is lost.`)) return;
+    const path = '/members/' + encodeURIComponent(no) + '/delete';
+    try { await api(path, 'POST', {}); }
+    catch (err) {
+      if (err.code !== 'has_records') { alert(err.message); return; }
+      if (!confirm(`${m.member_no} has ${err.data.sessions} game records and ${err.data.rewards} rewards.\n\nDeleting sends the game records back to Unmatched PPM and removes the rewards.\nTo keep them, Cancel and use "Merge into…".\n\nDelete anyway?`)) return;
+      try { await api(path, 'POST', { confirm: true }); } catch (e2) { alert(e2.message); return; }
+    }
+    alert(m.member_no + ' deleted.'); location.hash = '#/members';
+  };
   const renum = view.querySelector('#renum');
   if (renum) renum.onclick = async () => {
     const next = (prompt(`New member number for ${m.name} (now ${m.member_no}).\nType 6 digits — EV- is added automatically.\nGame records, rewards and photo stay with this member. The old number still works in PPM.`, m.member_no) || '').trim();
