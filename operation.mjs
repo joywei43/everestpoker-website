@@ -108,12 +108,13 @@ export async function handleOperation(req, env, now, reply, role) {
 
   // Today's visitors: one row per player, finished sessions plus anyone still at a table.
   const people = new Map();
-  const person = (key, base) => { if (!people.has(key)) people.set(key, { ...base, sessions: 0, play_seconds: 0, buy_in: 0, cash_out: 0, with_cash_out: 0, cash_out_buy_in: 0, busted: 0, missing_cash_out: 0, first_at: null, last_at: null, tables: new Set(), playing_now: null }); return people.get(key); };
-  const visRows = await all(env.DB.prepare(`SELECT ps.member_ref, ps.table_name, ps.start_at, ps.end_at, ps.active_seconds, ps.buy_in, sr.session_id has_result, sr.cash_out, sr.busted, m.member_no, m.nickname, m.surname, m.middle_name, m.family_name, EXISTS(SELECT 1 FROM member_photos ph WHERE ph.member_id=m.id) has_photo
+  const person = (key, base) => { if (!people.has(key)) people.set(key, { ...base, sessions: 0, play_seconds: 0, buy_in: 0, cash_out: 0, with_cash_out: 0, cash_out_buy_in: 0, busted: 0, missing_cash_out: 0, first_at: null, last_at: null, tables: new Set(), playing_now: null, segments: [] }); return people.get(key); };
+  const visRows = await all(env.DB.prepare(`SELECT ps.member_ref, ps.table_name, ps.seat, ps.start_at, ps.end_at, ps.active_seconds, ps.buy_in, sr.session_id has_result, sr.cash_out, sr.busted, m.member_no, m.nickname, m.surname, m.middle_name, m.family_name, EXISTS(SELECT 1 FROM member_photos ph WHERE ph.member_id=m.id) has_photo
     FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.start_at>=? AND ps.start_at<? ORDER BY ps.start_at`).bind(bd.start, bd.end));
   for (const r of visRows) {
     const p = person(r.member_no ? 'm:' + r.member_no : 'r:' + r.member_ref.toLowerCase(), { member_no: r.member_no || null, name: r.member_no ? displayName(r) : r.member_ref, nickname: r.member_no ? r.nickname : '', ref: r.member_ref, has_photo: !!r.has_photo });
     p.sessions++; p.play_seconds += r.active_seconds; p.buy_in += r.buy_in || 0; p.tables.add(r.table_name);
+    p.segments.push({ table: r.table_name, seat: r.seat, start: r.start_at, end: r.end_at, active_seconds: r.active_seconds, buy_in: r.buy_in, cash_out: r.has_result ? r.cash_out : null, busted: !!r.busted });
     if (r.has_result) { p.with_cash_out++; p.cash_out += r.cash_out; p.cash_out_buy_in += r.buy_in || 0; p.busted += r.busted ? 1 : 0; } else if (r.buy_in != null) p.missing_cash_out++;
     p.first_at = p.first_at == null ? r.start_at : Math.min(p.first_at, r.start_at); p.last_at = Math.max(p.last_at || 0, r.end_at);
   }
@@ -122,6 +123,7 @@ export async function handleOperation(req, env, now, reply, role) {
     const p = person(m ? 'm:' + m.member_no : 'r:' + x.ref.toLowerCase(), { member_no: m ? m.member_no : null, name: m ? m.name : x.ref, nickname: m ? m.nickname : '', ref: x.ref, has_photo: !!(m && m.has_photo) });
     p.play_seconds += x.active_seconds; p.buy_in += x.buy_in || 0; p.tables.add(x.table);
     p.playing_now = { table: x.table, seat: x.seat, status: x.status, buy_in: x.buy_in, active_seconds: x.active_seconds };
+    p.sessions++; p.segments.push({ table: x.table, seat: x.seat, start: x.started, end: null, active_seconds: x.active_seconds, buy_in: x.buy_in, cash_out: null, live: true });
     if (x.started != null) p.first_at = p.first_at == null ? x.started : Math.min(p.first_at, x.started);
   }
   const visitorList = [...people.values()].map((p) => ({ ...p, tables: [...p.tables].sort(), win_loss: p.with_cash_out ? p.cash_out - p.cash_out_buy_in : null }))
