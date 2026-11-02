@@ -463,4 +463,16 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal(mv.status, 200, JSON.stringify(mv.body));
   assert.ok((await call('/members/444444', 'GET', null, boss.token)).body.sessions.some((s) => s.id === x.id));
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session');
+{ // Master recovers a session that never reached the member system, from the CSV PPM exported.
+  await call('/members', 'POST', { nickname: 'JOY', member_no: '666666', confirm_duplicate: true }, boss.token);
+  const rows = [{ table: 'T1', seat: '7', member: 'JOY (666666)', start: '2026-11-03 03:06:19', end: '2026-11-03 05:57:15', active: '10224', rest: '31', buy_in: '10000', cash_out: '' }];
+  assert.equal((await call('/sessions/import-ppm', 'POST', { rows, dry_run: true }, maria.token)).status, 403);
+  const dry = (await call('/sessions/import-ppm', 'POST', { rows, dry_run: true, blinds: '50 / 100' }, boss.token)).body.rows[0];
+  assert.equal(dry.status, 'missing'); assert.equal(dry.will_go_to, 'EV-666666');
+  const imp = (await call('/sessions/import-ppm', 'POST', { rows, blinds: '50 / 100' }, boss.token)).body;
+  assert.equal(imp.imported, 1); assert.equal(imp.rows[0].status, 'recorded'); assert.equal(imp.rows[0].member_no, 'EV-666666');
+  const joy = (await call('/members/666666', 'GET', null, boss.token)).body.sessions[0];
+  assert.deepEqual([joy.table_name, joy.seat, joy.active_seconds, joy.buy_in, joy.blinds], ['T1', 7, 10224, 10000, '50 / 100']);
+  assert.equal((await call('/sessions/import-ppm', 'POST', { rows }, boss.token)).body.imported, 0, 'importing twice adds nothing');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV');

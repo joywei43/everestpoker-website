@@ -94,7 +94,7 @@ export default {async fetch(req,env){
    ]);
    if(!results[0].meta.changes)return reply({error:'Another staff member updated the room. Reload and retry.'},409);
    // Copy finished seat sessions into member play time. Never blocks the PPM save; missed rows are picked up on the next save.
-   try{await ingestPpm(env,ts,now);}catch(e){}
+   try{await ingestPpm(env,ts,now);}catch(e){try{await auditStmt(env,now,user||'staff','ppm.sync_error','Could not copy finished PPM sessions: '+String(e&&e.message||e)).run();}catch(e2){}}
    try{await recordTableRuns(env,ts,now);}catch(e){}
    try{const ch=ppmChanges(JSON.parse(row.data),ts);if(ch.length)await env.DB.batch(ch.slice(0,60).map(c=>auditStmt(env,now,user||'staff',c.action,c.detail)));}catch(e){}
    return reply({version:body.version+1,tables:ts});

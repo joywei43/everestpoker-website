@@ -829,6 +829,40 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     ]);
     return reply({ ok: true });
   }
+  // Master: recover finished sessions from a CSV that PPM exported (at Close or Reset). Rows already recorded are left alone.
+  if (parts[0] === 'sessions' && parts[1] === 'import-ppm' && method === 'POST') {
+    if (!master) return masterOnly();
+    const b = await readJson(req, 1000000);
+    const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 300);
+    const numOr = (v) => { const t = String(v ?? '').replace(/[,\s₱]/g, ''); return t === '' || !Number.isFinite(Number(t)) ? null : Math.round(Number(t)); };
+    const byTable = new Map(), keys = [];
+    rows.forEach((r) => {
+      const name = str(r.table, 10), ref = str(r.member, 60);
+      if (!name || !ref || ppmTime(r.start) == null || ppmTime(r.end) == null) return;
+      const sess = { seatId: numOr(r.seat) || 0, memberId: ref, startTime: r.start, endTime: r.end, activeSeconds: numOr(r.active) || 0, restSeconds: numOr(r.rest) || 0, buyInAmount: numOr(r.buy_in) ?? undefined };
+      const co = numOr(r.cash_out); if (co != null && co >= 0) { sess.cashOutAmount = co; sess.busted = false; }
+      if (!byTable.has(name)) byTable.set(name, { id: name, name, gameType: str(b.game_type, 10) || 'NLH', blinds: str(b.blinds, 20), sessions: [] });
+      byTable.get(name).sessions.push(sess);
+      keys.push({ key: [name, sess.seatId, ref, r.start, r.end].join('|').slice(0, 200), row: { table: name, seat: sess.seatId, member: ref, start: r.start, end: r.end, buy_in: sess.buyInAmount ?? null, cash_out: sess.cashOutAmount ?? null } });
+    });
+    const status = async () => {
+      const out = [];
+      for (const k of keys) {
+        const got = await env.DB.prepare('SELECT ps.id, m.member_no FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id WHERE ps.session_key=?').bind(k.key).first();
+        const del = got ? null : await env.DB.prepare('SELECT deleted_by FROM deleted_sessions WHERE session_key=?').bind(k.key).first();
+        out.push({ ...k.row, status: got ? 'recorded' : del ? 'deleted' : 'missing', member_no: got ? got.member_no : null, match: got ? null : (await matchRefs(env, [k.row.member]))(k.row.member) });
+      }
+      for (const o of out) if (o.match) { const m = await env.DB.prepare('SELECT member_no FROM members WHERE id=?').bind(o.match).first(); o.will_go_to = m ? m.member_no : null; delete o.match; } else delete o.match;
+      return out;
+    };
+    if (b.dry_run) return reply({ rows: await status() });
+    const before = await status();
+    const missing = before.filter((r) => r.status === 'missing').length;
+    if (missing) await ingestPpm(env, [...byTable.values()], now);
+    const after = await status();
+    if (missing) await audit(env, now, who(b), 'session.import', null, `Recovered ${after.filter((r, i) => before[i].status === 'missing' && r.status === 'recorded').length} session(s) from a PPM CSV`).run();
+    return reply({ rows: after, imported: after.filter((r, i) => before[i].status === 'missing' && r.status === 'recorded').length });
+  }
   // Master: move one finished session to another member (credited to that member's group at the time).
   if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && parts[2] === 'move' && method === 'POST') {
     if (!master) return masterOnly();
