@@ -71,6 +71,7 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 .evno{display:flex;align-items:center;border:1px solid #CDD5DF;border-radius:8px;background:#fff;overflow:hidden}.evno>span{padding:0 4px 0 10px;font-family:'IBM Plex Mono',monospace;color:var(--muted);font-weight:500}.evno input{border:0!important;flex:1;font-family:'IBM Plex Mono',monospace;padding-left:0!important}.evno:focus-within{outline:2px solid var(--blue);outline-offset:1px}
 .seg{display:inline-flex;background:#fff;border:1px solid #CDD5DF;border-radius:10px;padding:3px;gap:2px}.seg button{height:34px;padding:0 14px;border:0;border-radius:8px;background:transparent;font-weight:600;cursor:pointer;color:#3A4554}.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
 .linkbtn{background:none;border:0;padding:0;color:var(--blue);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline dotted}
+.st{width:14px;height:14px;border-radius:50%;border:2px solid #9AA7B6;display:block}.st.on{background:var(--ink);border-color:var(--ink)}.st.rest{background:#E2B04A;border-color:#E2B04A}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (min-width:700px){.wide{grid-column:span 2}}
 @media (max-width:640px){main{padding:16px}nav.side{gap:12px}.navlinks{flex-direction:row;flex-wrap:wrap}.staffbox{margin-top:0}}
@@ -124,7 +125,7 @@ function needStaff() { return staff; }
 async function loadMe() {
   try { const me = await api('/me'); const wasRole = role; staff = me.user || ''; role = me.role || 'admin'; sessionStorage.setItem(USER_KEY, staff); sessionStorage.setItem(ROLE_KEY, role); if (wasRole !== role) render(); else renderStaff(); } catch (e) {}
 }
-function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: page || 'members', arg: rest.map(decodeURIComponent).join('/') }; }
+function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: page || (isManager() ? 'operation' : 'members'), arg: rest.map(decodeURIComponent).join('/') }; }
 
 // ---------- shell ----------
 function render() {
@@ -135,6 +136,7 @@ function render() {
     <nav class="side" aria-label="Main">
       <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Member console</small></div></div>
       <div class="navlinks">
+        ${isManager() ? link('operation', 'Operation') : ''}
         ${link('members', 'Members')}
         ${link('groups', 'Player groups')}
         ${link('unmatched', 'Unmatched PPM')}
@@ -150,7 +152,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, approvals: viewApprovals, promotions: viewPromotions, staff: isMaster() ? viewStaff : viewMembers, import: isMaster() ? viewImport : viewMembers };
+  const pages = { members: viewMembers, member: viewMember, groups: viewGroups, unmatched: viewUnmatched, approvals: viewApprovals, operation: isManager() ? viewOperation : viewMembers, promotions: viewPromotions, staff: isMaster() ? viewStaff : viewMembers, import: isMaster() ? viewImport : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -497,6 +499,42 @@ async function viewGroups(view) {
     const csv = lines.map((r) => r.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-${current.name}-${from}-to-${to}.csv`; a.click();
   };
+}
+
+// ---------- Daily operation ----------
+let operationTimer = null;
+async function viewOperation(view) {
+  clearTimeout(operationTimer);
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const q = params.get('day') ? '?day=' + encodeURIComponent(params.get('day')) : '';
+  const d = await api('/operation' + q);
+  const o = d.operating, mo = d.money, v = d.visitors, pl = d.play;
+  const dt = (t) => t ? fmt(t, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
+  const prevDay = d.history[0] ? d.history[0].day : null;
+  const nextDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(d.day + 'T00:00:00Z') + 864e5));
+  const big = (k, val, sub, extra = '') => `<div class="tile" ${extra}><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub}</div></div>`;
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Operation</h1>
+      <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A day starts at 12:00, or when the first table opens that morning.</p></div>
+    <div class="row">${prevDay ? `<a class="btn" href="#/operation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/operation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/operation">Today</a>`}</div></div>
+    ${d.is_today ? `<section class="card"><div class="row between" style="margin-bottom:10px"><h2>Tables now <span class="small muted" style="font-weight:400">· ${d.open_tables} open · ${v.at_table_now} players</span></h2><span class="small muted">Live from PPM · refreshes every 30 s</span></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">${d.tables.map((t) => `<div class="tile" style="${t.running ? 'border-color:var(--green)' : 'opacity:.6'}">
+        <div class="row between"><b style="font-size:18px">${esc(t.name)}</b><span class="chip ${t.running ? 'green' : ''}">${t.running ? 'Open' : 'Closed'}</span></div>
+        ${t.running ? `<div style="margin-top:6px"><b>${esc(t.game_type)} ${esc(t.blinds)}</b></div>
+        <div class="seats" role="img" aria-label="${t.seated} playing, ${t.resting} resting, ${t.empty} empty" style="display:flex;gap:4px;margin:8px 0">${'<i class="st on"></i>'.repeat(t.seated)}${'<i class="st rest"></i>'.repeat(t.resting)}${'<i class="st"></i>'.repeat(Math.max(0, t.empty))}</div>
+        <div class="small muted">${t.seated + t.resting}/9 seated${t.resting ? ' · ' + t.resting + ' resting' : ''}${t.waiting ? ' · ' + t.waiting + ' waiting' : ''}</div>
+        <div class="small muted">Running ${hm(t.run_seconds)} · on table ${peso(t.buy_in_on_table)}</div>` : '<div class="small muted" style="margin-top:6px">Not running</div>'}</div>`).join('')}</div></section>` : ''}
+    <div class="grid">
+      ${big('Operating time', hm(o.seconds), o.since ? `First table ${time(o.since)}${o.until ? ' · last closed ' + time(o.until) : ' · still open'} · table hours ${hm(o.table_seconds)}` : 'No table has run yet')}
+      ${big('Visitors', String(v.total), `${v.members} members · ${v.unmatched} not matched${v.at_table_now ? ' · ' + v.at_table_now + ' at a table now' : ''}${v.new_members ? ' · ' + v.new_members + ' new sign-ups' : ''}`)}
+      ${big('Total buy-in', peso(mo.buy_in_total), d.is_today ? `${peso(mo.buy_in_finished)} finished + ${peso(mo.buy_in_live)} at tables now` : `${pl.sessions} sessions`)}
+      ${big('Total cash-out', peso(mo.cash_out), `${mo.sessions_with_cash_out} sessions${mo.busted ? ' · ' + mo.busted + ' busted' : ''}${mo.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${mo.missing_cash_out} missing (${peso(mo.buy_in_without_cash_out)} buy-in)</span>` : ''}`)}
+      ${big('Player hours', hm(pl.finished_seconds + pl.live_seconds), `${hm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hm(pl.live_seconds) + ' playing now' : ''} · ${restBadge(pl.rest_seconds, pl.finished_seconds)}`)}
+    </div>
+    <section class="card"><h2 style="margin-bottom:10px">Last 7 business days</h2><div class="tbl"><table><thead><tr><th>Day</th><th class="num">Visitors</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th></tr></thead><tbody>
+      ${d.history.map((h) => `<tr class="click" data-day="${h.day}"><td>${esc(h.day)}</td><td class="num">${h.visitors}</td><td class="num">${hm(h.secs)}</td><td class="num">${peso(h.buy_in)}</td><td class="num">${peso(h.cash_out)}</td></tr>`).join('')}
+    </tbody></table></div><p class="small muted" style="margin:8px 0 0">Buy-in and cash-out are what PPM recorded at the tables; the cage system will reconcile them with cash.</p></section>`;
+  view.querySelectorAll('tr[data-day]').forEach((tr) => tr.onclick = () => { location.hash = '#/operation?day=' + tr.dataset.day; });
+  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'operation') viewOperation(view).catch(() => {}); }, 30000);
 }
 
 // ---------- Rewards waiting for a manager ----------

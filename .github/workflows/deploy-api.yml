@@ -37,7 +37,7 @@ jobs:
           done
           exit $missing
       - name: Run tests
-        run: node test.mjs && node ppm.test.mjs && node members.test.mjs && node member-app.test.mjs
+        run: node test.mjs && node ppm.test.mjs && node members.test.mjs && node member-app.test.mjs && node operation.test.mjs
       - name: Point wrangler.toml at the live database
         run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
       - name: Update database tables (safe to repeat; existing data is kept)

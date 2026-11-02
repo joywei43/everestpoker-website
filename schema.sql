@@ -186,3 +186,7 @@ UPDATE members SET nationality='United Kingdom' WHERE nationality<>'United Kingd
 -- Cash-out recorded when a player leaves the seat in PPM (or entered later by a manager). busted=1: lost the whole buy-in.
 -- Kept beside play_sessions so the existing table is never altered.
 CREATE TABLE IF NOT EXISTS session_results(session_id INTEGER PRIMARY KEY REFERENCES play_sessions(id), cash_out INTEGER NOT NULL CHECK(cash_out>=0), busted INTEGER NOT NULL DEFAULT 0, entered_by TEXT NOT NULL DEFAULT 'PPM', updated_at INTEGER NOT NULL);
+
+-- When each PPM table was running (opened or resumed → stopped or paused), for operating hours.
+CREATE TABLE IF NOT EXISTS table_runs(run_key TEXT PRIMARY KEY, table_name TEXT NOT NULL, opened_at INTEGER NOT NULL, closed_at INTEGER, game_type TEXT NOT NULL DEFAULT '', blinds TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS table_runs_open ON table_runs(opened_at);
