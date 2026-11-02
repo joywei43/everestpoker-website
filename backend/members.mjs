@@ -65,8 +65,11 @@ async function loadGroups(env) {
 async function memberByNo(env, no) {
   return env.DB.prepare('SELECT * FROM members WHERE member_no=? COLLATE NOCASE').bind(no).first();
 }
+async function memberByOldNo(env, no) {
+  return env.DB.prepare('SELECT m.* FROM member_number_history h JOIN members m ON m.id=h.member_id WHERE h.old_no=? COLLATE NOCASE').bind(no).first();
+}
 async function nextMemberNumber(env) {
-  const row = await env.DB.prepare("SELECT MAX(CAST(SUBSTR(member_no,4) AS INTEGER)) AS n FROM members WHERE member_no LIKE 'EV-%'").first();
+  const row = await env.DB.prepare("SELECT MAX(n) AS n FROM (SELECT CAST(SUBSTR(member_no,4) AS INTEGER) n FROM members WHERE member_no LIKE 'EV-%' UNION ALL SELECT CAST(SUBSTR(old_no,4) AS INTEGER) FROM member_number_history WHERE old_no LIKE 'EV-%')").first();
   return (row && row.n ? row.n : 0) + 1;
 }
 const formatNo = (n) => 'EV-' + String(n).padStart(6, '0');
@@ -121,6 +124,10 @@ export async function ingestPpm(env, tables, now = Math.floor(Date.now() / 1000)
       byNo.set(r.member_no.toLowerCase(), r.id);
       if (r.nickname) { const k = r.nickname.toLowerCase(); byNick.set(k, byNick.has(k) ? -1 : r.id); }
     }
+  }
+  for (const part of chunks(refs, 90)) {
+    const rows = await all(env.DB.prepare(`SELECT old_no,member_id FROM member_number_history WHERE lower(old_no) IN (${marks(part.length)})`).bind(...part));
+    for (const r of rows) if (!byNo.has(r.old_no.toLowerCase())) byNo.set(r.old_no.toLowerCase(), r.member_id);
   }
   const memberOf = (ref) => { const k = ref.toLowerCase(); if (byNo.has(k)) return byNo.get(k); const n = byNick.get(k); return n && n > 0 ? n : null; };
   const ids = [...new Set(fresh.map((f) => memberOf(f.ref)).filter(Boolean))];
@@ -301,7 +308,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const groupId = b.group_id ? str(b.group_id, 30) : null;
     if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
     const wanted = str(b.member_no, 30);
-    if (wanted && await memberByNo(env, wanted)) return bad(reply, 'Member number already used.', 409);
+    if (wanted && (await memberByNo(env, wanted) || await memberByOldNo(env, wanted))) return bad(reply, 'Member number already used.', 409);
     const created = await createMember(env, now, fields, groupId, 'staff', who(b), wanted || null);
     return reply({ ok: true, member_no: created.member_no });
   }
@@ -346,7 +353,10 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
   // ----- one member -----
   if (parts[0] === 'members' && parts[1]) {
     const m = await memberByNo(env, parts[1]);
-    if (!m) return bad(reply, 'Member not found.', 404);
+    if (!m) {
+      const moved = method === 'GET' && parts.length === 2 ? await memberByOldNo(env, parts[1]) : null;
+      return moved ? reply({ moved_to: moved.member_no }, 301) : bad(reply, 'Member not found.', 404);
+    }
 
     if (parts.length === 2 && method === 'GET') {
       const t30 = now - 30 * DAY;
@@ -372,6 +382,31 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),
         audit: log
       });
+    }
+
+    if (parts[2] === 'number' && method === 'POST') {
+      if (!master) return masterOnly();
+      const b = await readJson(req, 2000);
+      const next = str(b.member_no, 30).toUpperCase();
+      if (!/^[A-Z0-9][A-Z0-9-]{1,29}$/.test(next)) return bad(reply, 'Member number: 2–30 letters, numbers or dashes.');
+      if (next === m.member_no.toUpperCase()) return reply({ ok: true, unchanged: true, member_no: m.member_no });
+      const taken = await env.DB.prepare('SELECT 1 x FROM members WHERE member_no=? COLLATE NOCASE AND id<>? UNION SELECT 1 FROM member_number_history WHERE old_no=? COLLATE NOCASE AND member_id<>?').bind(next, m.id, next, m.id).first();
+      if (taken) return bad(reply, 'That member number is already used.', 409);
+      // Game records, rewards, photo and group history are linked by the internal id, so they all stay.
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM member_number_history WHERE old_no=? COLLATE NOCASE').bind(next),
+        env.DB.prepare('INSERT OR REPLACE INTO member_number_history(old_no,member_id,changed_at,changed_by) VALUES(?,?,?,?)').bind(m.member_no, m.id, now, who(b)),
+        env.DB.prepare('UPDATE members SET member_no=?,updated_at=? WHERE id=?').bind(next, now, m.id),
+        audit(env, now, who(b), 'member.number', m.id, `${m.member_no} → ${next}`)
+      ]);
+      // Keep the member's place on the waiting list under the new number.
+      const room = await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();
+      if (room && room.data.includes(m.member_no)) {
+        const st = JSON.parse(room.data); let hit = false;
+        for (const q of [...(st.queue || []), ...Object.values(st.calls || {})]) if (q && q.member_no === m.member_no) { q.member_no = next; hit = true; }
+        if (hit) await env.DB.prepare('UPDATE room SET version=version+1,data=? WHERE id=1 AND version=?').bind(JSON.stringify(st), room.version).run();
+      }
+      return reply({ ok: true, member_no: next });
     }
 
     if (parts[2] === 'photo' && parts.length === 3 && method === 'GET') {

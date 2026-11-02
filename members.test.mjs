@@ -219,4 +219,20 @@ const pid = (await call('/rewards/pending', 'GET', null, geraldine.token)).body.
 assert.equal((await call(`/rewards/${pid}/void`, 'POST', { reason: 'x' }, geraldine.token)).status, 403, 'managers cannot void');
 assert.equal((await call(`/rewards/${pid}/approve`, 'POST', {}, geraldine.token)).status, 200, 'managers approve');
 
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff');
+// Master can change a member number; records stay, the old number still works in PPM.
+assert.equal((await call('/members/EV-000002/number', 'POST', { member_no: 'VIP-007' }, geraldine.token)).status, 403);
+assert.equal((await call('/members/EV-000002/number', 'POST', { member_no: 'EV-000001' }, boss.token)).status, 409);
+assert.equal((await call('/members/EV-000002/number', 'POST', { member_no: 'bad no!' }, boss.token)).status, 400);
+const tigerBefore = (await call('/members/EV-000002', 'GET', null, boss.token)).body;
+r = await call('/members/EV-000002/number', 'POST', { member_no: 'vip-007' }, boss.token);
+assert.equal(r.status, 200); assert.equal(r.body.member_no, 'VIP-007');
+const tigerAfter = (await call('/members/VIP-007', 'GET', null, boss.token)).body;
+assert.equal(tigerAfter.stats.all.secs, tigerBefore.stats.all.secs, 'play time stays');
+assert.equal(tigerAfter.group_history.length, tigerBefore.group_history.length);
+assert.equal((await call('/members/EV-000002', 'GET', null, boss.token)).body.moved_to, 'VIP-007');
+assert.ok(tigerAfter.audit.some((a) => a.action === 'member.number' && a.detail === 'EV-000002 → VIP-007'));
+assert.equal((await call('/members', 'POST', { nickname: 'Copycat', member_no: 'EV-000002' }, boss.token)).status, 409, 'retired numbers are not reused');
+const fresh = (await call('/members', 'POST', { nickname: 'Fresh' }, boss.token)).body.member_no;
+assert.notEqual(fresh, 'EV-000002');
+
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change');

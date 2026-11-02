@@ -108,6 +108,7 @@ async function api(path, method = 'GET', body) {
   const res = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   let data = {}; try { data = await res.json(); } catch (e) {}
   if (res.status === 401) { token = ''; sessionStorage.removeItem(TOKEN_KEY); render(); throw new Error('Please sign in again.'); }
+  if (res.status === 301 && data.moved_to) { const e = new Error('moved'); e.movedTo = data.moved_to; throw e; }
   if (!res.ok) throw new Error(data.error || 'Request failed (' + res.status + ')');
   return data;
 }
@@ -244,14 +245,16 @@ function openMemberDialog(view, member, save) {
 
 // ---------- One member ----------
 async function viewMember(view, no) {
-  const [gs, data] = await Promise.all([groups(), api('/members/' + encodeURIComponent(no))]);
+  let gs, data;
+  try { [gs, data] = await Promise.all([groups(), api('/members/' + encodeURIComponent(no))]); }
+  catch (e) { if (e.movedTo) { location.replace('#/member/' + encodeURIComponent(e.movedTo)); return; } throw e; }
   const m = data.member, s30 = data.stats.last30, sAll = data.stats.all, share = data.stats.group_share;
   const since = Date.now() / 1000 - 30 * 86400;
   const rw30 = data.rewards.filter((r) => !r.voided && r.approved_at && r.given_at >= since);
   const byType = Object.keys(TYPES).map((t) => ({ t, amt: rw30.filter((r) => r.type === t).reduce((a, r) => a + r.amount, 0) })).filter((x) => x.amt > 0).sort((a, b) => b.amt - a.amt);
   const maxType = Math.max(1, ...byType.map((x) => x.amt));
   view.innerHTML = `<div class="row between"><div class="muted"><a href="#/members">Members</a> / <span class="mono">${esc(m.member_no)}</span></div>
-      <div class="row"><button class="btn" id="edit">Edit profile</button></div></div>
+      <div class="row">${isMaster() ? '<button class="btn" id="renum">Change member no.</button>' : ''}<button class="btn" id="edit">Edit profile</button></div></div>
     <section class="card" style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
       <div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:none">
         <div class="ph" id="ph" role="img" aria-label="Member photo">${esc((m.nickname || m.name || '?').trim().slice(0, 2).toUpperCase())}</div>
@@ -333,6 +336,13 @@ async function viewMember(view, no) {
   };
   const rm = view.querySelector('#phRm');
   if (rm) rm.onclick = async () => { if (!confirm('Remove this photo?')) return; try { await api('/members/' + encodeURIComponent(no) + '/photo/remove', 'POST', {}); reload(); } catch (err) { alert(err.message); } };
+  const renum = view.querySelector('#renum');
+  if (renum) renum.onclick = async () => {
+    const next = (prompt(`New member number for ${m.name} (now ${m.member_no}).\nGame records, rewards and photo stay with this member. The old number still works in PPM.`, m.member_no) || '').trim();
+    if (!next || next.toUpperCase() === m.member_no.toUpperCase()) return;
+    try { const r = await api('/members/' + encodeURIComponent(no) + '/number', 'POST', { member_no: next }); location.hash = '#/member/' + encodeURIComponent(r.member_no); }
+    catch (err) { alert(err.message); }
+  };
   view.querySelector('#edit').onclick = () => openMemberDialog(view, m, async (d) => { await api('/members/' + encodeURIComponent(no), 'PUT', { ...d, staff: needStaff() }); reload(); });
   if (view.querySelector('#gf')) view.querySelector('#gf').onsubmit = async (e) => {
     e.preventDefault(); const who = needStaff(); if (!who) return;
