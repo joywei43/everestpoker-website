@@ -1,0 +1,58 @@
+# Apply a database fix whose contents stay private.
+#   keygen: makes a key pair; the private key is kept in D1 (never in the repo or logs), the public key is printed.
+#   apply:  takes a payload encrypted with that public key (RSA-wrapped AES), decrypts it inside the job and runs it.
+# Logs show only the number of statements and rows changed.
+name: Encrypted SQL
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'keygen | apply'
+        required: true
+      payload:
+        description: 'Encrypted payload (apply only)'
+        required: false
+        default: ''
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      MODE: ${{ github.event.inputs.mode }}
+      PAYLOAD: ${{ github.event.inputs.payload }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Run
+        run: |
+          set -e
+          d1() { npx --yes wrangler@4 d1 execute everest-waiting --remote "$@" 2>/dev/null; }
+          if [ "$MODE" = keygen ]; then
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/ops.pem 2>/dev/null
+            K=$(base64 -w0 /tmp/ops.pem)
+            printf "CREATE TABLE IF NOT EXISTS ops_keys(id INTEGER PRIMARY KEY, pem TEXT NOT NULL, created_at INTEGER NOT NULL);\nINSERT OR REPLACE INTO ops_keys(id,pem,created_at) VALUES(1,'%s',%s);\n" "$K" "$(date +%s)" > /tmp/k.sql
+            d1 --file=/tmp/k.sql > /dev/null
+            echo "PUB-BEGIN"; openssl pkey -in /tmp/ops.pem -pubout; echo "PUB-END"
+            rm -f /tmp/ops.pem /tmp/k.sql
+          elif [ "$MODE" = apply ]; then
+            d1 --json --command "SELECT pem FROM ops_keys WHERE id=1" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);process.stdout.write(Buffer.from(j[0].results[0].pem,'base64'))})" > /tmp/ops.pem
+            echo "$PAYLOAD" | cut -d. -f1 | base64 -d > /tmp/k.enc
+            echo "$PAYLOAD" | cut -d. -f2 | base64 -d > /tmp/sql.enc
+            openssl pkeyutl -decrypt -inkey /tmp/ops.pem -in /tmp/k.enc -out /tmp/k
+            openssl enc -d -aes-256-cbc -pbkdf2 -in /tmp/sql.enc -out /tmp/fix.sql -pass file:/tmp/k
+            echo "statements: $(grep -c ';' /tmp/fix.sql)"
+            d1 --json --file=/tmp/fix.sql | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);const r=Array.isArray(j)?j:[j];console.log('ok:',r.every(x=>x.success),'rows written:',r.reduce((a,x)=>a+((x.meta&&x.meta.rows_written)||0),0))}catch(e){console.log('could not read result')}})"
+            rm -f /tmp/ops.pem /tmp/k /tmp/k.enc /tmp/sql.enc /tmp/fix.sql
+          else
+            echo "mode must be keygen or apply"; exit 1
+          fi
