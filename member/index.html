@@ -62,22 +62,22 @@ footer{padding:18px 16px 28px;text-align:center;font-size:12px;color:var(--muted
 const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
 const KEY = 'everest-member-token', LANG_KEY = 'everest-member-lang';
 const T = {
-  en: { login: 'Member sign in', memberNo: 'Member number', birthday: 'Date of birth', signIn: 'Sign in', signOut: 'Sign out', wrong: 'Member number or birthday is not correct.', inactive: 'Your membership is on hold. Please ask the staff.', tooMany: 'Too many tries. Please wait 15 minutes.', noBirthday: 'No member number yet? Register, then show your ID at the counter.', register: 'Register', error: 'Something went wrong. Please try again.',
+  en: { login: 'Member sign in', memberNo: 'Member number', birthday: 'Date of birth', signIn: 'Sign in', signOut: 'Sign out', wrong: 'Member number or birthday is not correct.', inactive: 'Your membership is on hold. Please ask the staff.', tooMany: 'Too many tries. Please wait 15 minutes.', noBirthday: 'No member number yet? Please ask at the counter and show your ID.', register: 'Register', error: 'Something went wrong. Please try again.',
     memberNo2: 'Member no.', myWait: 'My waitlist', place: 'Your place', called: 'You are being called — please go to the counter!', ahead: (n) => n === 1 ? 'You are next' : `${n - 1} ahead of you`, leave: 'Leave waitlist', join: 'Join waitlist', chooseGame: 'Game', already: 'You are already on a waitlist.', joined: 'You are on the waitlist.',
     tables: 'Tables now', updated: 'Updated', open: (n) => `${n} seat${n === 1 ? '' : 's'} open`, full: 'Full', waiting: (n) => `${n} waiting`, players: (n) => `${n} / 9 players`, noTables: 'No tables open right now.', legend: 'Filled = seat taken',
     records: 'My game record', days30: 'Visit days · 30 days', hours30: 'Play time · 30 days', noRecords: 'No games yet.', restNote: 'Play time from the table system, breaks not counted.',
     promos: 'Promotions', noPromos: 'Ask the staff about current promotions.', foot: '21 years old and above only. Gambling can be addictive. Know when to stop.', h: 'h', m: 'm', days: 'days' },
-  zh: { login: '會員登入', memberNo: '會員號碼', birthday: '出生日期', signIn: '登入', signOut: '登出', wrong: '會員號碼或生日不正確。', inactive: '您的會員資格暫停中，請洽現場人員。', tooMany: '嘗試次數過多，請 15 分鐘後再試。', noBirthday: '還沒有會員號碼？請先註冊，再到櫃台出示證件。', register: '註冊', error: '發生錯誤，請再試一次。',
+  zh: { login: '會員登入', memberNo: '會員號碼', birthday: '出生日期', signIn: '登入', signOut: '登出', wrong: '會員號碼或生日不正確。', inactive: '您的會員資格暫停中，請洽現場人員。', tooMany: '嘗試次數過多，請 15 分鐘後再試。', noBirthday: '還沒有會員號碼？請到櫃台出示證件辦理。', register: '註冊', error: '發生錯誤，請再試一次。',
     memberNo2: '會員號碼', myWait: '我的候位', place: '目前順位', called: '輪到您了，請到櫃台！', ahead: (n) => n === 1 ? '下一位就是您' : `前面還有 ${n - 1} 位`, leave: '取消候位', join: '登記候位', chooseGame: '遊戲', already: '您已經在候位中。', joined: '已登記候位。',
     tables: '現在桌況', updated: '更新', open: (n) => `${n} 個空位`, full: '滿桌', waiting: (n) => `候位 ${n} 人`, players: (n) => `${n} / 9 人`, noTables: '目前沒有開桌。', legend: '實心 = 有人入座',
     records: '我的遊戲紀錄', days30: '近 30 天來訪', hours30: '近 30 天遊戲時數', noRecords: '還沒有遊戲紀錄。', restNote: '遊戲時數依桌邊系統紀錄，不含休息時間。',
     promos: '目前活動', noPromos: '目前活動請洽現場人員。', foot: '僅限 21 歲以上。博弈可能使人上癮，請適可而止。', h: '小時', m: '分', days: '天' },
-  ja: { login: '会員ログイン', memberNo: '会員番号', birthday: '生年月日', signIn: 'ログイン', signOut: 'ログアウト', wrong: '会員番号または生年月日が正しくありません。', inactive: '会員資格が停止中です。スタッフにお問い合わせください。', tooMany: '試行回数が多すぎます。15分後にお試しください。', noBirthday: '会員番号がない方は、登録後に受付で身分証をご提示ください。', register: '登録', error: 'エラーが発生しました。もう一度お試しください。',
+  ja: { login: '会員ログイン', memberNo: '会員番号', birthday: '生年月日', signIn: 'ログイン', signOut: 'ログアウト', wrong: '会員番号または生年月日が正しくありません。', inactive: '会員資格が停止中です。スタッフにお問い合わせください。', tooMany: '試行回数が多すぎます。15分後にお試しください。', noBirthday: '会員番号がない方は、受付で身分証をご提示ください。', register: '登録', error: 'エラーが発生しました。もう一度お試しください。',
     memberNo2: '会員番号', myWait: 'ウェイティング', place: '現在の順番', called: '順番です。受付へお越しください！', ahead: (n) => n === 1 ? '次の番です' : `前に ${n - 1} 人`, leave: '取り消す', join: 'ウェイティング登録', chooseGame: 'ゲーム', already: 'すでにウェイティング中です。', joined: '登録しました。',
     tables: '現在のテーブル', updated: '更新', open: (n) => `空席 ${n}`, full: '満席', waiting: (n) => `待ち ${n} 人`, players: (n) => `${n} / 9 人`, noTables: '現在営業中のテーブルはありません。', legend: '塗りつぶし = 着席中',
     records: 'プレイ履歴', days30: '30日間の来店日数', hours30: '30日間のプレイ時間', noRecords: 'まだ履歴がありません。', restNote: 'プレイ時間はテーブルシステムの記録です（休憩を除く）。',
     promos: '開催中のプロモーション', noPromos: 'プロモーションはスタッフにお尋ねください。', foot: '21歳以上の方のみ。ギャンブルは依存症になることがあります。', h: '時間', m: '分', days: '日' },
-  ko: { login: '회원 로그인', memberNo: '회원 번호', birthday: '생년월일', signIn: '로그인', signOut: '로그아웃', wrong: '회원 번호 또는 생년월일이 올바르지 않습니다.', inactive: '회원 자격이 정지되었습니다. 직원에게 문의해주세요.', tooMany: '시도 횟수가 너무 많습니다. 15분 후 다시 시도해주세요.', noBirthday: '회원 번호가 없으신가요? 등록 후 카운터에서 신분증을 보여주세요.', register: '등록', error: '오류가 발생했습니다. 다시 시도해주세요.',
+  ko: { login: '회원 로그인', memberNo: '회원 번호', birthday: '생년월일', signIn: '로그인', signOut: '로그아웃', wrong: '회원 번호 또는 생년월일이 올바르지 않습니다.', inactive: '회원 자격이 정지되었습니다. 직원에게 문의해주세요.', tooMany: '시도 횟수가 너무 많습니다. 15분 후 다시 시도해주세요.', noBirthday: '회원 번호가 없으신가요? 카운터에서 신분증을 보여주세요.', register: '등록', error: '오류가 발생했습니다. 다시 시도해주세요.',
     memberNo2: '회원 번호', myWait: '내 대기', place: '현재 순서', called: '차례입니다. 카운터로 와주세요!', ahead: (n) => n === 1 ? '다음 차례입니다' : `앞에 ${n - 1}명`, leave: '대기 취소', join: '대기 등록', chooseGame: '게임', already: '이미 대기 중입니다.', joined: '대기 등록되었습니다.',
     tables: '현재 테이블', updated: '업데이트', open: (n) => `빈자리 ${n}`, full: '만석', waiting: (n) => `대기 ${n}명`, players: (n) => `${n} / 9명`, noTables: '현재 열린 테이블이 없습니다.', legend: '채워진 원 = 착석',
     records: '내 게임 기록', days30: '30일 방문 일수', hours30: '30일 플레이 시간', noRecords: '아직 기록이 없습니다.', restNote: '플레이 시간은 테이블 시스템 기록이며 휴식 시간은 제외됩니다.',
@@ -118,7 +118,7 @@ function renderLogin(err) {
       ${err ? `<div class="msg err" role="alert">${esc(err)}</div>` : ''}
       <button class="btn gold">${t('signIn')}</button>
     </form>
-    <p class="small muted" style="margin:0">${t('noBirthday')} <a href="../register/">${t('register')}</a></p></section>`;
+    <p class="small muted" style="margin:0">${t('noBirthday')}</p></section>`;
   document.getElementById('lf').onsubmit = async (e) => {
     e.preventDefault();
     try { const d = await api('/member/login', 'POST', { member_no: document.getElementById('no').value.trim(), birthday: document.getElementById('bd').value }); token = d.token; localStorage.setItem(KEY, token); renderHome(); }

@@ -63,7 +63,8 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(scheduledSync(env))
  }
  if(path==='/register'&&req.method==='POST'){
   if(Number(req.headers.get('content-length'))>5000)return reply({error:'Too large'},413);
-  return handleRegister(req,env,now,reply,await digest('reg:'+(req.headers.get('CF-Connecting-IP')||'unknown')));
+  // Online registration is turned off: members are added by staff in the console.
+  return reply({error:'Online registration is closed. Please register at the counter.'},410);
  }
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});

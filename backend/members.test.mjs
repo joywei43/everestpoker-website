@@ -115,13 +115,10 @@ chen = (await call('/members/EV-000001', 'GET', null, token)).body;
 assert.equal(chen.member.staff_notes, 'Prefers seat 1');
 assert.ok(chen.audit.some((a) => a.action === 'member.group') && chen.audit.some((a) => a.action === 'reward.void'));
 
-// Public registration replaces the Google Sheet: 21+ only, rate limited.
-const reg = { surname: 'Young', familyName: 'Player', birthday: '2010-01-01', agreedTerms: true, agreedAge: true, agreedPolicy: true };
-assert.equal((await call('/register', 'POST', reg)).status, 400);
-r = await call('/register', 'POST', { ...reg, birthday: '1990-05-05' });
-assert.equal(r.status, 200); assert.match(r.body.member_no, /^EV-\d{6}$/);
-for (let i = 0; i < 3; i++) await call('/register', 'POST', { ...reg, birthday: '1990-05-05' });
-assert.equal((await call('/register', 'POST', { ...reg, birthday: '1990-05-05' })).status, 429);
+// Online registration is closed: the endpoint refuses and creates nothing.
+{ const before = (await call('/members?limit=1', 'GET', null, token)).body.total;
+  assert.equal((await call('/register', 'POST', { surname: 'Young', familyName: 'Player', birthday: '1990-05-05', agreedTerms: true, agreedAge: true, agreedPolicy: true })).status, 410);
+  assert.equal((await call('/members?limit=1', 'GET', null, token)).body.total, before); }
 
 // Search for the PPM autocomplete.
 const hits = (await call('/members?q=wei&limit=8', 'GET', null, token)).body.members;
@@ -498,4 +495,4 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   r = await call('/ppm', 'PUT', { version: r.body.version, tables: cur.tables }, boss.token);
   assert.equal(r.body.sync.error, undefined, String(r.body.sync.error)); assert.equal(r.body.sync.inserted, 1, 'the 61st session is recorded too');
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, 21+ registration, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit)');
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit)');
