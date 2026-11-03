@@ -163,4 +163,13 @@ assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).bo
   const c = structuredClone(b); c[1].seats[4] = seat(5); c[1].sessions = [{ seatId: 5, memberId: 'Joe', buyInAmount: 2000, cashOutAmount: 500 }];
   assert.deepEqual(ppmChanges(b, c).map((x) => x.detail), ['Joe left T2 #5 · buy-in 2,000 · cash-out 500 · W/L −1,500']);
 }
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log');
+
+// Telegram lineup: any staff account; players counted by nationality.
+{ await call('/members/000001', 'PUT', { nationality: 'Taiwanese' }, boss);
+  const a = (await call('/announce', 'GET', null, maria2)).body;
+  const t1 = a.tables.find((t) => t.name === 'T1');
+  assert.ok(t1, JSON.stringify(a)); assert.equal(t1.number, '1'); assert.equal(t1.players, 2); assert.equal(t1.open_seats, 7);
+  assert.deepEqual(t1.nationalities, [{ nationality: 'Taiwanese', count: 1 }, { nationality: '', count: 1 }]);
+  assert.equal((await call('/announce', 'POST', {}, maria2)).status, 200);
+  assert.equal((await call('/announce', 'GET', null, maria2)).body.last_copy.actor, 'Maria'); }
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup');

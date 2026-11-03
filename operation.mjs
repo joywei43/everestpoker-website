@@ -204,3 +204,34 @@ export async function handleTableRuns(req, env, path, now, reply, user, role) {
     log(`Changed ${run.table_name} ${when(run.opened_at)} → ${when(run.closed_at)} to ${when(opened)} → ${when(closed)}`)]);
   return reply({ ok: true });
 }
+
+// Telegram lineup post: open tables with players counted by nationality (from their member profiles). Any staff account.
+const DEMONYM = { taiwan: 'Taiwanese', philippines: 'Filipino', 'south korea': 'Korean', korea: 'Korean', japan: 'Japanese', 'hong kong': 'Hong Kong', macau: 'Macanese', china: 'Chinese',
+  singapore: 'Singaporean', thailand: 'Thai', indonesia: 'Indonesian', malaysia: 'Malaysian', vietnam: 'Vietnamese', india: 'Indian', 'united states': 'American', usa: 'American',
+  canada: 'Canadian', australia: 'Australian', 'united kingdom': 'British', uk: 'British' };
+export async function handleAnnounce(req, env, now, reply, user) {
+  if (req.method === 'POST') {
+    await env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'telegram.copy',NULL,'Copied the Telegram lineup post')").bind(now, str(user || 'staff', 60)).run();
+    return reply({ ok: true });
+  }
+  const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
+  const room = await env.DB.prepare('SELECT data FROM room WHERE id=1').first();
+  const queue = room ? (JSON.parse(room.data).queue || []) : [];
+  const players = await liveSeatPlayers(env);
+  const tables = [];
+  for (const t of ppmRow ? JSON.parse(ppmRow.data) : []) {
+    if (!t.isRunning) continue;
+    const name = t.name || 'T' + t.id, here = players.filter((p) => p.table === name);
+    const counts = {};
+    for (const p of here) {
+      const nat = p.member && p.member.nationality ? DEMONYM[p.member.nationality.trim().toLowerCase()] || p.member.nationality.trim() : '';
+      counts[nat] = (counts[nat] || 0) + 1;
+    }
+    const game = `${t.blinds || ''} ${t.gameType || ''}`.trim();
+    tables.push({ name, number: name.replace(/^T/i, ''), blinds: t.blinds || '', game_type: t.gameType || '', players: here.length, open_seats: Math.max(0, 9 - here.length),
+      nationalities: Object.entries(counts).map(([k, n]) => ({ nationality: k, count: n })).sort((a, b) => b.count - a.count || (a.nationality === '') - (b.nationality === '') || a.nationality.localeCompare(b.nationality)),
+      waiting: queue.filter((q) => q.game === game).length });
+  }
+  const last = await env.DB.prepare("SELECT at, actor FROM audit_log WHERE action='telegram.copy' ORDER BY id DESC LIMIT 1").first();
+  return reply({ now, tables, last_copy: last || null });
+}

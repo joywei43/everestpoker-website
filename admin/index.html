@@ -173,6 +173,7 @@ function render() {
         ${link('unmatchedppm', 'Unmatched PPM')}
         ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
         ${link('promotions', 'Promotions')}
+        ${link('telegrampost', 'Telegram post')}
         ${isManager() ? link('importmembers', 'Import members') : ''}
         ${isMaster() ? link('staffaccounts', 'Staff accounts') : ''}
         ${isMaster() ? link('historylog', 'History Log') : ''}
@@ -184,7 +185,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
+  const pages = { members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -802,7 +803,7 @@ const ACTION_LABELS = {
   'member.photo': ['Photo', ''], 'member.merge': ['Merged', 'red'], 'member.delete': ['Member deleted', 'red'], 'member.import': ['Import', 'blue'],
   'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'session.edit': ['Session edited', 'amber'], 'session.move': ['Session moved', 'blue'], 'session.import': ['Sessions recovered', 'green'], 'ppm.sync_error': ['PPM sync error', 'red'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
   'reward.add': ['Reward', 'green'], 'reward.approve': ['Approved', 'green'], 'reward.void': ['Voided', 'red'],
-  'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue']
+  'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue'], 'telegram.copy': ['Telegram post', 'blue']
 };
 async function viewHistory(view) {
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -838,6 +839,54 @@ async function viewHistory(view) {
     const csv = lines.map((r) => r.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-history-${f.from}-to-${f.to}.csv`; a.click();
   };
+}
+
+// ---------- Telegram lineup post ----------
+function telegramText(d) {
+  const bl = (b) => String(b || '').replace(/\s*\/\s*/g, '-');
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const L = ['🔥 THE ACTION IS ON AT EVEREST POKER! 🃏🔥', 'Check our Latest Update on website:', 'www.everestpokerroom.com/waiting-list', ''];
+  if (!d.tables.length) {
+    L.push(' No table is running right now.', ' Message us to get on the list for the next game!');
+  } else {
+    const games = [...new Set(d.tables.map((t) => `${bl(t.blinds)} ${t.game_type}`.trim()))];
+    L.push(` ${d.tables.length} TABLE${d.tables.length === 1 ? '' : 'S'} ONGOING – ${games.join(' & ')}`, '👥 Current Lineup:');
+    for (const t of d.tables) {
+      L.push('', ` TABLE ${t.number} ${bl(t.blinds)} ${t.game_type}`, '');
+      for (const n of t.nationalities) L.push(`${n.count} ${n.nationality ? n.nationality + ' ' : 'Other '}${n.count === 1 ? 'Player' : 'Players'}`);
+      if (!t.players) L.push('Table just opened — be the first to sit!');
+      L.push(t.open_seats ? `(${plural(t.open_seats, 'SEAT').toUpperCase()} OPEN )` : `(TABLE FULL${t.waiting ? ` – ${t.waiting} ON THE WAITING LIST` : ' – JOIN THE WAITING LIST'} )`);
+    }
+  }
+  L.push('', '', '🔥 Reserve your seat, players!', 'Come join the action at Everest Poker!🃏♠️♥️♣️');
+  return L.join('\n');
+}
+let telegramTimer = null;
+async function viewTelegram(view) {
+  clearTimeout(telegramTimer);
+  const d = await api('/announce');
+  const last = d.last_copy, due = last ? last.at + 3600 : null, nowS = Math.floor(Date.now() / 1000);
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Telegram post</h1><p class="sub">The lineup for the Telegram channel, written from PPM and the players' nationalities in their member profiles. Post it every hour.</p></div>
+    <div class="row"><button class="btn" id="tgRefresh">Refresh</button><a class="btn" href="https://t.me/MidoriPoker" target="_blank" rel="noopener">Open channel ↗</a><button class="btn primary" id="tgCopy">Copy post</button></div></div>
+    <div class="grid" style="grid-template-columns:minmax(0,1.3fr) minmax(240px,1fr);align-items:start">
+      <section class="card"><label class="f">Post (you can edit before copying)<textarea id="tgText" rows="22" style="font-size:15px;line-height:1.45"></textarea></label><div id="tgMsg" style="margin-top:8px"></div></section>
+      <section class="card"><h2 style="margin-bottom:10px">Tables now</h2>
+        ${d.tables.map((t) => `<div class="tile" style="margin-bottom:10px"><div class="row between"><b>TABLE ${esc(t.number)}</b><span class="chip green">${esc(t.blinds)} ${esc(t.game_type)}</span></div>
+          <div class="small" style="margin-top:6px">${t.players}/9 seated · ${t.open_seats} open${t.waiting ? ' · ' + t.waiting + ' waiting' : ''}</div>
+          <div class="small muted">${t.nationalities.map((n) => `${n.count} ${esc(n.nationality || 'Other')}`).join(' · ') || 'Nobody seated'}</div></div>`).join('') || '<p class="muted">No table is running.</p>'}
+        <p class="small muted" style="margin:6px 0 0">"Other" = player not matched to a member, or no nationality in the profile. Fix it in the member's profile and press Refresh.</p>
+        <div class="tile" style="margin-top:10px;${due && nowS > due ? 'border-color:var(--red)' : ''}"><div class="k">Last posted</div>
+          <div class="v" style="font-size:18px">${last ? time(last.at) : '—'}</div><div class="s">${last ? `copied by ${esc(last.actor)} · next post ${nowS > due ? '<b style="color:var(--red)">is due now</b>' : 'at ' + time(due)}` : 'Not posted yet today'}</div></div></section></div>`;
+  const ta = view.querySelector('#tgText'); ta.value = telegramText(d);
+  let edited = false; ta.oninput = () => { edited = true; };
+  view.querySelector('#tgRefresh').onclick = () => viewTelegram(view).catch((e) => alert(e.message));
+  view.querySelector('#tgCopy').onclick = async () => {
+    try { await navigator.clipboard.writeText(ta.value); } catch (e) { ta.select(); document.execCommand('copy'); }
+    try { await api('/announce', 'POST', {}); } catch (e) {}
+    flash(view.querySelector('#tgMsg'), 'Copied. Paste it in the Telegram channel.', 'ok');
+    setTimeout(() => { if (parseHash().page === 'telegrampost' && !edited) viewTelegram(view).catch(() => {}); }, 1500);
+  };
+  telegramTimer = setTimeout(function tick() { if (parseHash().page !== 'telegrampost') return; if (edited) { telegramTimer = setTimeout(tick, 60000); return; } viewTelegram(view).catch(() => {}); }, 60000);
 }
 
 // ---------- Operation Report ----------
