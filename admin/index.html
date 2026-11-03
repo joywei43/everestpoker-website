@@ -845,10 +845,9 @@ async function viewHistory(view) {
 function telegramText(d) {
   const bl = (b) => String(b || '').replace(/\s*\/\s*/g, '-');
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (!d.tables.length) return ''; // nothing to post when no table is open
   const L = ['🔥 THE ACTION IS ON AT EVEREST POKER! 🃏🔥', 'Check our Latest Update on website:', 'www.everestpokerroom.com/waiting-list', ''];
-  if (!d.tables.length) {
-    L.push(' No table is running right now.', ' Message us to get on the list for the next game!');
-  } else {
+  {
     const games = [...new Set(d.tables.map((t) => `${bl(t.blinds)} ${t.game_type}`.trim()))];
     L.push(` ${d.tables.length} TABLE${d.tables.length === 1 ? '' : 'S'} ONGOING – ${games.join(' & ')}`, '👥 Current Lineup:');
     for (const t of d.tables) {
@@ -875,9 +874,10 @@ async function viewTelegram(view) {
           <div class="small" style="margin-top:6px">${t.players}/9 seated · ${t.open_seats} open${t.waiting ? ' · ' + t.waiting + ' waiting' : ''}</div>
           <div class="small muted">${t.nationalities.map((n) => `${n.count} ${esc(n.nationality || 'Other')}`).join(' · ') || 'Nobody seated'}</div></div>`).join('') || '<p class="muted">No table is running.</p>'}
         <p class="small muted" style="margin:6px 0 0">"Other" = player not matched to a member, or no nationality in the profile. Fix it in the member's profile and press Refresh.</p>
-        <div class="tile" style="margin-top:10px;${due && nowS > due ? 'border-color:var(--red)' : ''}"><div class="k">Last posted</div>
-          <div class="v" style="font-size:18px">${last ? time(last.at) : '—'}</div><div class="s">${last ? `copied by ${esc(last.actor)} · next post ${nowS > due ? '<b style="color:var(--red)">is due now</b>' : 'at ' + time(due)}` : 'Not posted yet today'}</div></div></section></div>`;
+        <div class="tile" style="margin-top:10px;${due && nowS > due && d.tables.length ? 'border-color:var(--red)' : ''}"><div class="k">Last posted</div>
+          <div class="v" style="font-size:18px">${last ? time(last.at) : '—'}</div><div class="s">${last ? `copied by ${esc(last.actor)}${d.tables.length ? ` · next post ${nowS > due ? '<b style="color:var(--red)">is due now</b>' : 'at ' + time(due)}` : ' · no table open'}` : 'Not posted yet today'}</div></div></section></div>`;
   const ta = view.querySelector('#tgText'); ta.value = telegramText(d);
+  if (!d.tables.length) { ta.placeholder = 'No table is open, so there is nothing to post.'; ta.disabled = true; view.querySelector('#tgCopy').disabled = true; }
   let edited = false; ta.oninput = () => { edited = true; };
   view.querySelector('#tgRefresh').onclick = () => viewTelegram(view).catch((e) => alert(e.message));
   view.querySelector('#tgCopy').onclick = async () => {
