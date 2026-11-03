@@ -1045,11 +1045,19 @@ function bindPpmRecover(view) {
       const label = (r) => r.status === 'recorded' ? `<span class="chip green">Recorded</span> ${r.member_no ? `<a class="mono" href="#/member/${encodeURIComponent(r.member_no)}">${esc(r.member_no)}</a>` : 'Unmatched'}`
         : r.status === 'deleted' ? '<span class="chip">Deleted by master</span>' : `<span class="chip amber">Missing</span> → ${r.will_go_to ? `<span class="mono">${esc(r.will_go_to)}</span>` : 'Unmatched (link it after)'}`;
       const missing = res.rows.filter((r) => r.status === 'missing').length;
-      box.innerHTML = `<div class="tbl"><table><thead><tr><th>Table · Seat</th><th>Typed in PPM</th><th>Start – End</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>In the system</th></tr></thead><tbody>
-        ${res.rows.map((r) => `<tr><td>${esc(r.table)} · S${esc(r.seat)}</td><td>${esc(r.member)}</td><td class="mono small">${esc(r.start)} → ${esc(r.end.slice(11))}</td><td class="num">${r.buy_in == null ? '—' : peso(r.buy_in)}</td><td class="num">${r.cash_out == null ? '—' : peso(r.cash_out)}</td><td>${label(r)}</td></tr>`).join('')}</tbody></table></div>
-        ${missing ? `<div class="row" style="margin-top:10px"><button class="btn primary" id="ppmGo">Add ${missing} missing session${missing === 1 ? '' : 's'}</button></div>` : '<p class="small muted" style="margin:8px 0 0">Everything in this file is already in the system.</p>'}`;
+      box.innerHTML = `<div class="tbl"><table><thead><tr><th style="width:36px"><span class="sr">Add</span></th><th>Table · Seat</th><th>Typed in PPM</th><th>Start – End</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>In the system</th></tr></thead><tbody>
+        ${res.rows.map((r, i) => `<tr><td>${r.status === 'missing' ? `<input type="checkbox" data-pick="${i}" checked aria-label="Add this session">` : ''}</td><td>${esc(r.table)} · S${esc(r.seat)}</td><td>${esc(r.member)}</td><td class="mono small">${esc(r.start)} → ${esc(r.end.slice(11))}</td><td class="num">${r.buy_in == null ? '—' : peso(r.buy_in)}</td><td class="num">${r.cash_out == null ? '—' : peso(r.cash_out)}</td><td>${label(r)}</td></tr>`).join('')}</tbody></table></div>
+        ${missing ? `<div class="row" style="margin-top:10px"><button class="btn primary" id="ppmGo">Add ticked sessions</button><span class="small muted">Untick a session you already entered by hand.</span></div>` : '<p class="small muted" style="margin:8px 0 0">Everything in this file is already in the system.</p>'}`;
       const go = box.querySelector('#ppmGo');
-      if (go) go.onclick = async () => { go.disabled = true; try { const r = await api('/sessions/import-ppm', 'POST', { rows, blinds }); msg.textContent = `${r.imported} session${r.imported === 1 ? '' : 's'} added.`; show(r); } catch (e) { msg.textContent = e.message; go.disabled = false; } };
+      if (go) go.onclick = async () => {
+        const picked = new Set([...box.querySelectorAll('[data-pick]:checked')].map((c) => Number(c.dataset.pick)));
+        const keyOf = (r) => [r.table, String(r.seat), r.member, r.start, r.end].join('|');
+        const want = new Set(res.rows.filter((r, i) => r.status === 'missing' && picked.has(i)).map(keyOf));
+        const send = rows.filter((r) => want.has(keyOf({ table: r.table, seat: String(Number(r.seat) || 0), member: r.member, start: r.start, end: r.end })));
+        if (!send.length) { msg.textContent = 'Nothing ticked.'; return; }
+        go.disabled = true;
+        try { const r = await api('/sessions/import-ppm', 'POST', { rows: send, blinds }); msg.textContent = `${r.imported} session${r.imported === 1 ? '' : 's'} added.`; show(await api('/sessions/import-ppm', 'POST', { rows, blinds, dry_run: true })); } catch (e) { msg.textContent = e.message; go.disabled = false; }
+      };
     };
     msg.textContent = `${rows.length} sessions in ${file.name}${blinds ? ' · ' + blinds : ''}`;
     try { show(await api('/sessions/import-ppm', 'POST', { rows, blinds, dry_run: true })); } catch (e) { msg.textContent = e.message; }
