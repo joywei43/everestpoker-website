@@ -1,0 +1,46 @@
+# Exports the night's PPM sessions from D1, encrypted with .github/recon-public.pem (RSA + AES).
+# Only the holder of the matching private key can read the output; the public log shows ciphertext only.
+name: Encrypted export
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Unix seconds: sessions that started at or after this time'
+        required: true
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      SINCE: ${{ github.event.inputs.since }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Export and encrypt
+        run: |
+          set -e
+          case "$SINCE" in (*[!0-9]*|'') echo "since must be digits"; exit 1;; esac
+          q() { npx --yes wrangler@4 d1 execute everest-waiting --remote --json --command "$1" 2>/dev/null; }
+          {
+            echo '{"sessions":'; q "SELECT ps.id, ps.session_key, ps.member_ref, ps.table_name, ps.seat, ps.start_at, ps.end_at, ps.active_seconds, ps.rest_seconds, ps.buy_in, ps.group_id, m.member_no, m.nickname, sr.cash_out, sr.busted, sr.entered_by FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.start_at >= $SINCE ORDER BY ps.table_name, ps.end_at"
+            echo ',"deleted":'; q "SELECT session_key, summary, deleted_at FROM deleted_sessions"
+            echo ',"audit":'; q "SELECT id, at, actor, action, detail FROM audit_log WHERE at >= $SINCE AND (action LIKE 'session.%' OR action LIKE 'sessions.%' OR action LIKE 'member.%' OR action LIKE 'ppm.sync%') ORDER BY id"
+            echo ',"members":'; q "SELECT member_no, nickname, surname, family_name, group_id FROM members ORDER BY member_no"
+            echo '}'
+          } > /tmp/out.json
+          openssl rand -hex 32 > /tmp/k
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in /tmp/out.json -out /tmp/out.enc -pass file:/tmp/k
+          openssl pkeyutl -encrypt -pubin -inkey ../.github/recon-public.pem -in /tmp/k -out /tmp/k.enc
+          echo "KEY-BEGIN"; base64 -w0 /tmp/k.enc; echo; echo "KEY-END"
+          echo "DATA-BEGIN"; base64 -w0 /tmp/out.enc; echo; echo "DATA-END"
+          rm -f /tmp/out.json /tmp/k
