@@ -170,6 +170,9 @@ assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).bo
   const t1 = a.tables.find((t) => t.name === 'T1');
   assert.ok(t1, JSON.stringify(a)); assert.equal(t1.number, '1'); assert.equal(t1.players, 2); assert.equal(t1.open_seats, 7);
   assert.deepEqual(t1.nationalities, [{ nationality: 'Taiwanese', count: 1 }, { nationality: '', count: 1 }]);
-  assert.equal((await call('/announce', 'POST', {}, maria2)).status, 200);
-  assert.equal((await call('/announce', 'GET', null, maria2)).body.last_copy.actor, 'Maria'); }
+  assert.equal((await call('/announce', 'POST', { target: 'channel' }, maria2)).status, 200);
+  let an = (await call('/announce', 'GET', null, maria2)).body;
+  assert.equal(an.last.channel.actor, 'Maria'); assert.equal(an.last.group, null, 'group and channel tracked separately');
+  await call('/announce', 'POST', { target: 'group' }, maria2);
+  assert.equal((await call('/announce', 'GET', null, maria2)).body.last.group.actor, 'Maria'); }
 console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup');

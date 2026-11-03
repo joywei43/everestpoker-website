@@ -864,9 +864,10 @@ let telegramTimer = null;
 async function viewTelegram(view) {
   clearTimeout(telegramTimer);
   const d = await api('/announce');
-  const last = d.last_copy, due = last ? last.at + 3600 : null, nowS = Math.floor(Date.now() / 1000);
-  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Telegram post</h1><p class="sub">The lineup for the Telegram channel, written from PPM and the players' nationalities in their member profiles. Post it every hour.</p></div>
-    <div class="row"><button class="btn" id="tgRefresh">Refresh</button><a class="btn" href="https://t.me/MidoriPoker" target="_blank" rel="noopener">Open channel ↗</a><button class="btn primary" id="tgCopy">Copy post</button></div></div>
+  const nowS = Math.floor(Date.now() / 1000);
+  const TG = [['group', 'Player group', 60], ['channel', 'Channel', 30]];
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Telegram post</h1><p class="sub">The lineup for the Telegram channel, written from PPM and the players' nationalities in their member profiles. Post it in the players’ group every hour and in the channel every 30 minutes.</p></div>
+    <div class="row"><button class="btn" id="tgRefresh">Refresh</button><a class="btn" href="https://t.me/MidoriPoker" target="_blank" rel="noopener">Open channel ↗</a></div></div>
     <div class="grid" style="grid-template-columns:minmax(0,1.3fr) minmax(240px,1fr);align-items:start">
       <section class="card"><label class="f">Post (you can edit before copying)<textarea id="tgText" rows="22" style="font-size:15px;line-height:1.45"></textarea></label><div id="tgMsg" style="margin-top:8px"></div></section>
       <section class="card"><h2 style="margin-bottom:10px">Tables now</h2>
@@ -874,18 +875,20 @@ async function viewTelegram(view) {
           <div class="small" style="margin-top:6px">${t.players}/9 seated · ${t.open_seats} open${t.waiting ? ' · ' + t.waiting + ' waiting' : ''}</div>
           <div class="small muted">${t.nationalities.map((n) => `${n.count} ${esc(n.nationality || 'Other')}`).join(' · ') || 'Nobody seated'}</div></div>`).join('') || '<p class="muted">No table is running.</p>'}
         <p class="small muted" style="margin:6px 0 0">"Other" = player not matched to a member, or no nationality in the profile. Fix it in the member's profile and press Refresh.</p>
-        <div class="tile" style="margin-top:10px;${due && nowS > due && d.tables.length ? 'border-color:var(--red)' : ''}"><div class="k">Last posted</div>
-          <div class="v" style="font-size:18px">${last ? time(last.at) : '—'}</div><div class="s">${last ? `copied by ${esc(last.actor)}${d.tables.length ? ` · next post ${nowS > due ? '<b style="color:var(--red)">is due now</b>' : 'at ' + time(due)}` : ' · no table open'}` : 'Not posted yet today'}</div></div></section></div>`;
+        ${TG.map(([k, label, mins]) => { const l = d.last[k], due = l ? l.at + mins * 60 : null, late = d.tables.length && (!l || nowS > due);
+          return `<div class="tile" style="margin-top:10px;${late ? 'border-color:var(--red)' : ''}"><div class="row between"><div class="k">${label} · every ${mins} min</div><button class="btn sm primary" data-tg="${k}">Copy for ${label.toLowerCase()}</button></div>
+          <div class="v" style="font-size:18px">${l ? time(l.at) : '—'}</div><div class="s">${l ? `last copied by ${esc(l.actor)}` : 'Not posted yet'}${d.tables.length ? ` · next ${!l || nowS > due ? '<b style="color:var(--red)">due now</b>' : 'at ' + time(due)}` : ' · no table open'}</div></div>`; }).join('')}
+      </section></div>`;
   const ta = view.querySelector('#tgText'); ta.value = telegramText(d);
-  if (!d.tables.length) { ta.placeholder = 'No table is open, so there is nothing to post.'; ta.disabled = true; view.querySelector('#tgCopy').disabled = true; }
+  if (!d.tables.length) { ta.placeholder = 'No table is open, so there is nothing to post.'; ta.disabled = true; view.querySelectorAll('[data-tg]').forEach((b) => { b.disabled = true; }); }
   let edited = false; ta.oninput = () => { edited = true; };
   view.querySelector('#tgRefresh').onclick = () => viewTelegram(view).catch((e) => alert(e.message));
-  view.querySelector('#tgCopy').onclick = async () => {
+  view.querySelectorAll('[data-tg]').forEach((btn) => btn.onclick = async () => {
     try { await navigator.clipboard.writeText(ta.value); } catch (e) { ta.select(); document.execCommand('copy'); }
-    try { await api('/announce', 'POST', {}); } catch (e) {}
-    flash(view.querySelector('#tgMsg'), 'Copied. Paste it in the Telegram channel.', 'ok');
+    try { await api('/announce', 'POST', { target: btn.dataset.tg }); } catch (e) {}
+    flash(view.querySelector('#tgMsg'), `Copied. Paste it in the ${btn.dataset.tg === 'channel' ? 'Telegram channel' : 'players’ group'}.`, 'ok');
     setTimeout(() => { if (parseHash().page === 'telegrampost' && !edited) viewTelegram(view).catch(() => {}); }, 1500);
-  };
+  });
   telegramTimer = setTimeout(function tick() { if (parseHash().page !== 'telegrampost') return; if (edited) { telegramTimer = setTimeout(tick, 60000); return; } viewTelegram(view).catch(() => {}); }, 60000);
 }
 

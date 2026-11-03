@@ -210,8 +210,12 @@ const DEMONYM = { taiwan: 'Taiwanese', philippines: 'Filipino', 'south korea': '
   singapore: 'Singaporean', thailand: 'Thai', indonesia: 'Indonesian', malaysia: 'Malaysian', vietnam: 'Vietnamese', india: 'Indian', 'united states': 'American', usa: 'American',
   canada: 'Canadian', australia: 'Australian', 'united kingdom': 'British', uk: 'British' };
 export async function handleAnnounce(req, env, now, reply, user) {
+  // Two places to post: the players' group (every hour) and the subscribed channel (every 30 minutes).
+  const TARGETS = { group: 'player group', channel: 'channel' };
   if (req.method === 'POST') {
-    await env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'telegram.copy',NULL,'Copied the Telegram lineup post')").bind(now, str(user || 'staff', 60)).run();
+    let b = {}; try { b = await req.json(); } catch {}
+    const target = TARGETS[b.target] ? b.target : 'group';
+    await env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'telegram.copy',NULL,?)").bind(now, str(user || 'staff', 60), 'Copied the lineup post for the ' + TARGETS[target]).run();
     return reply({ ok: true });
   }
   const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
@@ -229,9 +233,10 @@ export async function handleAnnounce(req, env, now, reply, user) {
     }
     const game = `${t.blinds || ''} ${t.gameType || ''}`.trim();
     tables.push({ name, number: name.replace(/^T/i, ''), blinds: t.blinds || '', game_type: t.gameType || '', players: here.length, open_seats: Math.max(0, 9 - here.length),
-      nationalities: Object.entries(counts).map(([k, n]) => ({ nationality: k, count: n })).sort((a, b) => b.count - a.count || (a.nationality === '') - (b.nationality === '') || a.nationality.localeCompare(b.nationality)),
+      nationalities: Object.entries(counts).map(([k, n]) => ({ nationality: k, count: n })).sort((a, b) => (a.nationality === '') - (b.nationality === '') || b.count - a.count || a.nationality.localeCompare(b.nationality)),
       waiting: queue.filter((q) => q.game === game).length });
   }
-  const last = await env.DB.prepare("SELECT at, actor FROM audit_log WHERE action='telegram.copy' ORDER BY id DESC LIMIT 1").first();
-  return reply({ now, tables, last_copy: last || null });
+  const lastFor = (t) => env.DB.prepare("SELECT at, actor FROM audit_log WHERE action='telegram.copy' AND detail LIKE ? ORDER BY id DESC LIMIT 1").bind('%' + TARGETS[t]).first();
+  const last = { group: (await lastFor('group')) || null, channel: (await lastFor('channel')) || null };
+  return reply({ now, tables, last_copy: last.group, last });
 }
