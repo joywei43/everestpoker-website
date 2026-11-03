@@ -1,0 +1,53 @@
+# Master-approved fixes to one game session, by its id (no names or amounts in the inputs or logs).
+name: Fix session
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'delete | set_seat'
+        required: true
+      session_id:
+        description: 'play_sessions.id'
+        required: true
+      value:
+        description: 'New seat number for set_seat'
+        required: false
+        default: ''
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      ACTION: ${{ github.event.inputs.action }}
+      SID: ${{ github.event.inputs.session_id }}
+      VALUE: ${{ github.event.inputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Apply
+        run: |
+          set -e
+          case "$SID" in (*[!0-9]*|'') echo "session_id must be digits"; exit 1;; esac
+          NOW=$(date +%s)
+          case "$ACTION" in
+            delete)
+              SQL="INSERT OR REPLACE INTO deleted_sessions(session_key,summary,deleted_by,deleted_at) SELECT session_key,'Session #$SID removed (staff seat mistake)','JOY',$NOW FROM play_sessions WHERE id=$SID;
+                   INSERT INTO audit_log(at,actor,action,member_id,detail) SELECT $NOW,'JOY','session.delete',member_id,'Deleted game session #$SID (staff seat mistake, fixed on request)' FROM play_sessions WHERE id=$SID;
+                   DELETE FROM session_results WHERE session_id=$SID; DELETE FROM play_sessions WHERE id=$SID;";;
+            set_seat)
+              case "$VALUE" in ([1-9]) ;; (*) echo "value must be a seat 1-9"; exit 1;; esac
+              SQL="INSERT INTO audit_log(at,actor,action,member_id,detail) SELECT $NOW,'JOY','session.edit',member_id,'Session #$SID seat '||seat||' → $VALUE (staff seat mistake, fixed on request)' FROM play_sessions WHERE id=$SID;
+                   UPDATE play_sessions SET seat=$VALUE WHERE id=$SID;";;
+            *) echo "unknown action"; exit 1;;
+          esac
+          npx --yes wrangler@4 d1 execute everest-waiting --remote --command "$SQL" | grep -E '"changes"|success|rows_written' || true
