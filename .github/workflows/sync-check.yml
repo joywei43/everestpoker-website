@@ -1,0 +1,31 @@
+# Read-only health check of PPM → member sync. Prints counts and sync errors only (no names or personal data),
+# because logs of this public repository are public.
+name: Sync check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Sessions in PPM right now, per table
+        run: npx --yes wrangler@4 d1 execute everest-waiting --remote --command "SELECT json_extract(j.value,'$.name') tbl, json_extract(j.value,'$.isRunning') running, json_array_length(json_extract(j.value,'$.sessions')) sessions FROM ppm, json_each(ppm.data) j"
+      - name: Recorded sessions per hour (Manila) since 2026-11-02 18:00
+        run: npx --yes wrangler@4 d1 execute everest-waiting --remote --command "SELECT table_name, strftime('%m-%d %H:00', end_at+28800, 'unixepoch') hour_end, COUNT(*) n, SUM(member_id IS NULL) unmatched FROM play_sessions WHERE end_at >= 1793613600 GROUP BY 1,2 ORDER BY 1,2"
+      - name: Sync events
+        run: npx --yes wrangler@4 d1 execute everest-waiting --remote --command "SELECT id, strftime('%m-%d %H:%M', at+28800, 'unixepoch') at, action, detail FROM audit_log WHERE action IN ('ppm.sync_error','ppm.sync_retry','session.import') ORDER BY id DESC LIMIT 15"
+      - name: Deleted sessions
+        run: npx --yes wrangler@4 d1 execute everest-waiting --remote --command "SELECT COUNT(*) deleted FROM deleted_sessions"
