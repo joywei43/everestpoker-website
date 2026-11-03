@@ -5,13 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'delete | set_seat'
+        description: 'delete | set_seat | set_start'
         required: true
       session_id:
         description: 'play_sessions.id'
         required: true
       value:
-        description: 'New seat number for set_seat'
+        description: 'New seat (set_seat) or new start in unix seconds (set_start)'
         required: false
         default: ''
 
@@ -48,6 +48,11 @@ jobs:
               case "$VALUE" in ([1-9]) ;; (*) echo "value must be a seat 1-9"; exit 1;; esac
               SQL="INSERT INTO audit_log(at,actor,action,member_id,detail) SELECT $NOW,'JOY','session.edit',member_id,'Session #$SID seat '||seat||' → $VALUE (staff seat mistake, fixed on request)' FROM play_sessions WHERE id=$SID;
                    UPDATE play_sessions SET seat=$VALUE WHERE id=$SID;";;
+            set_start)
+              case "$VALUE" in (*[!0-9]*|'') echo "value must be unix seconds"; exit 1;; esac
+              # Earlier start: the extra minutes count as playing time.
+              SQL="INSERT INTO audit_log(at,actor,action,member_id,detail) SELECT $NOW,'JOY','session.edit',member_id,'Session #$SID start moved '||(start_at-$VALUE)||' s earlier (staff seat mistake, fixed on request)' FROM play_sessions WHERE id=$SID AND $VALUE<start_at;
+                   UPDATE play_sessions SET active_seconds=active_seconds+(start_at-$VALUE), start_at=$VALUE WHERE id=$SID AND $VALUE<start_at;";;
             *) echo "unknown action"; exit 1;;
           esac
           npx --yes wrangler@4 d1 execute everest-waiting --remote --command "$SQL" | grep -E '"changes"|success|rows_written' || true
