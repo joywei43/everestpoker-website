@@ -101,6 +101,7 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 .pc-now{margin:10px 0;font-size:13px}.pc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pc-st{background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.6}
 .pcard .k{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}.pc-t{width:100%;font-size:12px;border-collapse:collapse}.pc-t td{padding:3px 4px;border-bottom:1px solid var(--line2)}
 .floor-side .k{font-size:12px;color:var(--muted)}
+.pt{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.25}.pt small{font-size:11px;color:var(--muted);white-space:nowrap}td:not(.num) .pt,.pv .pt{align-items:inherit}
 .pc-note{margin-top:8px;background:var(--note);border:1px solid var(--note-line);border-radius:8px;padding:6px 8px;font-size:12px;white-space:pre-wrap}
 </style>
 </head>
@@ -353,21 +354,20 @@ async function viewMember(view, no) {
     </section>
     <div class="row between"><div role="group" aria-label="Period" class="seg">
         <button type="button" data-period="30" aria-pressed="${period === '30'}">Last 30 days</button><button type="button" data-period="all" aria-pressed="${period === 'all'}">All time</button></div>
-      <span class="small muted">Play time from PPM, rest excluded</span></div>
+      <span class="small muted">Playing hours = time at the table − rest</span></div>
     <div class="grid" id="statTiles">${statTiles(period === 'all' ? sAll : s30)}</div>
     ${(data.playing || []).map((x) => `<section class="card" style="border:2px solid var(--gold);display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center">
       <span class="chip ${x.status === 'rest' ? 'amber' : 'green'}">${x.status === 'rest' ? 'Resting now' : 'Playing now'}</span>
       <div><div class="small muted">Table · Seat</div><b>${esc(x.table)} · S${x.seat}</b></div>
       <div><div class="small muted">Game</div><b>${esc(x.game_type)} ${esc(x.blinds)}</b></div>
       <div><div class="small muted">Since</div><b class="mono">${time(x.started)}</b></div>
-      <div><div class="small muted">Play time so far</div><b class="mono">${hhmm(x.active_seconds)}</b></div>
-      <div><div class="small muted">Rest</div><span class="mono muted">${hhmm(x.rest_seconds)}</span></div>
+      <div><div class="small muted">Playing hours so far</div><b class="mono">${hhmm(x.active_seconds)}</b><div class="small muted mono">${restLine(x.active_seconds, x.rest_seconds)}</div></div>
       <div><div class="small muted">Buy-in</div><b>${x.buy_in === null ? '—' : peso(x.buy_in)}</b></div>
       <div class="small muted" style="flex:1 1 220px">PPM name "${esc(x.ref)}"${x.linked ? ' · linked by staff' : ' · matched automatically'}. Added to Game sessions and totals when the seat is cleared.</div>
     </section>`).join('')}
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM when the player leaves the seat</span></div>
-      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Play time</th><th>Table · Seat</th><th>Start – End</th><th class="num">Rest</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
-      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num mono muted">${hhmm(x.rest_seconds)} ${restBadge(x.rest_seconds, x.active_seconds)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
+      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Playing hours</th><th>Table · Seat</th><th>Start – End</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
+      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num">${playTime(x.active_seconds, x.rest_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
         <td class="num">${isManager() ? `<button type="button" class="linkbtn" data-co="${x.id}" title="Enter or correct the cash-out">${x.cash_out == null ? 'Add' : (x.busted ? 'Busted' : peso(x.cash_out))}</button>` : (x.cash_out == null ? '—' : x.busted ? 'Busted' : peso(x.cash_out))}</td>
         <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-editsess="${x.id}" title="Correct times, buy-in or cash-out">Edit</button><button type="button" class="btn sm" data-movesess="${x.id}" title="This session belongs to another member">Move</button><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
@@ -481,7 +481,7 @@ async function viewMember(view, no) {
     dlg.innerHTML = `<form method="dialog"><h2>Edit session · ${esc(x.table_name)} S${esc(x.seat)} · ${esc(x.game_type)} ${esc(x.blinds)}</h2><div class="form">
         <label class="f">Start<input type="datetime-local" name="start" required value="${toLocalInput(x.start_at)}"></label>
         <label class="f">End<input type="datetime-local" name="end" required value="${toLocalInput(x.end_at)}"></label>
-        <label class="f">Play time (minutes)<input type="number" min="0" name="active" value="${mins(x.active_seconds)}"></label>
+        <label class="f">Playing time (minutes, rest excluded)<input type="number" min="0" name="active" value="${mins(x.active_seconds)}"></label>
         <label class="f">Rest (minutes)<input type="number" min="0" name="rest" value="${mins(x.rest_seconds)}"></label>
         <label class="f">Buy-in (₱)<input type="text" inputmode="numeric" name="buy" value="${x.buy_in ?? ''}"></label>
         <label class="f">Cash-out (₱)<input type="text" inputmode="numeric" name="cash" value="${x.cash_out ?? ''}" placeholder="Blank = not entered"></label>
@@ -548,6 +548,10 @@ function squarePhoto(file) {
   });
 }
 // Rest share of the time at the table: under 10% green, up to 20% yellow, above 20% red.
+// Playing hours = total time at the table minus rest. Shown first; total and rest underneath (HH:MM).
+const restColor = (rest, play) => { const t = (rest || 0) + (play || 0); if (!t) return 'inherit'; const pct = rest / t * 100; return pct <= 10 ? 'var(--green)' : pct <= 20 ? 'var(--amber)' : 'var(--red)'; };
+const restLine = (play, rest) => `<span style="white-space:nowrap">Total ${hhmm((play || 0) + (rest || 0))} / Rest <span style="color:${restColor(rest, play)};font-weight:600" title="${(play || rest) ? Math.round((rest || 0) / ((play || 0) + (rest || 0)) * 100) : 0}% of the time at the table">${hhmm(rest)}</span></span>`;
+function playTime(play, rest) { return `<span class="pt"><b class="mono">${hhmm(play)}</b><small class="mono">${restLine(play, rest)}</small></span>`; }
 function restBadge(rest, play) {
   const total = (rest || 0) + (play || 0);
   if (!total) return '<span class="muted">—</span>';
@@ -559,7 +563,7 @@ const signedPeso = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + peso(Math.abs(n))
 function statTiles(st) {
   const wlColor = st.win_loss > 0 ? 'var(--green)' : st.win_loss < 0 ? 'var(--red)' : 'inherit';
   return `${tile('Visit days', st.days + ' days', st.sessions + ' sessions')}
-    <div class="tile"><div class="k">Play time</div><div class="v">${hm(st.secs)}</div><div class="s row" style="gap:6px">${restBadge(st.rest_secs, st.secs)} <span>rest ${hm(st.rest_secs)}</span></div></div>
+    <div class="tile"><div class="k">Playing hours</div><div class="v mono">${hhmm(st.secs)}</div><div class="s mono">${restLine(st.secs, st.rest_secs)}</div></div>
     ${tile('Buy-in', peso(st.buy_in), 'Cash-out ' + peso(st.cash_out))}
     <div class="tile"><div class="k">History W/L</div><div class="v" style="color:${wlColor}">${st.with_cash_out ? signedPeso(st.win_loss) : '—'}</div><div class="s">${st.with_cash_out} of ${st.sessions} sessions with cash-out${st.busted ? ' · ' + st.busted + ' busted' : ''}</div></div>
     ${tile('Rewards given', peso(st.rewards), perHour(st.rewards, st.secs) + ' per play hour' + (st.rewards_pending ? ' · ' + peso(st.rewards_pending) + ' waiting' : ''))}`;
@@ -598,7 +602,7 @@ async function viewGroups(view) {
     </div>
     <section class="card"><div class="row between" style="margin-bottom:12px"><div><h2>${esc(current.name)} group</h2><div class="small muted">${current.member_count} members · ${current.player_count} played · ${hm(current.seconds)} finished${current.playing_now ? ' · ' + current.playing_now + ' at a table now' : ''} · rewards ${peso(current.rewards)}</div></div>
       <button class="btn" id="csv">Export CSV</button></div>
-      <div class="tbl"><table><thead><tr><th>#</th><th>Player</th><th>Member no.</th><th class="num">Visit days</th><th class="num">Play time</th><th style="width:200px">Share of group</th><th class="num">Rewards</th><th class="num">Per hour</th><th>Last visit</th></tr></thead><tbody>
+      <div class="tbl"><table><thead><tr><th>#</th><th>Player</th><th>Member no.</th><th class="num">Visit days</th><th class="num">Playing hours</th><th style="width:200px">Share of group</th><th class="num">Rewards</th><th class="num">Per hour</th><th>Last visit</th></tr></thead><tbody>
       ${current.players.map((p, i) => { const pct = current.seconds ? Math.round(p.seconds / current.seconds * 100) : 0; return `<tr class="click" data-no="${esc(p.member_no)}"><td class="muted">${i + 1}</td><td><b>${esc(p.name)}</b>${p.nickname ? ` <span class="muted">“${esc(p.nickname)}”</span>` : ''}${p.moved_to ? `<div><span class="chip small">Now in ${esc(p.moved_to)}</span></div>` : ''}${p.playing_now ? `<div><span class="chip green small">Playing now · ${esc(p.playing_now.table)} S${p.playing_now.seat} · ${hm(p.playing_now.seconds)}</span></div>` : ''}</td><td class="mono">${esc(p.member_no)}</td><td class="num">${p.days}</td><td class="num"><b>${hm(p.seconds)}</b></td><td><div class="row" style="flex-wrap:nowrap"><div class="bar"><i style="width:${pct}%"></i></div><span style="width:36px;text-align:right">${pct}%</span></div></td><td class="num"><b>${peso(p.rewards)}</b></td><td class="num muted">${perHour(p.rewards, p.seconds)}</td><td class="muted">${p.last ? day(p.last) : '—'}</td></tr>`; }).join('') || '<tr><td colspan="9" class="muted">No play or rewards in this period.</td></tr>'}
       </tbody></table></div></section>`;
   view.querySelectorAll('.gcard').forEach((b) => b.onclick = () => setParams({ g: b.dataset.g }));
@@ -651,7 +655,7 @@ async function playerCard(view, p, anchor) {
   view.querySelector('#pcard')?.remove();
   const card = document.createElement('div'); card.id = 'pcard'; card.className = 'pcard'; card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', 'Player');
   const name = p.member ? (p.member.nickname || p.member.name) : p.ref;
-  const now = `<div class="pc-now"><span class="chip ${p.status === 'rest' ? 'amber' : 'green'}">${p.status === 'rest' ? 'Resting' : 'Playing'}</span> ${esc(p.table)} · Seat ${p.seat} · buy-in <b>${peso(p.buy_in)}</b> · ${hm(p.active_seconds)}${p.rest_seconds ? ' · rest ' + hm(p.rest_seconds) : ''}</div>`;
+  const now = `<div class="pc-now"><span class="chip ${p.status === 'rest' ? 'amber' : 'green'}">${p.status === 'rest' ? 'Resting' : 'Playing'}</span> ${esc(p.table)} · Seat ${p.seat} · buy-in <b>${peso(p.buy_in)}</b><br>Playing <b class="mono">${hhmm(p.active_seconds)}</b> · <span class="mono">${restLine(p.active_seconds, p.rest_seconds)}</span></div>`;
   card.innerHTML = `<button type="button" class="pc-x" aria-label="Close">×</button><div class="row" style="gap:12px;flex-wrap:nowrap">${avatar(p, 52)}<div><b style="font-size:17px">${esc(name)}</b>
     <div class="small muted">${p.member ? `<span class="mono">${esc(p.member.member_no)}</span>${p.member.name && p.member.name !== name ? ' · ' + esc(p.member.name) : ''}${p.member.nationality ? ' · ' + esc(p.member.nationality) : ''}${p.member.group_name ? ' · ' + esc(p.member.group_name) : ''}` : 'Not matched to a member'}</div></div></div>${now}<div id="pcBody" class="small muted">${p.member ? 'Loading history…' : `<a href="#/unmatchedppm">Link this player in Unmatched PPM →</a>`}</div>`;
   document.body.appendChild(card);
@@ -668,10 +672,10 @@ async function playerCard(view, p, anchor) {
   if (!p.member) return;
   try {
     const d = await api('/members/' + encodeURIComponent(p.member.member_no));
-    const st = (x, label) => `<div class="pc-st"><div class="k">${label}</div><b>${x.days}</b> day${x.days === 1 ? '' : 's'} · <b>${hm(x.secs)}</b><br>W/L <b style="color:${x.win_loss > 0 ? 'var(--green)' : x.win_loss < 0 ? 'var(--red)' : 'inherit'}">${x.with_cash_out ? signedPeso(x.win_loss) : '—'}</b> · ${restBadge(x.rest_secs, x.secs)}<br>Buy-in ${peso(x.buy_in)} · rewards ${peso(x.rewards)}</div>`;
+    const st = (x, label) => `<div class="pc-st"><div class="k">${label}</div><b>${x.days}</b> day${x.days === 1 ? '' : 's'} · <b class="mono">${hhmm(x.secs)}</b> playing<br><span class="mono">${restLine(x.secs, x.rest_secs)}</span><br>W/L <b style="color:${x.win_loss > 0 ? 'var(--green)' : x.win_loss < 0 ? 'var(--red)' : 'inherit'}">${x.with_cash_out ? signedPeso(x.win_loss) : '—'}</b><br>Buy-in ${peso(x.buy_in)} · rewards ${peso(x.rewards)}</div>`;
     card.querySelector('#pcBody').classList.remove('muted');
     card.querySelector('#pcBody').innerHTML = `<div class="pc-grid">${st(d.stats.last30, 'Last 30 days')}${st(d.stats.all, 'All time')}</div>
-      <div class="k" style="margin-top:10px">Recent sessions</div><table class="pc-t">${d.sessions.slice(0, 5).map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.table_name)} · ${esc(x.blinds)}</td><td class="num">${hm(x.active_seconds)}</td><td class="num" style="color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td></tr>`).join('') || '<tr><td class="muted">First visit</td></tr>'}</table>
+      <div class="k" style="margin-top:10px">Recent sessions</div><table class="pc-t">${d.sessions.slice(0, 5).map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.table_name)} · ${esc(x.blinds)}</td><td class="num mono">${hhmm(x.active_seconds)}</td><td class="num" style="color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td></tr>`).join('') || '<tr><td class="muted">First visit</td></tr>'}</table>
       ${d.member.staff_notes ? `<div class="pc-note">${esc(d.member.staff_notes)}</div>` : ''}<a class="btn sm" style="margin-top:10px" href="#/member/${encodeURIComponent(p.member.member_no)}">Open profile →</a>`;
   } catch (e) { card.querySelector('#pcBody').textContent = e.message; }
 }
@@ -750,25 +754,25 @@ async function viewOperation(view) {
           <div class="small muted">${sel.running ? `${esc(sel.game_type)} ${esc(sel.blinds)} · running ${hm(sel.run_seconds)}${sel.waiting ? ' · ' + sel.waiting + ' waiting' : ''}` : 'Not running'}</div></div>
           <div style="text-align:right"><div class="k">On the table</div><b style="font-size:18px">${peso(sel.buy_in_on_table)}</b></div></div>
         <div class="plist">${(sel.players || []).map((p) => `<button type="button" class="prow" data-seat="${esc(sel.name)}|${p.seat}">${avatar(p, 40)}<span class="pn"><b>${esc(p.member ? (p.member.nickname || p.member.name) : p.ref)}</b><small>Seat ${p.seat} · ${p.member ? esc(p.member.member_no) + (p.member.group_name ? ' · ' + esc(p.member.group_name) : '') : 'not matched'}</small></span>
-            <span class="pv"><b>${peso(p.buy_in)}</b><small>${hm(p.active_seconds)}${p.status === 'rest' ? ' · resting' : ''} ${restBadge(p.rest_seconds, p.active_seconds)}</small></span></button>`).join('') || '<p class="muted small" style="margin:12px 0 0">Nobody at this table.</p>'}</div>` : '<p class="muted">No tables.</p>'}</aside></div></section>` : ''}
+            <span class="pv"><b>${peso(p.buy_in)}</b>${playTime(p.active_seconds, p.rest_seconds)}${p.status === 'rest' ? '<small>on a break</small>' : ''}</span></button>`).join('') || '<p class="muted small" style="margin:12px 0 0">Nobody at this table.</p>'}</div>` : '<p class="muted">No tables.</p>'}</aside></div></section>` : ''}
     <div class="grid">
       ${big('Operating time', hm(o.seconds), o.since ? `First table ${time(o.since)}${o.until ? ' · last closed ' + time(o.until) : ' · still open'} · table hours ${hm(o.table_seconds)}` : 'No table has run yet')}
       ${big('Visitors', String(v.total), `${v.members} members · ${v.unmatched} not matched${v.at_table_now ? ' · ' + v.at_table_now + ' at a table now' : ''}${v.new_members ? ' · ' + v.new_members + ' new sign-ups' : ''}`)}
       ${big('Total buy-in', peso(mo.buy_in_total), d.is_today ? `${peso(mo.buy_in_finished)} finished + ${peso(mo.buy_in_live)} at tables now` : `${pl.sessions} sessions`)}
       ${big('Total cash-out', peso(mo.cash_out), `${mo.sessions_with_cash_out} sessions${mo.busted ? ' · ' + mo.busted + ' busted' : ''}${mo.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${mo.missing_cash_out} missing (${peso(mo.buy_in_without_cash_out)} buy-in)</span>` : ''}`)}
-      ${big('Player hours', hm(pl.finished_seconds + pl.live_seconds), `${hm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hm(pl.live_seconds) + ' playing now' : ''} · ${restBadge(pl.rest_seconds, pl.finished_seconds)}`)}
+      ${big('Playing hours', `<span class="mono">${hhmm(pl.finished_seconds + pl.live_seconds)}</span>`, `<span class="mono">${restLine(pl.finished_seconds + pl.live_seconds, pl.rest_seconds + (pl.live_rest_seconds || 0))}</span><br>${hhmm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hhmm(pl.live_seconds) + ' at a table now' : ''}`)}
     </div>
-    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>${d.is_today ? "Today's visitors" : 'Visitors'} <span class="small muted" style="font-weight:400">· ${d.visitor_list.length} players</span></h2><span class="small muted">Play time and buy-in include players still at a table · cash-out is entered at Leave</span></div>
-      <div class="tbl"><table><thead><tr><th style="width:52px"><span class="sr">Photo</span></th><th>Member ID</th><th>Name</th><th>Sessions</th><th class="num">Play time</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Tables</th><th>Now</th></tr></thead><tbody>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>${d.is_today ? "Today's visitors" : 'Visitors'} <span class="small muted" style="font-weight:400">· ${d.visitor_list.length} players</span></h2><span class="small muted">Playing hours and buy-in include players still at a table · cash-out is entered at Leave</span></div>
+      <div class="tbl"><table><thead><tr><th style="width:52px"><span class="sr">Photo</span></th><th>Member ID</th><th>Name</th><th>Sessions</th><th class="num">Playing hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Tables</th><th>Now</th></tr></thead><tbody>
       ${d.visitor_list.map((p) => `<tr ${p.member_no ? `class="click" data-no="${esc(p.member_no)}"` : ''}><td>${avatar({ ref: p.ref, status: p.playing_now ? p.playing_now.status : 'left', member: p.member_no ? { member_no: p.member_no, nickname: p.nickname, name: p.name, has_photo: p.has_photo } : null }, 36)}</td><td class="mono">${p.member_no ? esc(p.member_no) : '<span class="chip amber">Not matched</span>'}</td>
         <td><b>${esc(p.nickname || p.name)}</b>${p.nickname && p.name && p.name !== p.nickname ? ` <span class="small muted">${esc(p.name)}</span>` : ''}</td>
-        <td class="small" style="white-space:nowrap"><b>${p.sessions}</b>${p.segments.map((g) => `<div class="muted">${esc(g.table)} #${g.seat} ${g.start ? time(g.start) : ''}–${g.live ? 'now' : time(g.end)} · ${hm(g.active_seconds)}${g.cash_out != null ? ' · ' + signedPeso(g.cash_out - (g.buy_in || 0)) : ''}</div>`).join('')}</td>
-        <td class="num">${hm(p.play_seconds)}</td><td class="num">${peso(p.buy_in)}</td>
+        <td class="small" style="white-space:nowrap"><b>${p.sessions}</b>${p.segments.map((g) => `<div class="muted">${esc(g.table)} #${g.seat} ${g.start ? time(g.start) : ''}–${g.live ? 'now' : time(g.end)} · ${hhmm(g.active_seconds)}${g.rest_seconds ? ' (rest ' + hhmm(g.rest_seconds) + ')' : ''}${g.cash_out != null ? ' · ' + signedPeso(g.cash_out - (g.buy_in || 0)) : ''}</div>`).join('')}</td>
+        <td class="num">${playTime(p.play_seconds, p.rest_seconds)}</td><td class="num">${peso(p.buy_in)}</td>
         <td class="num">${p.with_cash_out ? peso(p.cash_out) + (p.busted ? ' <span class="chip red">Busted</span>' : '') : '—'}${p.missing_cash_out ? `<div class="small" style="color:var(--amber)">${p.missing_cash_out} missing</div>` : ''}</td>
         <td class="num" style="font-weight:600;color:${p.win_loss == null ? 'inherit' : p.win_loss >= 0 ? 'var(--green)' : 'var(--red)'}">${p.win_loss == null ? '—' : signedPeso(p.win_loss)}</td>
         <td>${p.tables.map(esc).join(' ')}</td>
         <td>${p.playing_now ? `<span class="chip ${p.playing_now.status === 'rest' ? 'amber' : 'green'}">${esc(p.playing_now.table)} #${p.playing_now.seat}${p.playing_now.status === 'rest' ? ' · break' : ''}</span>` : `<span class="small muted">Left ${p.last_at ? time(p.last_at) : ''}</span>`}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">No visitors yet.</td></tr>'}
-      </tbody>${d.visitor_list.length ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td colspan="3">Total · ${d.visitor_list.length} players</td><td>${d.visitor_list.reduce((a, p) => a + p.sessions, 0)}</td><td class="num">${hm(d.visitor_list.reduce((a, p) => a + p.play_seconds, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.buy_in, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.cash_out, 0))}</td><td></td><td></td><td></td></tr></tfoot>` : ''}</table></div>
+      </tbody>${d.visitor_list.length ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td colspan="3">Total · ${d.visitor_list.length} players</td><td>${d.visitor_list.reduce((a, p) => a + p.sessions, 0)}</td><td class="num">${playTime(d.visitor_list.reduce((a, p) => a + p.play_seconds, 0), d.visitor_list.reduce((a, p) => a + p.rest_seconds, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.buy_in, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.cash_out, 0))}</td><td></td><td></td><td></td></tr></tfoot>` : ''}</table></div>
       <p class="small muted" style="margin:8px 0 0">W/L counts only sessions that have a cash-out. Click a member to open their profile.</p></section>
     ${isMaster() ? `<section class="card" id="runsCard"><div class="row between"><h2>Table records <span class="chip dark small">Master</span></h2><span class="small muted">Fix a table opened by mistake or wrong open/close times. Changes are logged.</span></div><div id="runs" class="small muted" style="margin-top:10px">Loading…</div></section>
     <dialog id="rund"><form method="dialog" id="runf"><h2 id="runTitle"></h2><div class="form"><label class="f">Opened<input type="datetime-local" name="opened" required></label><label class="f">Closed<input type="datetime-local" name="closed"></label></div>
@@ -871,7 +875,7 @@ async function viewReport(view) {
       ${tile('Bad Beat Jackpot', d.bbj.main == null ? '—' : peso2(d.bbj.main), d.bbj.as_of ? `Main · 1st Reserved ${opt(d.bbj.reserve, peso2)} · as of ${esc(d.bbj.as_of)}${d.bbj.growth != null ? ' · grew ' + peso2(d.bbj.growth) + ' in this range' : ''}${d.bbj.paid ? ' · paid out ' + peso2(d.bbj.paid) : ''}` : 'Not entered yet — click a day below')}
       ${tile('Table hours', hm(T.table_seconds), `${T.open_days} open day${T.open_days === 1 ? '' : 's'} · avg ${hm(per(T.table_seconds, T.open_days) || 0)} a day · operating ${hm(T.operating_seconds)}`)}
       ${tile('Visitors', String(T.visits), `visits (days added up) · ${T.unique_visitors} different players · ${T.unique_members} members · ${T.new_members} new members`)}
-      ${tile('Player hours', hm(T.play_seconds), `${T.sessions} sessions · ${restBadge(T.rest_seconds, T.play_seconds)}`)}
+      ${tile('Playing hours', `<span class="mono">${hhmm(T.play_seconds)}</span>`, `<span class="mono">${restLine(T.play_seconds, T.rest_seconds)}</span> · ${T.sessions} sessions`)}
       ${tile('Buy-in / Cash-out', peso(T.buy_in), `cash-out ${peso(T.cash_out)}${T.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${T.missing_cash_out} without cash-out</span>` : ''}`)}
     </div>
     <section class="card"><h2 style="margin-bottom:10px">By table</h2><div class="tbl"><table><thead><tr><th>Table</th><th class="num">Days open</th><th class="num">Table hours</th><th class="num">Revenue</th><th class="num">Per table hour</th><th style="width:30%">Share of revenue</th></tr></thead><tbody>
@@ -1079,7 +1083,7 @@ async function viewUnmatched(view) {
           : `<form class="row" data-s="${i}" style="flex-wrap:nowrap">${box('s' + i, '6-digit member no.')}<button class="btn sm">Link</button></form>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No one is seated in PPM right now.</td></tr>'}
       </tbody></table></div></section>
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Already left the table</h2></div>
-    <div class="tbl"><table><thead><tr><th>Typed in PPM</th><th class="num">Sessions</th><th class="num">Play time</th><th>Last seen</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
+    <div class="tbl"><table><thead><tr><th>Typed in PPM</th><th class="num">Sessions</th><th class="num">Playing hours</th><th>Last seen</th><th style="min-width:280px">Link to member</th></tr></thead><tbody>
     ${data.refs.map((r, i) => `<tr><td><b>${esc(r.member_ref)}</b></td><td class="num">${r.sessions}</td><td class="num">${hm(r.secs)}</td><td class="muted">${day(r.last)}</td>
       <td><form class="row" data-i="${i}" style="flex-wrap:nowrap">${box('u' + i, '6-digit member no., e.g. 444444')}<button class="btn sm">Link</button></form></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Nothing to link.</td></tr>'}
     </tbody></table></div></section>
