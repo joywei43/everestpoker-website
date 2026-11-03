@@ -42,5 +42,5 @@ jobs:
           openssl enc -aes-256-cbc -pbkdf2 -salt -in /tmp/out.json -out /tmp/out.enc -pass file:/tmp/k
           openssl pkeyutl -encrypt -pubin -inkey ../.github/recon-public.pem -in /tmp/k -out /tmp/k.enc
           echo "KEY-BEGIN"; base64 -w0 /tmp/k.enc; echo; echo "KEY-END"
-          echo "DATA-BEGIN"; base64 -w0 /tmp/out.enc; echo; echo "DATA-END"
+          echo "DATA-BEGIN"; base64 -w 76 /tmp/out.enc; echo "DATA-END"; wc -c /tmp/out.json /tmp/out.enc
           rm -f /tmp/out.json /tmp/k
