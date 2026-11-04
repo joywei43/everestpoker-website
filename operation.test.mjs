@@ -175,4 +175,9 @@ assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).bo
   assert.equal(an.last.channel.actor, 'Maria'); assert.equal(an.last.group, null, 'group and channel tracked separately');
   await call('/announce', 'POST', { target: 'group' }, maria2);
   assert.equal((await call('/announce', 'GET', null, maria2)).body.last.group.actor, 'Maria'); }
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup');
+
+// Public lineup text for the Telegram bot: no sign-in, no names.
+{ const res = await worker.fetch(new Request('https://api.test/lineup'), env); const text = await res.text();
+  assert.equal(res.status, 200); assert.match(text, /TABLE 1 50-100 NLH/); assert.match(text, /1 Taiwanese Player/); assert.ok(!/Wei|Ann|Jiho/.test(text), 'no names');
+  const j = await (await worker.fetch(new Request('https://api.test/lineup?format=json'), env)).json(); assert.equal(j.text, text); }
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup, public lineup text');

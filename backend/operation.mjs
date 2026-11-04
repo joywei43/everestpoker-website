@@ -209,6 +209,33 @@ export async function handleTableRuns(req, env, path, now, reply, user, role) {
 const DEMONYM = { taiwan: 'Taiwanese', philippines: 'Filipino', 'south korea': 'Korean', korea: 'Korean', japan: 'Japanese', 'hong kong': 'Hong Kong', macau: 'Macanese', china: 'Chinese',
   singapore: 'Singaporean', thailand: 'Thai', indonesia: 'Indonesian', malaysia: 'Malaysian', vietnam: 'Vietnamese', india: 'Indian', 'united states': 'American', usa: 'American',
   canada: 'Canadian', australia: 'Australian', 'united kingdom': 'British', uk: 'British' };
+// The lineup post as text (same as the console's Telegram post page). Empty when no table is open.
+export function lineupText(tables) {
+  if (!tables.length) return '';
+  const bl = (b) => String(b || '').replace(/\s*\/\s*/g, '-');
+  const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' })[n % 10] || 'TH');
+  const L = ['🔥 THE ACTION IS ON AT EVEREST POKER! 🃏🔥', 'Check our Latest Update on website:', 'www.everestpokerroom.com/waiting-list', ''];
+  const games = [...new Set(tables.map((t) => `${bl(t.blinds)} ${t.game_type}`.trim()))];
+  L.push(` ${tables.length} TABLE${tables.length === 1 ? '' : 'S'} ONGOING – ${games.join(' & ')}`, '👥 Current Lineup:');
+  for (const t of tables) {
+    L.push('', ` TABLE ${t.number} ${bl(t.blinds)} ${t.game_type}`, '');
+    for (const n of t.nationalities) L.push(`${n.count} ${n.nationality ? n.nationality + ' ' : 'Other '}${n.count === 1 ? 'Player' : 'Players'}`);
+    if (!t.players) L.push('Table just opened — be the first to sit!');
+    L.push(t.open_seats ? `(${t.open_seats} SEAT${t.open_seats === 1 ? '' : 'S'} OPEN )` : `(TABLE FULL${t.waiting ? ` – ${t.waiting} ON THE WAITING LIST` : ' – JOIN THE WAITING LIST'} )`);
+    if (!t.open_seats && tables.every((x) => !x.open_seats)) L.push(`SEAT OPEN FOR ${ordinal(tables.length + 1)} TABLE`);
+  }
+  L.push('', '', '🔥 Reserve your seat, players!', 'Come join the action at Everest Poker!🃏♠️♥️♣️');
+  return L.join('\n');
+}
+// Public (no sign-in): what the Telegram bot posts. No names — only counts by nationality.
+export async function handleLineupPublic(req, env, now) {
+  const fake = { method: 'GET' };
+  let data; await handleAnnounce(fake, env, now, (d) => { data = d; return d; }, '');
+  const text = lineupText(data.tables);
+  const url = new URL(req.url);
+  if (url.searchParams.get('format') === 'json') return new Response(JSON.stringify({ text, open_tables: data.tables.length }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+  return new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+}
 export async function handleAnnounce(req, env, now, reply, user) {
   // Two places to post: the players' group (every hour) and the subscribed channel (every 30 minutes).
   const TARGETS = { group: 'player group', channel: 'channel' };

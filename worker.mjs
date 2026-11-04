@@ -1,7 +1,7 @@
 import { isMemberApi, handleMembersApi, handleRegister, ingestPpm } from './members.mjs';
 import { handleMemberApp, handlePromotions } from './member-app.mjs';
 import { handleStaff } from './staff.mjs';
-import { handleOperation, recordTableRuns, handleTableRuns, handleAnnounce } from './operation.mjs';
+import { handleOperation, recordTableRuns, handleTableRuns, handleAnnounce, handleLineupPublic } from './operation.mjs';
 import { handleReport } from './report.mjs';
 import { auditStmt, ppmChanges, handleAudit } from './audit.mjs';
 const enc = new TextEncoder();
@@ -57,6 +57,7 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(scheduledSync(env))
   try{await auditStmt(env,now,user,'staff.login','Signed in').run();}catch(e){}
   return reply({token,expires:now+28800,user,role});
  }
+ if(path==='/lineup'&&req.method==='GET')return handleLineupPublic(req,env,now);
  if(path.startsWith('/member/')){
   if(Number(req.headers.get('content-length'))>5000)return reply({error:'Too large'},413);
   return handleMemberApp(req,env,path,now,reply,await digest('member:'+(req.headers.get('CF-Connecting-IP')||'unknown')));
