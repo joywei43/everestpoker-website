@@ -845,6 +845,7 @@ async function viewHistory(view) {
 function telegramText(d) {
   const bl = (b) => String(b || '').replace(/\s*\/\s*/g, '-');
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' })[n % 10] || 'TH');
   if (!d.tables.length) return ''; // nothing to post when no table is open
   const L = ['🔥 THE ACTION IS ON AT EVEREST POKER! 🃏🔥', 'Check our Latest Update on website:', 'www.everestpokerroom.com/waiting-list', ''];
   {
@@ -855,6 +856,8 @@ function telegramText(d) {
       for (const n of t.nationalities) L.push(`${n.count} ${n.nationality ? n.nationality + ' ' : 'Other '}${n.count === 1 ? 'Player' : 'Players'}`);
       if (!t.players) L.push('Table just opened — be the first to sit!');
       L.push(t.open_seats ? `(${plural(t.open_seats, 'SEAT').toUpperCase()} OPEN )` : `(TABLE FULL${t.waiting ? ` – ${t.waiting} ON THE WAITING LIST` : ' – JOIN THE WAITING LIST'} )`);
+      // A full table (9 players) always invites players to the next table, as long as no open table has a free seat.
+      if (!t.open_seats && d.tables.every((x) => !x.open_seats)) L.push(`SEAT OPEN FOR ${ordinal(d.tables.length + 1)} TABLE`);
     }
   }
   L.push('', '', '🔥 Reserve your seat, players!', 'Come join the action at Everest Poker!🃏♠️♥️♣️');
