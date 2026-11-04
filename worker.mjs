@@ -1,7 +1,7 @@
 import { isMemberApi, handleMembersApi, handleRegister, ingestPpm } from './members.mjs';
 import { handleMemberApp, handlePromotions } from './member-app.mjs';
 import { handleStaff } from './staff.mjs';
-import { handleOperation, recordTableRuns, handleTableRuns, handleAnnounce } from './operation.mjs';
+import { handleOperation, recordTableRuns, handleTableRuns, handleAnnounce, readTelegramLineup } from './operation.mjs';
 import { handleReport } from './report.mjs';
 import { auditStmt, ppmChanges, handleAudit } from './audit.mjs';
 const enc = new TextEncoder();
@@ -65,6 +65,11 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(scheduledSync(env))
   if(Number(req.headers.get('content-length'))>5000)return reply({error:'Too large'},413);
   // Online registration is turned off: members are added by staff in the console.
   return reply({error:'Online registration is closed. Please register at the counter.'},410);
+ }
+ if(path==='/internal/telegram-lineup'&&req.method==='GET'){
+  const key=req.headers.get('X-Telegram-Lineup-Key')||'';
+  if(!env.TELEGRAM_LINEUP_KEY||!key||key.length>256||!await equal(key,env.TELEGRAM_LINEUP_KEY))return reply({error:'Forbidden'},403);
+  return reply({tables:await readTelegramLineup(env)});
  }
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});

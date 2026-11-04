@@ -218,15 +218,22 @@ export async function handleAnnounce(req, env, now, reply, user) {
     await env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'telegram.copy',NULL,?)").bind(now, str(user || 'staff', 60), 'Copied the lineup post for the ' + TARGETS[target]).run();
     return reply({ ok: true });
   }
+  const tables = await readTelegramLineup(env, true);
+  const lastFor = (t) => env.DB.prepare("SELECT at, actor FROM audit_log WHERE action='telegram.copy' AND detail LIKE ? ORDER BY id DESC LIMIT 1").bind('%' + TARGETS[t]).first();
+  const last = { group: (await lastFor('group')) || null, channel: (await lastFor('channel')) || null };
+  return reply({ now, tables, last_copy: last.group, last });
+}
+
+export async function readTelegramLineup(env, includeWaiting = false) {
   const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
-  const room = await env.DB.prepare('SELECT data FROM room WHERE id=1').first();
+  const room = includeWaiting ? await env.DB.prepare('SELECT data FROM room WHERE id=1').first() : null;
   const queue = room ? (JSON.parse(room.data).queue || []) : [];
   const players = await liveSeatPlayers(env);
   const tables = [];
   for (const t of ppmRow ? JSON.parse(ppmRow.data) : []) {
     if (!t.isRunning) continue;
     const name = t.name || 'T' + t.id, here = players.filter((p) => p.table === name);
-    const counts = {};
+    const counts = Object.create(null);
     for (const p of here) {
       const nat = p.member && p.member.nationality ? DEMONYM[p.member.nationality.trim().toLowerCase()] || p.member.nationality.trim() : '';
       counts[nat] = (counts[nat] || 0) + 1;
@@ -234,9 +241,7 @@ export async function handleAnnounce(req, env, now, reply, user) {
     const game = `${t.blinds || ''} ${t.gameType || ''}`.trim();
     tables.push({ name, number: name.replace(/^T/i, ''), blinds: t.blinds || '', game_type: t.gameType || '', players: here.length, open_seats: Math.max(0, 9 - here.length),
       nationalities: Object.entries(counts).map(([k, n]) => ({ nationality: k, count: n })).sort((a, b) => (a.nationality === '') - (b.nationality === '') || b.count - a.count || a.nationality.localeCompare(b.nationality)),
-      waiting: queue.filter((q) => q.game === game).length });
+      ...(includeWaiting ? { waiting: queue.filter((q) => q.game === game).length } : { slot: t.id }) });
   }
-  const lastFor = (t) => env.DB.prepare("SELECT at, actor FROM audit_log WHERE action='telegram.copy' AND detail LIKE ? ORDER BY id DESC LIMIT 1").bind('%' + TARGETS[t]).first();
-  const last = { group: (await lastFor('group')) || null, channel: (await lastFor('channel')) || null };
-  return reply({ now, tables, last_copy: last.group, last });
+  return tables;
 }

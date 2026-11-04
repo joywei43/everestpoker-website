@@ -176,3 +176,21 @@ assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).bo
   await call('/announce', 'POST', { target: 'group' }, maria2);
   assert.equal((await call('/announce', 'GET', null, maria2)).body.last.group.actor, 'Maria'); }
 console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup');
+
+
+{
+  const request = async key => worker.fetch(new Request('https://api.test/internal/telegram-lineup', {
+    headers: key ? { 'X-Telegram-Lineup-Key': key } : {},
+  }), env);
+  assert.equal((await request('example-lineup-key')).status, 403);
+  env.TELEGRAM_LINEUP_KEY = 'example-lineup-key';
+  assert.equal((await request()).status, 403);
+  assert.equal((await request('wrong')).status, 403);
+  const response = await request(env.TELEGRAM_LINEUP_KEY);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(Object.keys(data), ['tables']);
+  const first = data.tables.find(t => t.slot === 1);
+  assert.deepEqual(first.nationalities, [{ nationality: 'Taiwanese', count: 1 }, { nationality: '', count: 1 }]);
+  assert.deepEqual(Object.keys(first).sort(), ['blinds','game_type','name','nationalities','number','open_seats','players','slot']);
+}
