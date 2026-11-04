@@ -1,0 +1,42 @@
+# Deploys telegram-bot/worker.js to the existing "everest-telegram-bot" Worker.
+# keep_bindings keeps BOT_TOKEN, OWNER_ID, SETUP_PASSWORD, the D1 database and the PPM_API service binding as they are;
+# the every-minute schedule is a separate setting and is not touched.
+name: Deploy Telegram bot
+
+on:
+  push:
+    branches: [main]
+    paths: ['telegram-bot/**', '.github/workflows/deploy-telegram-bot.yml']
+  workflow_dispatch:
+
+concurrency: deploy-telegram-bot
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the code loads
+        run: node --input-type=module -e "await import('./telegram-bot/worker.js'); console.log('ok')"
+      - name: Upload
+        run: |
+          set -e
+          cat > /tmp/meta.json <<'JSON'
+          {"main_module":"worker.js","compatibility_date":"2026-10-29","keep_bindings":["plain_text","secret_text","d1","service"],"observability":{"enabled":true,"head_sampling_rate":1,"logs":{"enabled":true,"head_sampling_rate":1,"persist":true,"invocation_logs":true}}}
+          JSON
+          curl -sS -X PUT "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/scripts/everest-telegram-bot" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -F "metadata=@/tmp/meta.json;type=application/json" \
+            -F "worker.js=@telegram-bot/worker.js;type=application/javascript+module" -o /tmp/r.json
+          node -e "const r=require('/tmp/r.json');console.log('success:',r.success,(r.errors||[]).map(e=>e.code+' '+e.message).join('; '));process.exit(r.success?0:1)"
+      - name: Bindings and schedule still there
+        run: |
+          B="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/scripts/everest-telegram-bot"
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" "$B/settings" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s).result;console.log('bindings:',r.bindings.map(b=>b.name+':'+b.type).join(', '))})"
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" "$B/schedules" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{console.log('schedules:',JSON.parse(s).result.schedules.map(x=>x.cron).join(', '))})"

@@ -54,11 +54,40 @@ export function transition(previous = {}, tables, now) {
   };
 }
 
-export function message(tables, now, { filter = 'all', full = [], minPlayers = 0, periodic = false } = {}) {
+// The lineup post (same wording as the member system's Telegram post page). lineupTables comes from
+// everest-waiting-api /lineup?format=json and only adds nationality counts; seats come from the PPM state.
+export function lineupMessage(selected, lineupTables, tables) {
+  const bl = (s) => String(s || '').replace(/\s/g, '').replace(/\//g, '-');
+  const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' })[n % 10] || 'TH');
+  const open = tables.filter((t) => t.open);
+  const allFull = open.length > 0 && open.every((t) => t.players >= t.capacity);
+  const games = [...new Set(selected.map((t) => `${bl(t.stakes)} ${t.game}`))];
+  const L = ['🔥 THE ACTION IS ON AT EVEREST POKER! 🃏🔥', 'Check our Latest Update on website:', 'www.everestpokerroom.com/waiting-list', '',
+    ` ${selected.length} TABLE${selected.length === 1 ? '' : 'S'} ONGOING – ${games.join(' & ')}`, '👥 Current Lineup:'];
+  for (const t of selected) {
+    const l = (lineupTables || []).find((x) => x.name === t.id);
+    const seats = Math.max(0, t.capacity - t.players);
+    L.push('', ` TABLE ${t.id.slice(1)} ${bl(t.stakes)} ${t.game}`, '');
+    if (l && Array.isArray(l.nationalities) && l.nationalities.length) {
+      for (const n of l.nationalities) L.push(`${n.count} ${n.nationality ? n.nationality + ' ' : 'Other '}${n.count === 1 ? 'Player' : 'Players'}`);
+    } else L.push(`${t.players} ${t.players === 1 ? 'Player' : 'Players'} Seated`);
+    if (seats) L.push(`(${seats} ${seats === 1 ? 'SEAT' : 'SEATS'} OPEN )`);
+    else {
+      const waiting = l && l.waiting ? l.waiting : 0;
+      L.push(`(TABLE FULL${waiting ? ` – ${waiting} ON THE WAITING LIST` : ' – JOIN THE WAITING LIST'} )`);
+      if (allFull) L.push(`SEAT OPEN FOR ${ordinal(open.length + 1)} TABLE`);
+    }
+  }
+  L.push('', '', '🔥 Reserve your seat, players!', 'Come join the action at Everest Poker!🃏♠️♥️♣️');
+  return L.join('\n');
+}
+
+export function message(tables, now, { filter = 'all', full = [], minPlayers = 0, periodic = false, lineup = null } = {}) {
   const date = new Date(now * 1000);
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date).map(p => [p.type,p.value]));
   const lines = ['EVEREST POKER LIVE TABLES', `TIME: ${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`, ''];
   const selected = tables.filter(t => t.open && t.players >= minPlayers && (filter === 'all' || t.game === filter));
+  if (selected.length) return lineupMessage(selected, lineup, tables);
   if (periodic) {
     const games = new Map();
     for (const table of selected) {
@@ -135,6 +164,16 @@ export async function source(env={},fetcher=fetch) {
   const raw=await r.text();if(raw.length>200000)throw new Error('SOURCE_TOO_LARGE');
   return readTables(JSON.parse(raw).state);
 }
+const LINEUP='https://everest-waiting-api.drumsjw47.workers.dev/lineup?format=json';
+// Nationality counts per table. Optional: if it fails, messages fall back to "N Players Seated".
+export async function lineupSource(env={},fetcher=fetch) {
+  try{
+    const read=env.PPM_API && typeof env.PPM_API.fetch==='function' ? (url,options)=>env.PPM_API.fetch(url,options) : fetcher;
+    const r=await read(LINEUP,{headers:{Accept:'application/json','User-Agent':'EverestTelegramBot/2.1'},signal:AbortSignal.timeout(8000),cache:'no-store'});
+    if(!r.ok)return null;
+    const j=await r.json();return Array.isArray(j.tables)?j.tables:null;
+  }catch{return null;}
+}
 async function telegram(env,method,payload) {
   // Do not log request URLs or raw exceptions: the Telegram URL contains the bot token.
   try {
@@ -166,6 +205,7 @@ export async function poll(env) {
     const time=now();
     if(await setting(db,'enabled')==='1') {
       const tables=await source(env);
+      const lineup=await lineupSource(env);
       const previous=JSON.parse((await db.prepare('SELECT data FROM bot_runtime WHERE id=1').first()).data);
       const event=transition(previous,tables,time);
       const sequence=(previous.sequence||0)+1;
@@ -190,11 +230,11 @@ export async function poll(env) {
         for(const r of subscribers) {
           if(!tables.some(t=>t.open&&t.players>=5&&(r.filter==='all'||r.filter===t.game)))continue;
           if(event.group.reason==='new-table'&&!tables.some(t=>event.group.tables.includes(t.id)&&(r.filter==='all'||r.filter===t.game)))continue;
-          statements.push(job(db,`group:${sequence}:${r.id}`,r.id,'group',message(tables,time,{filter:r.filter,minPlayers:5,periodic:event.group.reason==='periodic'}),time));
+          statements.push(job(db,`group:${sequence}:${r.id}`,r.id,'group',message(tables,time,{filter:r.filter,minPlayers:5,periodic:event.group.reason==='periodic',lineup}),time));
         }
-        for(const r of destinations.filter(r=>r.kind==='group'))statements.push(job(db,`group:${sequence}:${r.id}`,r.id,'group',message(tables,time,{minPlayers:5,periodic:event.group.reason==='periodic'}),time));
+        for(const r of destinations.filter(r=>r.kind==='group'))statements.push(job(db,`group:${sequence}:${r.id}`,r.id,'group',message(tables,time,{minPlayers:5,periodic:event.group.reason==='periodic',lineup}),time));
       }
-      if(eligible(event.channel,'channel'))for(const r of destinations.filter(r=>r.kind==='channel'))statements.push(job(db,`channel:${sequence}:${r.id}`,r.id,'channel',message(tables,time,{...event.channel,minPlayers:5,periodic:event.channel.reason==='periodic'}),time));
+      if(eligible(event.channel,'channel'))for(const r of destinations.filter(r=>r.kind==='channel'))statements.push(job(db,`channel:${sequence}:${r.id}`,r.id,'channel',message(tables,time,{...event.channel,minPlayers:5,periodic:event.channel.reason==='periodic',lineup}),time));
       statements.push(db.prepare('UPDATE bot_runtime SET data=? WHERE id=1').bind(JSON.stringify(event.state)));
       await db.batch(statements);
     }
@@ -214,7 +254,7 @@ async function flush(env) {
     const payload=JSON.parse(r.payload);
     if(['group','channel'].includes(r.stream)) {
       const snapshot=JSON.parse((await db.prepare('SELECT data FROM bot_runtime WHERE id=1').first()).data);
-      const listed=[...payload.text.matchAll(/^(?:T([1235]) ·|TABLE ([1235]) )/gm)].map(match=>`T${match[1] ?? match[2]}`);
+      const listed=[...payload.text.matchAll(/^\s*(?:T([1235]) ·|TABLE ([1235]) )/gm)].map(match=>`T${match[1] ?? match[2]}`);
       // Cancel stale queued snapshots when a listed table drops below the threshold.
       if(!listed.length || listed.some(id=>!snapshot.tables?.some(t=>t.id===id&&t.open&&t.players>=5))) {
         await db.prepare("UPDATE bot_jobs SET status='cancelled' WHERE id=?").bind(r.id).run();continue;
@@ -254,7 +294,7 @@ export async function update(env,u) {
           reply(filter==='off'?'Table notifications stopped.':`Subscribed: ${filter}`);
         }else if(!q) {
           if(cmd==='/tables') {
-            try{reply(message(await source(env),time));}catch{reply('Live tables are temporarily unavailable. Please check https://www.everestpokerroom.com/waiting-list/');}
+            try{reply(message(await source(env),time,{lineup:await lineupSource(env)}));}catch{reply('Live tables are temporarily unavailable. Please check https://www.everestpokerroom.com/waiting-list/');}
           }else if(privateChat&&['/subscribe','/start'].includes(cmd)) {
             reply('EVEREST POKER LIVE TABLES\n/tables — latest tables\n/subscribe — table notifications\n/unsubscribe — stop notifications\nContact : @midoripokerroom to reserve your seat',{reply_markup:menu});
           }else if(privateChat&&cmd==='/unsubscribe') {

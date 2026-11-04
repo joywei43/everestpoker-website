@@ -233,7 +233,7 @@ export async function handleLineupPublic(req, env, now) {
   let data; await handleAnnounce(fake, env, now, (d) => { data = d; return d; }, '');
   const text = lineupText(data.tables);
   const url = new URL(req.url);
-  if (url.searchParams.get('format') === 'json') return new Response(JSON.stringify({ text, open_tables: data.tables.length }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+  if (url.searchParams.get('format') === 'json') return new Response(JSON.stringify({ text, open_tables: data.tables.length, tables: data.tables }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
   return new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
 }
 export async function handleAnnounce(req, env, now, reply, user) {
