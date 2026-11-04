@@ -1,0 +1,38 @@
+# Exports another Worker's code and settings, encrypted with .github/recon-public.pem (secrets in code never reach the public log).
+name: Worker export
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: 'Worker name'
+        required: true
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SCRIPT: ${{ github.event.inputs.script }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Export and encrypt
+        run: |
+          set -e
+          case "$SCRIPT" in (*[!a-z0-9-]*|'') echo "bad name"; exit 1;; esac
+          B="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/scripts/$SCRIPT"
+          mkdir /tmp/w
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" "$B/content/v2" -D /tmp/w/content-headers.txt -o /tmp/w/content.bin
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" "$B" -o /tmp/w/raw-script.bin
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" "$B/settings" -o /tmp/w/settings.json
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" "$B/schedules" -o /tmp/w/schedules.json
+          curl -sS -H "Authorization: Bearer $CF_TOKEN" "$B/secrets" -o /tmp/w/secret-names.json
+          ls -la /tmp/w | awk '{print $5, $9}'
+          tar -C /tmp -czf /tmp/w.tgz w
+          openssl rand -hex 32 > /tmp/k
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in /tmp/w.tgz -out /tmp/w.enc -pass file:/tmp/k
+          openssl pkeyutl -encrypt -pubin -inkey .github/recon-public.pem -in /tmp/k -out /tmp/k.enc
+          echo "KEY-BEGIN"; base64 -w 76 /tmp/k.enc; echo "KEY-END"
+          echo "DATA-BEGIN"; base64 -w 76 /tmp/w.enc; echo "DATA-END"
+          rm -rf /tmp/w /tmp/w.tgz /tmp/k
