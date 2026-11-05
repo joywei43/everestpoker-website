@@ -69,7 +69,7 @@ const audit = (env, now, actor, action, memberId, detail) =>
     .bind(now, str(actor, 60), action, memberId ?? null, str(detail, 500));
 
 async function loadGroups(env) {
-  const rows = await all(env.DB.prepare('SELECT id,name,kind,owner,sort,active FROM member_groups ORDER BY sort,name'));
+  const rows = await all(env.DB.prepare('SELECT g.id,g.name,g.kind,g.owner,g.sort,g.active,l.label FROM member_groups g LEFT JOIN group_labels l ON l.group_id=g.id ORDER BY g.sort,g.name'));
   return new Map(rows.map((g) => [g.id, g]));
 }
 // Staff type just the six digits: 444444 or ev444444 → EV-444444. Anything else (e.g. VIP-007) is kept as typed.
@@ -417,7 +417,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const key = gid || '';
       if (!buckets.has(key)) {
         const g = gid ? groups.get(gid) : null;
-        buckets.set(key, { id: gid, name: g ? g.name : 'No group', kind: g ? g.kind : 'none', owner: g ? g.owner : '', seconds: 0, rewards: 0, players: new Map() });
+        buckets.set(key, { id: gid, name: g ? g.name : 'No group', kind: g ? g.kind : 'none', label: g ? g.label || '' : '', owner: g ? g.owner : '', seconds: 0, rewards: 0, players: new Map() });
       }
       return buckets.get(key);
     };

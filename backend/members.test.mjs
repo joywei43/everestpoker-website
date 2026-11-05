@@ -26,7 +26,7 @@ const { body: { token } } = await call('/login', 'POST', { username: 'admin01', 
 
 // Groups are seeded.
 const groups = (await call('/groups', 'GET', null, token)).body.groups;
-assert.deepEqual(groups.map((g) => g.name), ['Hee', 'Dee', 'SK', 'Patrick', 'JOY', 'In-House']);
+assert.deepEqual(groups.map((g) => g.name), ['Hee', 'Dee', 'SK', 'Patrick', 'JOY', 'JIN pogi', 'A.A', 'In-House']);
 assert.equal(groups.find((g) => g.id === 'inhouse').owner, 'Marketing');
 
 // Create members.
@@ -546,4 +546,10 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   // The master still edits directly.
   assert.equal((await call('/sessions/' + sess.id + '/edit', 'POST', { ...body, buy_in: 10000 }, boss.token)).body.pending, undefined);
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval');
+{ // New host groups; A.A carries the junket-operator label.
+  const gs = (await call('/groups', 'GET', null, boss.token)).body.groups;
+  assert.equal(gs.find((g) => g.id === 'jin').name, 'JIN pogi');
+  assert.equal(gs.find((g) => g.id === 'aa').label, 'Junket Operator · 100-200'); assert.equal(gs.find((g) => g.id === 'aa').kind, 'host');
+  assert.equal((await call('/groups/summary', 'GET', null, boss.token)).body.groups.find((g) => g.id === 'aa').label, 'Junket Operator · 100-200');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval, junket label');

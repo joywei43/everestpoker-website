@@ -208,3 +208,9 @@ CREATE TABLE IF NOT EXISTS change_requests(id INTEGER PRIMARY KEY AUTOINCREMENT,
  summary TEXT NOT NULL DEFAULT '', member_id INTEGER, requested_by TEXT NOT NULL, requested_at INTEGER NOT NULL,
  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelled')), decided_by TEXT, decided_at INTEGER, decision_note TEXT NOT NULL DEFAULT '');
 CREATE INDEX IF NOT EXISTS change_requests_status ON change_requests(status, requested_at);
+
+-- More host groups. A group can carry a label shown next to its name (e.g. a junket operator and their game).
+CREATE TABLE IF NOT EXISTS group_labels(group_id TEXT PRIMARY KEY REFERENCES member_groups(id), label TEXT NOT NULL);
+INSERT OR IGNORE INTO member_groups(id,name,kind,owner,sort) VALUES ('jin','JIN pogi','host','JIN pogi',7), ('aa','A.A','host','A.A',8);
+INSERT OR IGNORE INTO group_labels(group_id,label) VALUES ('aa','Junket Operator · 100-200');
+UPDATE member_groups SET sort=99 WHERE id='inhouse' AND sort<99; -- In-House (Marketing) listed after the hosts

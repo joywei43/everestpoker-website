@@ -146,7 +146,7 @@ async function api(path, method = 'GET', body) {
   return data;
 }
 async function groups() { if (!groupsCache) groupsCache = (await api('/groups')).groups; return groupsCache; }
-const groupOptions = (gs, selected, extra = '') => extra + gs.map((g) => `<option value="${esc(g.id)}" ${g.id === selected ? 'selected' : ''}>${esc(g.name)}${g.kind === 'inhouse' ? ' (Marketing)' : ''}</option>`).join('');
+const groupOptions = (gs, selected, extra = '') => extra + gs.map((g) => `<option value="${esc(g.id)}" ${g.id === selected ? 'selected' : ''}>${esc(g.name)}${g.label ? ' — ' + esc(g.label) : ''}${g.kind === 'inhouse' ? ' (Marketing)' : ''}</option>`).join('');
 function flash(el, text, kind = '') { el.innerHTML = text ? `<div class="msg ${kind}" role="status">${esc(text)}</div>` : ''; }
 // The signed-in account is recorded as the actor by the server; this is only for display and defaults.
 function needStaff() { return staff; }
@@ -609,7 +609,7 @@ async function viewGroups(view) {
     <h2>Hours contribution by group</h2>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">
       ${data.groups.filter((g) => g.id || g.seconds || g.rewards).map((g) => `<button type="button" class="gcard" data-g="${esc(g.id || 'none')}" aria-pressed="${g === current}">
-        <div class="row between" style="width:100%"><span style="font-size:18px;font-weight:700">${esc(g.name)}</span><span class="chip ${g.kind === 'inhouse' ? 'amber' : 'blue'}">${g.kind === 'inhouse' ? 'In-House · Marketing' : g.kind === 'host' ? 'Host' : '—'}</span></div>
+        <div class="row between" style="width:100%"><span style="font-size:18px;font-weight:700">${esc(g.name)}</span><span class="chip ${g.label ? 'dark' : g.kind === 'inhouse' ? 'amber' : 'blue'}">${g.label ? esc(g.label) : g.kind === 'inhouse' ? 'In-House · Marketing' : g.kind === 'host' ? 'Host' : '—'}</span></div>
         <div class="row between" style="width:100%;align-items:baseline"><span style="font-size:22px;font-weight:700">${hm(g.seconds)}</span><span class="small muted">${data.total_seconds ? Math.round(g.seconds / data.total_seconds * 100) : 0}% of total</span></div>
         <div class="bar" style="width:100%;flex:none"><i style="width:${Math.round(g.seconds / max * 100)}%"></i></div>
         <div class="small muted">${g.member_count} member${g.member_count === 1 ? '' : 's'} · ${g.player_count} played${g.owner ? ' · owner ' + esc(g.owner) : ''}</div>
@@ -617,7 +617,7 @@ async function viewGroups(view) {
         <div class="row between small" style="width:100%;border-top:1px solid var(--line2);padding-top:8px"><span class="muted">Rewards</span><span><b>${peso(g.rewards)}</b> <span class="muted">· ${perHour(g.rewards, g.seconds)}/h</span></span></div>
       </button>`).join('')}
     </div>
-    <section class="card"><div class="row between" style="margin-bottom:12px"><div><h2>${esc(current.name)} group</h2><div class="small muted">${current.member_count} members · ${current.player_count} played · ${hm(current.seconds)} finished${current.playing_now ? ' · ' + current.playing_now + ' at a table now' : ''} · rewards ${peso(current.rewards)}</div></div>
+    <section class="card"><div class="row between" style="margin-bottom:12px"><div><h2>${esc(current.name)} group${current.label ? ` <span class="chip dark" style="vertical-align:middle">${esc(current.label)}</span>` : ''}</h2><div class="small muted">${current.member_count} members · ${current.player_count} played · ${hm(current.seconds)} finished${current.playing_now ? ' · ' + current.playing_now + ' at a table now' : ''} · rewards ${peso(current.rewards)}</div></div>
       <button class="btn" id="csv">Export CSV</button></div>
       <div class="tbl"><table><thead><tr><th>#</th><th>Player</th><th>Member no.</th><th class="num">Visit days</th><th class="num">Playing hours</th><th style="width:200px">Share of group</th><th class="num">Rewards</th><th class="num">Per hour</th><th>Last visit</th></tr></thead><tbody>
       ${current.players.map((p, i) => { const pct = current.seconds ? Math.round(p.seconds / current.seconds * 100) : 0; return `<tr class="click" data-no="${esc(p.member_no)}"><td class="muted">${i + 1}</td><td><b>${esc(p.name)}</b>${p.nickname ? ` <span class="muted">“${esc(p.nickname)}”</span>` : ''}${p.moved_to ? `<div><span class="chip small">Now in ${esc(p.moved_to)}</span></div>` : ''}${p.playing_now ? `<div><span class="chip green small">Playing now · ${esc(p.playing_now.table)} S${p.playing_now.seat} · ${hm(p.playing_now.seconds)}</span></div>` : ''}</td><td class="mono">${esc(p.member_no)}</td><td class="num">${p.days}</td><td class="num"><b>${hm(p.seconds)}</b></td><td><div class="row" style="flex-wrap:nowrap"><div class="bar"><i style="width:${pct}%"></i></div><span style="width:36px;text-align:right">${pct}%</span></div></td><td class="num"><b>${peso(p.rewards)}</b></td><td class="num muted">${perHour(p.rewards, p.seconds)}</td><td class="muted">${p.last ? day(p.last) : '—'}</td></tr>`; }).join('') || '<tr><td colspan="9" class="muted">No play or rewards in this period.</td></tr>'}
