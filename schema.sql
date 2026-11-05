@@ -202,3 +202,9 @@ CREATE TABLE IF NOT EXISTS table_revenue(day TEXT NOT NULL, table_name TEXT NOT 
 
 -- PPM sessions the master deleted (e.g. a table opened by mistake). Kept so the next PPM save does not bring them back.
 CREATE TABLE IF NOT EXISTS deleted_sessions(session_key TEXT PRIMARY KEY, summary TEXT NOT NULL DEFAULT '', deleted_by TEXT NOT NULL DEFAULT '', deleted_at INTEGER NOT NULL);
+
+-- Changes a manager asks for (edit / move / unlink / delete a game session). The master approves or rejects.
+CREATE TABLE IF NOT EXISTS change_requests(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, target_id INTEGER NOT NULL, payload TEXT NOT NULL, reason TEXT NOT NULL,
+ summary TEXT NOT NULL DEFAULT '', member_id INTEGER, requested_by TEXT NOT NULL, requested_at INTEGER NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelled')), decided_by TEXT, decided_at INTEGER, decision_note TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS change_requests_status ON change_requests(status, requested_at);

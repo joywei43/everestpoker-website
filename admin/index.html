@@ -367,10 +367,10 @@ async function viewMember(view, no) {
       <div class="small muted" style="flex:1 1 220px">PPM name "${esc(x.ref)}"${x.linked ? ' · linked by staff' : ' · matched automatically'}. Added to Game sessions and totals when the seat is cleared.</div>
     </section>`).join('')}
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM when the player leaves the seat</span></div>
-      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Playing hours</th><th>Table · Seat</th><th>Start – End</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isMaster() ? '<th></th>' : ''}</tr></thead><tbody>
+      <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Playing hours</th><th>Table · Seat</th><th>Start – End</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isManager() ? '<th></th>' : ''}</tr></thead><tbody>
       ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num">${playTime(x.active_seconds, x.rest_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
         <td class="num">${isManager() ? `<button type="button" class="linkbtn" data-co="${x.id}" title="Enter or correct the cash-out">${x.cash_out == null ? 'Add' : (x.busted ? 'Busted' : peso(x.cash_out))}</button>` : (x.cash_out == null ? '—' : x.busted ? 'Busted' : peso(x.cash_out))}</td>
-        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isMaster() ? `<td><span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-editsess="${x.id}" title="Correct times, buy-in or cash-out">Edit</button><button type="button" class="btn sm" data-movesess="${x.id}" title="This session belongs to another member">Move</button><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span></td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
+        <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isManager() ? `<td>${x.pending_change ? `<span class="chip amber" title="${esc(x.pending_change.summary)} · asked by ${esc(x.pending_change.requested_by)}: ${esc(x.pending_change.reason)}">Waiting for approval</span>${isMaster() ? ' <a class="small" href="#/approvals">Review</a>' : ''}` : `<span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-editsess="${x.id}" title="Correct times, buy-in or cash-out">Edit</button><button type="button" class="btn sm" data-movesess="${x.id}" title="This session belongs to another member">Move</button><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span>`}</td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
     <section class="card" style="display:flex;flex-direction:column;gap:14px">
       <div class="row between"><h2>Rewards received</h2><span class="chip dark">Staff only</span></div>
@@ -474,6 +474,13 @@ async function viewMember(view, no) {
     const body = !v ? { clear: true } : v === 'busted' || v === 'b' ? { busted: true } : { cash_out: Number(v.replace(/[,\s₱]/g, '')), busted: Number(v.replace(/[,\s₱]/g, '')) === 0 };
     try { await api('/sessions/' + b.dataset.co + '/cash-out', 'POST', body); reload(); } catch (err) { alert(err.message); }
   });
+  // Master: applies at once. Manager: sent to the master with a reason (required).
+  const sendChange = async (id, action, body, reason) => {
+    const r = await api('/sessions/' + id + '/' + action, 'POST', isMaster() ? body : { ...body, reason });
+    if (r.pending) alert(`Sent to the master account for approval (#${r.request_id}).\n\n${r.summary}`);
+    return r;
+  };
+  const askReason = (what) => { if (isMaster()) return ''; const r = (prompt(`Reason for this change (the master account will see it):\n${what}`) || '').trim(); return r || null; };
   view.querySelectorAll('[data-editsess]').forEach((b) => b.onclick = () => {
     const x = data.sessions.find((s) => String(s.id) === b.dataset.editsess);
     view.querySelector('#sessd')?.remove();
@@ -486,9 +493,10 @@ async function viewMember(view, no) {
         <label class="f">Rest (minutes)<input type="number" min="0" name="rest" value="${mins(x.rest_seconds)}"></label>
         <label class="f">Buy-in (₱)<input type="text" inputmode="numeric" name="buy" value="${x.buy_in ?? ''}"></label>
         <label class="f">Cash-out (₱)<input type="text" inputmode="numeric" name="cash" value="${x.cash_out ?? ''}" placeholder="Blank = not entered"></label>
-        <label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="busted" ${x.busted ? 'checked' : ''}> Busted (lost the whole buy-in)</label></div>
+        <label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="busted" ${x.busted ? 'checked' : ''}> Busted (lost the whole buy-in)</label>
+        ${isMaster() ? '' : '<label class="f" style="grid-column:1/-1">Reason (required — the master account approves this change)<textarea name="reason" rows="2" maxlength="500" placeholder="e.g. Cash-out typed wrong at the table: 14,800 not 1,480"></textarea></label>'}</div>
       <p class="small muted" style="margin:0" id="sessCalc"></p><div id="sessMsg"></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="sessSave">Save</button></div></form>`;
+      <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="sessSave">${isMaster() ? 'Save' : 'Send for approval'}</button></div></form>`;
     view.appendChild(dlg);
     const f = dlg.querySelector('form'), num = (v) => { const t = String(v).replace(/[,\s₱]/g, ''); return t === '' ? null : Number(t); };
     const calc = () => { const s0 = fromLocalInput(f.start.value), e0 = fromLocalInput(f.end.value), buy = num(f.buy.value), cash = f.busted.checked ? 0 : num(f.cash.value);
@@ -496,8 +504,13 @@ async function viewMember(view, no) {
     f.oninput = calc; calc();
     dlg.querySelector('#sessSave').onclick = async (e) => {
       e.preventDefault();
-      const body = { start_at: fromLocalInput(f.start.value), end_at: fromLocalInput(f.end.value), active_seconds: Math.round(Number(f.active.value || 0) * 60), rest_seconds: Math.round(Number(f.rest.value || 0) * 60), buy_in: num(f.buy.value), cash_out: f.busted.checked ? 0 : num(f.cash.value), busted: f.busted.checked };
-      try { await api('/sessions/' + x.id + '/edit', 'POST', body); dlg.close(); reload(); } catch (err) { flash(dlg.querySelector('#sessMsg'), err.message, 'err'); }
+      // Fields left as they were keep their exact seconds (the inputs only show minutes).
+      const same = (v, orig) => v === orig;
+      const body = { start_at: same(f.start.value, toLocalInput(x.start_at)) ? x.start_at : fromLocalInput(f.start.value), end_at: same(f.end.value, toLocalInput(x.end_at)) ? x.end_at : fromLocalInput(f.end.value),
+        active_seconds: Number(f.active.value || 0) === mins(x.active_seconds) ? x.active_seconds : Math.round(Number(f.active.value || 0) * 60), rest_seconds: Number(f.rest.value || 0) === mins(x.rest_seconds) ? x.rest_seconds : Math.round(Number(f.rest.value || 0) * 60), buy_in: num(f.buy.value), cash_out: f.busted.checked ? 0 : num(f.cash.value), busted: f.busted.checked };
+      const reason = isMaster() ? '' : f.reason.value.trim();
+      if (!isMaster() && !reason) { flash(dlg.querySelector('#sessMsg'), 'Write the reason for this change.', 'err'); return; }
+      try { await sendChange(x.id, 'edit', body, reason); dlg.close(); reload(); } catch (err) { flash(dlg.querySelector('#sessMsg'), err.message, 'err'); }
     };
     dlg.showModal();
   });
@@ -507,18 +520,21 @@ async function viewMember(view, no) {
     if (!to) return;
     let target; try { target = (await api('/members/' + encodeURIComponent(to))).member; } catch (e) { alert(e.movedTo ? 'That number now belongs to ' + e.movedTo + '.' : e.message); return; }
     if (!confirm(`Move to ${target.member_no} ${target.nickname || target.name}?`)) return;
-    try { await api('/sessions/' + x.id + '/move', 'POST', { member_no: target.member_no }); }
-    catch (e) { if (e.code !== 'overlap' || !confirm(e.message + '\nMove anyway?')) { if (e.code !== 'overlap') alert(e.message); return; } try { await api('/sessions/' + x.id + '/move', 'POST', { member_no: target.member_no, confirm: true }); } catch (e2) { alert(e2.message); return; } }
+    const why = askReason(`Move to ${target.member_no}`); if (why === null) return;
+    try { await sendChange(x.id, 'move', { member_no: target.member_no, confirm: !isMaster() }, why); }
+    catch (e) { if (e.code !== 'overlap' || !confirm(e.message + '\nMove anyway?')) { if (e.code !== 'overlap') alert(e.message); return; } try { await sendChange(x.id, 'move', { member_no: target.member_no, confirm: true }, why); } catch (e2) { alert(e2.message); return; } }
     reload();
   });
   view.querySelectorAll('[data-delsess]').forEach((b) => b.onclick = async () => {
     const x = data.sessions.find((s) => String(s.id) === b.dataset.delsess);
     if (!confirm(`Delete this game session completely?\n\n${x.play_date} · ${x.table_name} S${x.seat} · ${x.game_type} ${x.blinds} · buy-in ${peso(x.buy_in)}\n\nIts play time, buy-in and cash-out are removed from this member and from all reports. This cannot be undone.`)) return;
-    try { await api('/sessions/' + b.dataset.delsess + '/delete', 'POST', {}); reload(); } catch (err) { alert(err.message); }
+    const why = askReason('Delete this session'); if (why === null) return;
+    try { await sendChange(b.dataset.delsess, 'delete', {}, why); reload(); } catch (err) { alert(err.message); }
   });
   view.querySelectorAll('[data-unsess]').forEach((b) => b.onclick = async () => {
     if (!confirm(`Unlink this session from ${m.name}? It goes back to Unmatched PPM so you can link the right member.`)) return;
-    try { await api('/sessions/' + b.dataset.unsess + '/unlink', 'POST', {}); reload(); } catch (err) { alert(err.message); }
+    const why = askReason('Unlink this session'); if (why === null) return;
+    try { await sendChange(b.dataset.unsess, 'unlink', {}, why); reload(); } catch (err) { alert(err.message); }
   });
   view.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => {
     try { await api('/rewards/' + b.dataset.approve + '/approve', 'POST', {}); reload(); } catch (err) { alert(err.message); }
@@ -801,7 +817,7 @@ const ACTION_LABELS = {
   'ppm.change_seat': ['Change seat', 'blue'], 'ppm.change_table': ['Change table', 'blue'],
   'member.create': ['Member added', 'green'], 'member.update': ['Profile edited', 'blue'], 'member.group': ['Group change', 'amber'], 'member.number': ['Number change', 'amber'],
   'member.photo': ['Photo', ''], 'member.merge': ['Merged', 'red'], 'member.delete': ['Member deleted', 'red'], 'member.import': ['Import', 'blue'],
-  'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'session.edit': ['Session edited', 'amber'], 'session.move': ['Session moved', 'blue'], 'session.import': ['Sessions recovered', 'green'], 'ppm.sync_error': ['PPM sync error', 'red'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
+  'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'session.edit': ['Session edited', 'amber'], 'session.move': ['Session moved', 'blue'], 'change.request': ['Change requested', 'amber'], 'change.approve': ['Change approved', 'green'], 'change.reject': ['Change rejected', 'red'], 'change.cancel': ['Request withdrawn', ''], 'session.import': ['Sessions recovered', 'green'], 'ppm.sync_error': ['PPM sync error', 'red'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
   'reward.add': ['Reward', 'green'], 'reward.approve': ['Approved', 'green'], 'reward.void': ['Voided', 'red'],
   'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue'], 'telegram.copy': ['Telegram post', 'blue']
 };
@@ -810,7 +826,7 @@ async function viewHistory(view) {
   const f = { from: params.get('from') || today(), to: params.get('to') || today(), actor: params.get('actor') || '', category: params.get('category') || '', q: params.get('q') || '' };
   const go = (p) => { location.hash = '#/historylog?' + new URLSearchParams({ ...f, ...p }); };
   const first = await api('/audit?' + new URLSearchParams({ ...f, limit: 100 }));
-  const cats = [['', 'Everything'], ['ppm', 'PPM tables'], ['members', 'Members'], ['rewards', 'Rewards'], ['sessions', 'PPM links & cash-out'], ['tables', 'Table record fixes'], ['report', 'Operation Report'], ['promotions', 'Promotions'], ['staff', 'Staff accounts'], ['login', 'Sign-ins']];
+  const cats = [['', 'Everything'], ['ppm', 'PPM tables'], ['members', 'Members'], ['rewards', 'Rewards'], ['changes', 'Edits & approvals'], ['sessions', 'PPM links & cash-out'], ['tables', 'Table record fixes'], ['report', 'Operation Report'], ['promotions', 'Promotions'], ['staff', 'Staff accounts'], ['login', 'Sign-ins']];
   view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>History Log</h1><p class="sub">Every action, newest first: who did it, when, and what changed. Master only.</p></div><button class="btn" id="csv">Export CSV</button></div>
     <section class="card"><form id="hf" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
       <label class="f">From<input type="date" name="from" value="${esc(f.from)}"></label><label class="f">To<input type="date" name="to" value="${esc(f.to)}"></label>
@@ -991,17 +1007,31 @@ async function viewReport(view) {
 
 // ---------- Rewards waiting for a manager ----------
 async function refreshPending() {
-  try { const n = (await api('/rewards/pending')).rewards.length; const pill = document.getElementById('pendingPill'); if (pill) { pill.textContent = n; pill.hidden = !n; } } catch (e) {}
+  try { const n = (await api('/rewards/pending')).rewards.length + (isMaster() ? (await api('/change-requests?status=pending')).requests.length : 0); const pill = document.getElementById('pendingPill'); if (pill) { pill.textContent = n; pill.hidden = !n; } } catch (e) {}
 }
 async function viewApprovals(view) {
   const data = await api('/rewards/pending');
+  const cr = isManager() ? await api('/change-requests?status=pending') : { requests: [] };
+  const crDone = isManager() ? (await api('/change-requests?status=approved')).requests.concat((await api('/change-requests?status=rejected')).requests).sort((a, b) => b.decided_at - a.decided_at).slice(0, 15) : [];
   const total = data.rewards.reduce((a, r) => a + r.amount, 0);
   view.innerHTML = `<div><h1>Rewards waiting for approval</h1><p class="sub">Rewards recorded by staff count in cost totals only after a manager approves them.${isManager() ? '' : ' A manager will review these.'}</p></div>
     <div class="grid">${tile('Waiting', String(data.rewards.length), peso(total) + ' in total')}</div>
     <section class="card"><div class="tbl"><table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Group</th><th>Recorded by</th><th></th></tr></thead><tbody>
     ${data.rewards.map((r) => `<tr><td>${day(r.given_at)}</td><td><a href="#/member/${encodeURIComponent(r.member_no)}"><b>${esc(r.name)}</b></a><div class="small muted mono">${esc(r.member_no)}</div></td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}</td>
       <td class="row" style="flex-wrap:nowrap">${isManager() ? `<button class="btn sm primary" data-ok="${r.id}">Approve</button>` : ''}${isMaster() ? `<button class="btn sm" data-no="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Nothing waiting.</td></tr>'}
-    </tbody></table></div></section>`;
+    </tbody></table></div></section>
+    ${isManager() ? `<h1 style="margin-top:28px">Changes waiting for the master</h1><p class="sub">Managers ask to edit, move, unlink or delete a game session; nothing changes until the master account approves.</p>
+    <section class="card"><div class="tbl"><table><thead><tr><th>#</th><th>Asked</th><th>Member</th><th>Change</th><th>Reason</th><th></th></tr></thead><tbody>
+      ${cr.requests.map((r) => `<tr><td class="mono">${r.id}</td><td class="small"><b>${esc(r.requested_by)}</b><div class="muted">${fmt(r.requested_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}</div></td>
+        <td>${r.member_no ? `<a class="mono" href="#/member/${encodeURIComponent(r.member_no)}">${esc(r.member_no)}</a> ${esc(r.nickname || '')}` : '—'}</td><td class="small">${esc(r.summary)}</td><td class="small">${esc(r.reason)}</td>
+        <td class="row" style="flex-wrap:nowrap">${isMaster() ? `<button class="btn sm primary" data-cr-ok="${r.id}">Approve</button><button class="btn sm danger" data-cr-no="${r.id}">Reject</button>` : (r.requested_by === staff ? `<button class="btn sm" data-cr-cancel="${r.id}">Withdraw</button>` : '<span class="chip amber">Waiting</span>')}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No changes waiting.</td></tr>'}
+    </tbody></table></div></section>
+    <section class="card"><h2 style="margin-bottom:8px">Recently decided</h2><div class="tbl"><table><thead><tr><th>#</th><th>Change</th><th>Asked by · reason</th><th>Decision</th></tr></thead><tbody>
+      ${crDone.map((r) => `<tr><td class="mono">${r.id}</td><td class="small">${esc(r.summary)}</td><td class="small"><b>${esc(r.requested_by)}</b> · ${esc(r.reason)}</td><td class="small"><span class="chip ${r.status === 'approved' ? 'green' : 'red'}">${r.status}</span> ${esc(r.decided_by || '')} · ${fmt(r.decided_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}${r.decision_note ? `<div class="muted">${esc(r.decision_note)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nothing yet.</td></tr>'}
+    </tbody></table></div></section>` : ''}`;
+  view.querySelectorAll('[data-cr-ok]').forEach((b) => b.onclick = async () => { if (!confirm('Approve and apply change #' + b.dataset.crOk + '?')) return; try { await api('/change-requests/' + b.dataset.crOk + '/approve', 'POST', {}); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); } });
+  view.querySelectorAll('[data-cr-no]').forEach((b) => b.onclick = async () => { const note = prompt('Reject change #' + b.dataset.crNo + '? Optional note for the manager:'); if (note === null) return; try { await api('/change-requests/' + b.dataset.crNo + '/reject', 'POST', { note }); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); } });
+  view.querySelectorAll('[data-cr-cancel]').forEach((b) => b.onclick = async () => { if (!confirm('Withdraw your request #' + b.dataset.crCancel + '?')) return; try { await api('/change-requests/' + b.dataset.crCancel + '/cancel', 'POST', {}); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); } });
   view.querySelectorAll('[data-ok]').forEach((b) => b.onclick = async () => { try { await api('/rewards/' + b.dataset.ok + '/approve', 'POST', {}); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); } });
   view.querySelectorAll('[data-no]').forEach((b) => b.onclick = async () => {
     const reason = (prompt('Why is this reward being voided?') || '').trim(); if (!reason) return;

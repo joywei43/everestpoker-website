@@ -521,4 +521,29 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   cur = (await call('/ppm', 'GET', null, boss.token)).body; cur.tables[2].seats[4] = { id: 5, status: 'idle', memberId: '' }; cur.tables[2].isRunning = false;
   await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, boss.token);
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check');
+{ // Manager edits need the master's approval; staff cannot edit; everything is logged.
+  const gm = (await call('/login', 'POST', { username: 'Geraldine', password: 'secret-g' })).body.token;
+  const sess = (await call('/members/666666', 'GET', null, boss.token)).body.sessions[0];
+  assert.equal((await call('/sessions/' + sess.id + '/edit', 'POST', { buy_in: 1 }, maria.token)).status, 403, 'staff cannot edit');
+  assert.equal((await call('/sessions/' + sess.id + '/edit', 'POST', { buy_in: 1 }, gm)).status, 400, 'a reason is required');
+  const body = { start_at: sess.start_at, end_at: sess.end_at, active_seconds: sess.active_seconds, rest_seconds: sess.rest_seconds, buy_in: 12345, cash_out: 20000, busted: false };
+  let r = await call('/sessions/' + sess.id + '/edit', 'POST', { ...body, reason: 'Wrong buy-in typed at the table' }, gm);
+  assert.equal(r.status, 200); assert.equal(r.body.pending, true); assert.match(r.body.summary, /buy-in .* → 12345/);
+  assert.equal((await call('/members/666666', 'GET', null, boss.token)).body.sessions[0].buy_in, sess.buy_in, 'nothing changes before approval');
+  assert.equal((await call('/members/666666', 'GET', null, boss.token)).body.sessions[0].pending_change.id, r.body.request_id);
+  assert.equal((await call('/sessions/' + sess.id + '/delete', 'POST', { reason: 'x' }, gm)).status, 409, 'one open request per session');
+  assert.equal((await call('/change-requests/' + r.body.request_id + '/approve', 'POST', {}, gm)).status, 403, 'only the master approves');
+  assert.equal((await call('/change-requests/' + r.body.request_id + '/approve', 'POST', {}, boss.token)).status, 200);
+  const after = (await call('/members/666666', 'GET', null, boss.token)).body;
+  assert.equal(after.sessions[0].buy_in, 12345); assert.equal(after.sessions[0].cash_out, 20000); assert.equal(after.sessions[0].pending_change, null);
+  // A rejected move changes nothing.
+  r = await call('/sessions/' + sess.id + '/move', 'POST', { member_no: '000522', reason: 'Wrong player' }, gm);
+  assert.equal((await call('/change-requests/' + r.body.request_id + '/reject', 'POST', { note: 'It was right' }, boss.token)).status, 200);
+  assert.ok((await call('/members/666666', 'GET', null, boss.token)).body.sessions.some((x) => x.id === sess.id));
+  const log = (await call('/audit?category=&limit=50', 'GET', null, boss.token)).body.entries.map((e) => e.action);
+  for (const a of ['change.request', 'change.approve', 'change.reject', 'session.edit']) assert.ok(log.includes(a), 'logged ' + a);
+  assert.equal((await call('/change-requests?status=approved', 'GET', null, gm)).body.requests[0].reason, 'Wrong buy-in typed at the table');
+  // The master still edits directly.
+  assert.equal((await call('/sessions/' + sess.id + '/edit', 'POST', { ...body, buy_in: 10000 }, boss.token)).body.pending, undefined);
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval');

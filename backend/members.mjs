@@ -249,7 +249,7 @@ function range(url, now) {
   return { start, end, from: localDate(start), to: localDate(end - 1) };
 }
 
-export const isMemberApi = (path) => /^\/(members|groups|rewards|sessions)(\/|$)/.test(path) || path === '/ppm/sync';
+export const isMemberApi = (path) => /^\/(members|groups|rewards|sessions|change-requests)(\/|$)/.test(path) || path === '/ppm/sync';
 
 // Public self-registration (replaces the Google Sheet form). Rate limited per IP.
 export async function handleRegister(req, env, now, reply, ipHash) {
@@ -270,6 +270,24 @@ export async function handleRegister(req, env, now, reply, ipHash) {
   if (age < 21) return bad(reply, 'Members must be 21 or older.');
   const created = await createMember(env, now, m, null, 'register-form', 'register-form');
   return reply({ ok: true, member_no: created.member_no });
+}
+
+// One line describing a requested change to a game session (shown to the master and kept in the log).
+function describeSessionChange(action, row, p) {
+  const t = (x) => new Date((x + TZ_OFFSET) * 1000).toISOString().slice(0, 16).replace('T', ' ');
+  const what = `"${row.member_ref}" ${row.table_name} S${row.seat} ${t(row.start_at)}–${t(row.end_at).slice(11)}`;
+  if (action === 'move') return `Move ${what} → ${normNo(p.member_no || '')}`;
+  if (action === 'unlink') return `Unlink ${what} (back to Unmatched PPM)`;
+  if (action === 'delete') return `Delete ${what}`;
+  const ch = [];
+  if (p.start_at != null && Number(p.start_at) !== row.start_at) ch.push(`start ${t(row.start_at).slice(11)} → ${t(Number(p.start_at)).slice(11)}`);
+  if (p.end_at != null && Number(p.end_at) !== row.end_at) ch.push(`end ${t(row.end_at).slice(11)} → ${t(Number(p.end_at)).slice(11)}`);
+  if (p.active_seconds != null && Number(p.active_seconds) !== row.active_seconds) ch.push(`playing ${Math.round(row.active_seconds / 60)}m → ${Math.round(Number(p.active_seconds) / 60)}m`);
+  if (p.rest_seconds != null && Number(p.rest_seconds) !== row.rest_seconds) ch.push(`rest ${Math.round(row.rest_seconds / 60)}m → ${Math.round(Number(p.rest_seconds) / 60)}m`);
+  if ('buy_in' in p && (p.buy_in ?? null) !== (row.buy_in ?? null)) ch.push(`buy-in ${row.buy_in ?? '—'} → ${p.buy_in ?? '—'}`);
+  const cash = p.busted ? 0 : (p.cash_out === '' ? null : p.cash_out ?? null);
+  if ('cash_out' in p && (cash !== (row.cash_out ?? null) || !!p.busted !== !!row.busted)) ch.push(`cash-out ${row.cash_out ?? '—'}${row.busted ? ' busted' : ''} → ${cash ?? '—'}${p.busted ? ' busted' : ''}`);
+  return `Edit ${what}: ${ch.join(' · ') || 'no change'}`;
 }
 
 // Keep a member's place on the waiting list when their number changes.
@@ -607,6 +625,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       const history = await all(env.DB.prepare('SELECT group_id,effective_from,changed_by,note FROM member_group_history WHERE member_id=? ORDER BY effective_from DESC, id DESC').bind(m.id));
       const log = await all(env.DB.prepare('SELECT at,actor,action,detail FROM audit_log WHERE member_id=? ORDER BY at DESC, id DESC LIMIT 50').bind(m.id));
       const gname = (id) => (id ? (groups.get(id) || { name: id }).name : null);
+      const pendingBySession = new Map((await all(env.DB.prepare("SELECT id,target_id,summary,requested_by,reason FROM change_requests WHERE status='pending' AND member_id=? AND kind LIKE 'session.%'").bind(m.id))).map((c) => [c.target_id, c]));
       const dupsM = await dupNicknames(env);
       // Still at the table: shown on the profile now, written to Game sessions when the seat is cleared.
       const playing = (await liveSeats(env)).filter((x) => x.member_id === m.id).map((x) => ({ table: x.table, seat: x.seat, ref: x.ref, status: x.status, started: x.started, active_seconds: x.active_seconds, rest_seconds: x.rest_seconds, buy_in: x.buy_in, game_type: x.game_type, blinds: x.blinds, linked: !!x.link_member }));
@@ -614,7 +633,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         playing,
         member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups, dupsM),
         stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share },
-        sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id) })),
+        sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id), pending_change: pendingBySession.get(s.id) || null })),
         rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
         group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),
         audit: log
@@ -887,6 +906,59 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     return reply({ ok: true });
   }
   // Master: recover finished sessions from a CSV that PPM exported (at Close or Reset). Rows already recorded are left alone.
+  // ----- Changes that need the master's approval -----
+  // Managers may edit / move / unlink / delete a game session, but only by asking: the change waits, with a reason,
+  // until the master approves it. Staff cannot. The master's own changes apply at once.
+  const SESSION_ACTIONS = ['edit', 'move', 'unlink', 'delete'];
+  if (parts[0] === 'sessions' && /^\d+$/.test(parts[1] || '') && SESSION_ACTIONS.includes(parts[2]) && method === 'POST' && !master) {
+    if (!manager) return bad(reply, 'Staff accounts cannot change game records. Ask a manager.', 403);
+    const b = await readJson(req, 4000);
+    const reason = str(b.reason, 500);
+    if (!reason) return bad(reply, 'Write the reason for this change. The master account has to approve it.');
+    const row = await env.DB.prepare('SELECT ps.*, sr.cash_out, sr.busted FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.id=?').bind(Number(parts[1])).first();
+    if (!row) return bad(reply, 'Session not found.', 404);
+    const open = await env.DB.prepare("SELECT id FROM change_requests WHERE target_id=? AND status='pending' AND kind LIKE 'session.%'").bind(row.id).first();
+    if (open) return bad(reply, `This session already has a change waiting for approval (#${open.id}).`, 409);
+    const { reason: _r, staff: _s, ...payload } = b;
+    const summary = describeSessionChange(parts[2], row, payload);
+    const res = await env.DB.prepare('INSERT INTO change_requests(kind,target_id,payload,reason,summary,member_id,requested_by,requested_at) VALUES(?,?,?,?,?,?,?,?) RETURNING id')
+      .bind('session.' + parts[2], row.id, JSON.stringify(payload), reason, summary, row.member_id, who(b) || 'manager', now).first();
+    await audit(env, now, who(b), 'change.request', row.member_id, `#${res.id} ${summary} · reason: ${reason}`).run();
+    return reply({ ok: true, pending: true, request_id: res.id, summary });
+  }
+  if (parts[0] === 'change-requests' && parts.length === 1 && method === 'GET') {
+    if (!manager) return managerOnly();
+    const status = ['pending', 'approved', 'rejected', 'cancelled'].includes(url.searchParams.get('status')) ? url.searchParams.get('status') : 'pending';
+    const rows = await all(env.DB.prepare(`SELECT c.*, m.member_no, m.nickname FROM change_requests c LEFT JOIN members m ON m.id=c.member_id WHERE c.status=? ORDER BY c.id DESC LIMIT 100`).bind(status));
+    return reply({ requests: rows.map(({ payload, ...r }) => r) });
+  }
+  if (parts[0] === 'change-requests' && /^\d+$/.test(parts[1] || '') && ['approve', 'reject', 'cancel'].includes(parts[2]) && method === 'POST') {
+    const b = await readJson(req, 2000);
+    const cr = await env.DB.prepare('SELECT * FROM change_requests WHERE id=?').bind(Number(parts[1])).first();
+    if (!cr) return bad(reply, 'Request not found.', 404);
+    if (cr.status !== 'pending') return bad(reply, `This request was already ${cr.status}.`, 409);
+    const note = str(b.note, 500);
+    if (parts[2] === 'cancel') {
+      if (!manager || (!master && cr.requested_by !== who(b))) return bad(reply, 'Only the person who asked, or the master, can withdraw it.', 403);
+      await env.DB.batch([env.DB.prepare("UPDATE change_requests SET status='cancelled',decided_by=?,decided_at=? WHERE id=?").bind(who(b), now, cr.id),
+        audit(env, now, who(b), 'change.cancel', cr.member_id, `#${cr.id} withdrawn: ${cr.summary}`)]);
+      return reply({ ok: true });
+    }
+    if (!master) return masterOnly();
+    if (parts[2] === 'reject') {
+      await env.DB.batch([env.DB.prepare("UPDATE change_requests SET status='rejected',decided_by=?,decided_at=?,decision_note=? WHERE id=?").bind(who(b), now, note, cr.id),
+        audit(env, now, who(b), 'change.reject', cr.member_id, `#${cr.id} rejected (asked by ${cr.requested_by}): ${cr.summary}${note ? ' · ' + note : ''}`)]);
+      return reply({ ok: true });
+    }
+    // Approve: run the requested change exactly as the master would.
+    const [, action] = cr.kind.split('.');
+    const inner = new Request(`https://internal/sessions/${cr.target_id}/${action}`, { method: 'POST', body: JSON.stringify(JSON.parse(cr.payload)) });
+    const result = await handleMembersApi(inner, env, `/sessions/${cr.target_id}/${action}`, now, (data, status = 200) => ({ data, status }), user, 'master');
+    if (!result || result.status >= 400) return bad(reply, 'Could not apply: ' + ((result && result.data && result.data.error) || 'unknown error'), (result && result.status) || 400);
+    await env.DB.batch([env.DB.prepare("UPDATE change_requests SET status='approved',decided_by=?,decided_at=?,decision_note=? WHERE id=?").bind(who(b), now, note, cr.id),
+      audit(env, now, who(b), 'change.approve', cr.member_id, `#${cr.id} approved (asked by ${cr.requested_by}, reason: ${cr.reason}): ${cr.summary}`)]);
+    return reply({ ok: true, result: result.data });
+  }
   if (parts[0] === 'sessions' && parts[1] === 'import-ppm' && method === 'POST') {
     if (!master) return masterOnly();
     const b = await readJson(req, 1000000);
