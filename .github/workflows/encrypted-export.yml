@@ -35,6 +35,7 @@ jobs:
             echo '{"sessions":'; q "SELECT ps.id, ps.session_key, ps.member_ref, ps.table_name, ps.seat, ps.start_at, ps.end_at, ps.active_seconds, ps.rest_seconds, ps.buy_in, ps.group_id, m.member_no, m.nickname, sr.cash_out, sr.busted, sr.entered_by FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.start_at >= $SINCE ORDER BY ps.table_name, ps.end_at"
             echo ',"deleted":'; q "SELECT session_key, summary, deleted_at FROM deleted_sessions"
             echo ',"audit":'; q "SELECT id, at, actor, action, detail FROM audit_log WHERE at >= $SINCE AND (action LIKE 'session.%' OR action LIKE 'sessions.%' OR action LIKE 'member.%' OR action LIKE 'ppm.%') ORDER BY id"
+            echo ',"links":'; q "SELECT l.seat_key, m.member_no, l.created_at FROM ppm_seat_links l LEFT JOIN members m ON m.id=l.member_id ORDER BY l.created_at DESC LIMIT 20"
             echo ',"members":'; q "SELECT member_no, nickname, surname, family_name, group_id FROM members ORDER BY member_no"
             echo '}'
           } > /tmp/out.json
