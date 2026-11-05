@@ -1,6 +1,6 @@
 # Builds PPM (joywei43/everwin-ppm-system, main branch) and publishes it to /ppm/ on this site.
 # Runs when this file changes, or by hand: Actions → Build PPM → Run workflow.
-# Last requested: 2026-11-03T15:40:52Z seat swap
+# Last requested: 2026-11-05T14:49:37Z mistake guards
 name: Build PPM
 
 on:
