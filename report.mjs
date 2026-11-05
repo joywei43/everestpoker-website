@@ -1,7 +1,7 @@
 // Operation Report: one row per business day over a date range, with totals.
 // Revenue and the Bad Beat Jackpot are entered by managers per day; everything else comes from PPM.
 import { str, localDate, dayStart } from './members.mjs';
-import { businessDay } from './operation.mjs';
+import { businessDay, dayOpenFromRuns, runsAround } from './operation.mjs';
 
 const HOUR = 3600, DAY = 86400, TZ = 8 * HOUR, MAX_DAYS = 120;
 const all = async (stmt) => (await stmt.all()).results || [];
@@ -11,16 +11,11 @@ const money = (v) => { if (v === '' || v == null) return null; const n = Number(
 const cents = (v) => { if (v === '' || v == null) return null; const n = Number(String(v).replace(/[,\s₱]/g, '')); return Number.isFinite(n) && n >= 0 && n <= 1e11 ? Math.round(n * 100) : NaN; };
 const levelOf = (blinds, game) => `${blinds || ''} ${game || ''}`.trim() || 'Unknown';
 
-// Business day D opens at 12:00, or at the first table opening / seat-in between 06:00 and 12:00 that day.
+// Same business-day rule as Live Operation (see dayOpenFromRuns).
 async function dayOpenings(env, from, toPlusOne) {
-  const lo = dayStart(from) + 6 * HOUR, hi = dayStart(toPlusOne) + 12 * HOUR;
-  const rows = await all(env.DB.prepare('SELECT opened_at t FROM table_runs WHERE opened_at>=? AND opened_at<? UNION ALL SELECT start_at t FROM play_sessions WHERE start_at>=? AND start_at<?').bind(lo, hi, lo, hi));
+  const runs = await runsAround(env, from, toPlusOne);
   const opens = {};
-  for (let d = from; d <= toPlusOne; d = addDays(d, 1)) opens[d] = dayStart(d) + 12 * HOUR;
-  for (const { t } of rows) {
-    const h = ((t + TZ) % DAY) / HOUR, d = localDate(t);
-    if (h >= 6 && h < 12 && opens[d] != null && t < opens[d]) opens[d] = t;
-  }
+  for (let d = from; d <= toPlusOne; d = addDays(d, 1)) opens[d] = dayOpenFromRuns(d, runs);
   return opens;
 }
 

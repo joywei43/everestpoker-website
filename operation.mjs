@@ -34,12 +34,34 @@ export async function recordTableRuns(env, tables, now) {
   if (stmts.length) await env.DB.batch(stmts);
 }
 
+// Business day D starts at 12:00, or earlier when tables open fresh that morning (06:00–12:00).
+// A game that carries on from the night before belongs to the previous day: D only starts once every
+// table has closed (a pause of under an hour counts as the same game) and the next table opens, or at
+// noon if the night game ended before then.
+const FAR = 4e9, GAP = HOUR;
+export function dayOpenFromRuns(d, runs) {
+  const base = dayStart(d), six = base + 6 * HOUR, noon = base + 12 * HOUR;
+  const end = (r) => (r.closed_at == null ? Infinity : r.closed_at);
+  let x = six;
+  const carry = runs.filter((r) => r.opened_at < six && end(r) > six);
+  if (carry.length) {
+    x = Math.max(...carry.map(end));
+    for (let guard = 0; guard < 500 && x !== Infinity; guard++) {
+      const more = runs.filter((r) => r.opened_at <= x + GAP && end(r) > x);
+      if (!more.length) break;
+      x = Math.max(...more.map(end));
+    }
+    if (x === Infinity) return FAR; // still the night game: today has not started yet
+  }
+  const next = runs.filter((r) => r.opened_at >= x).map((r) => r.opened_at);
+  return Math.min(next.length ? Math.min(...next) : FAR, Math.max(x, noon));
+}
+export async function runsAround(env, fromDay, toDay) {
+  const lo = dayStart(fromDay) - DAY, hi = dayStart(toDay) + 2 * DAY;
+  return all(env.DB.prepare('SELECT opened_at, closed_at FROM table_runs WHERE opened_at<? AND (closed_at IS NULL OR closed_at>?)').bind(hi, lo));
+}
 async function dayOpensAt(env, d) {
-  const base = dayStart(d), noon = base + 12 * HOUR, early = base + 6 * HOUR;
-  const run = await env.DB.prepare('SELECT MIN(opened_at) t FROM table_runs WHERE opened_at>=? AND opened_at<?').bind(early, noon).first();
-  const ses = await env.DB.prepare('SELECT MIN(start_at) t FROM play_sessions WHERE start_at>=? AND start_at<?').bind(early, noon).first();
-  const times = [run && run.t, ses && ses.t].filter((x) => x != null);
-  return times.length ? Math.min(...times) : noon;
+  return dayOpenFromRuns(d, await runsAround(env, d, d));
 }
 export async function businessDay(env, now, wanted) {
   let d = isDate(wanted) ? wanted : localDate(now);

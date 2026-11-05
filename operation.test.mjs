@@ -77,7 +77,12 @@ const bob = vl.find((v) => v.ref === 'Bob'); assert.equal(bob.busted, 1); assert
 assert.equal(vl.find((v) => v.member_no === 'EV-000002').missing_cash_out, 1);
 assert.equal(vl[0].sessions, 2, 'Wei left and came back: two sessions'); assert.deepEqual(vl[0].segments.map((x) => [x.table, x.seat, !!x.live]), [['T1', 1, false], ['T1', 1, true]]);
 
-// A morning opening moves the next day's start earlier.
+// Cross-night: T1 is still running at 07:00, so it is still business day 2026-11-02, even if someone sits down now.
+clock = at('2026-11-03 07:00:00'); await relogin();
+tables[0].sessions.push({ seatId: 3, memberId: 'Late', startTime: '2026-11-03 06:40:00', endTime: '2026-11-03 06:55:00', activeSeconds: 900, restSeconds: 0, buyInAmount: 1000 }); await save();
+assert.equal((await call('/operation', 'GET', null, boss)).body.day, '2026-11-02', 'night game carries the day past 06:00');
+// The night game ends at 08:00; a fresh table at 10:30 starts the new business day.
+clock = at('2026-11-03 08:00:00'); tables[0].isRunning = false; tables[0].lastStartTime = null; await save();
 clock = at('2026-11-03 10:30:00'); tables[1].isRunning = true; tables[1].lastStartTime = clock; tables[1].openedAt = '2026-11-03 10:30:00'; await save();
 op = (await call('/operation', 'GET', null, boss)).body;
 assert.equal(op.day, '2026-11-03', 'table opened at 10:30 starts the new business day');
@@ -85,8 +90,8 @@ assert.equal(op.start, at('2026-11-03 10:30:00') / 1000);
 const prev = (await call('/operation?day=2026-11-02', 'GET', null, boss)).body;
 assert.equal(prev.end, at('2026-11-03 10:30:00') / 1000, 'previous day ends when the next one opens');
 assert.equal(prev.tables.length, 0, 'no live tables on a past day');
-assert.equal(prev.money.buy_in_finished, 35000);
-assert.equal(op.history[0].day, '2026-11-02'); assert.equal(op.history[0].buy_in, 35000);
+assert.equal(prev.money.buy_in_finished, 36000, 'the 06:40 sit-down belongs to the night');
+assert.equal(op.history[0].day, '2026-11-02'); assert.equal(op.history[0].buy_in, 36000);
 
 
 // Operation Report: managers enter revenue and BBJ per day; the rest comes from PPM.
@@ -101,9 +106,9 @@ let rep = (await call('/report?from=2026-11-01&to=2026-11-03', 'GET', null, boss
 assert.deepEqual(rep.days.map((d) => d.day), ['2026-11-01', '2026-11-02', '2026-11-03']);
 const r2 = rep.days[1];
 assert.equal(r2.revenue, 85000); assert.deepEqual(r2.table_revenue, { T1: 50000, T3: 35000 }); assert.equal(r2.bbj_main, 273962.25); assert.equal(r2.bbj_reserve, 74555.25); assert.equal(r2.updated_by, 'Boss');
-assert.equal(r2.table_seconds, 21.5 * 3600 + 8 * 3600, 'T1 13:00 → 10:30 next morning, T3 8 h');
+assert.equal(r2.table_seconds, 19 * 3600 + 8 * 3600, 'T1 13:00 → 08:00 when the night game ended, T3 8 h');
 assert.deepEqual(r2.tables, ['T1', 'T3']);
-assert.equal(r2.visitors, 3); assert.equal(r2.members, 2); assert.equal(r2.sessions, 3); assert.equal(r2.buy_in, 35000); assert.equal(r2.cash_out, 32000);
+assert.equal(r2.visitors, 4); assert.equal(r2.members, 2); assert.equal(r2.sessions, 4); assert.equal(r2.buy_in, 36000); assert.equal(r2.cash_out, 32000);
 assert.equal(r2.levels['50 / 100 NLH'].table_seconds, r2.table_seconds);
 assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.entered_days, 1);
 { const t3 = rep.totals.tables.T3; assert.equal(t3.revenue, 35000); assert.equal(t3.table_seconds, 8 * 3600); assert.equal(t3.days, 1); assert.equal(t3.bb_hours, 800, '8 h × BB 100'); }
@@ -121,7 +126,7 @@ assert.deepEqual(op2.bbj, { day: '2026-11-02', main: 273962.25, reserve: 74555.2
 clock = at('2026-11-03 11:30:00'); tables[1].blinds = '100 / 200'; await save();
 clock = at('2026-11-03 12:30:00');
 rep = (await call('/report?from=2026-11-03&to=2026-11-03', 'GET', null, boss)).body;
-assert.equal(rep.days[0].levels['50 / 100 NLH'].table_seconds, 3600 + 2 * 3600, 'T2 10:30–11:30 + T1 10:30–12:30');
+assert.equal(rep.days[0].levels['50 / 100 NLH'].table_seconds, 3600, 'T2 10:30–11:30 (T1 closed at 08:00)');
 assert.equal(rep.days[0].levels['100 / 200 NLH'].table_seconds, 3600, 'T2 11:30–12:30');
 
 // Master fixes: list runs, change times, delete a table opened by mistake.
@@ -131,9 +136,9 @@ const t3run = runs.find((r) => r.table_name === 'T3');
 assert.equal(t3run.seconds, 8 * 3600); assert.equal(t3run.sessions, 0);
 assert.equal((await call('/operation/runs/update', 'POST', { run_key: t3run.run_key, opened_at: at('2026-11-02 15:00:00') / 1000, closed_at: at('2026-11-02 14:00:00') / 1000 }, boss)).status, 400);
 assert.equal((await call('/operation/runs/update', 'POST', { run_key: t3run.run_key, opened_at: at('2026-11-02 15:00:00') / 1000, closed_at: at('2026-11-02 22:00:00') / 1000 }, boss)).status, 200);
-assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 21.5 * 3600 + 7 * 3600);
+assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 19 * 3600 + 7 * 3600);
 assert.equal((await call('/operation/runs/delete', 'POST', { run_key: t3run.run_key }, boss)).status, 200);
-assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 21.5 * 3600, 'T3 removed');
+assert.equal((await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0].table_seconds, 19 * 3600, 'T3 removed');
 
 // History Log: master only; PPM actions, logins and fixes are all there.
 assert.equal((await call('/audit', 'GET', null, maria2)).status, 403);
@@ -165,7 +170,8 @@ assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).bo
 }
 
 // Telegram lineup: any staff account; players counted by nationality.
-{ await call('/members/000001', 'PUT', { nationality: 'Taiwanese' }, boss);
+{ tables[0].isRunning = true; tables[0].lastStartTime = clock; await save(); // T1 back on for the lineup
+  await call('/members/000001', 'PUT', { nationality: 'Taiwanese' }, boss);
   const a = (await call('/announce', 'GET', null, maria2)).body;
   const t1 = a.tables.find((t) => t.name === 'T1');
   assert.ok(t1, JSON.stringify(a)); assert.equal(t1.number, '1'); assert.equal(t1.players, 2); assert.equal(t1.open_seats, 7);
@@ -180,4 +186,16 @@ assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).bo
 { const res = await worker.fetch(new Request('https://api.test/lineup'), env); const text = await res.text();
   assert.equal(res.status, 200); assert.match(text, /TABLE 1 50-100 NLH/); assert.match(text, /1 Taiwanese Player/); assert.ok(!/Wei|Ann|Jiho/.test(text), 'no names');
   const j = await (await worker.fetch(new Request('https://api.test/lineup?format=json'), env)).json(); assert.equal(j.text, text); assert.equal(j.tables[0].nationalities[0].nationality, 'Taiwanese'); }
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup, public lineup text');
+{ // Business-day boundary rule.
+  const { dayOpenFromRuns } = await import('./operation.mjs');
+  const T = (x) => at(x) / 1000, run = (a, b) => ({ opened_at: T(a), closed_at: b ? T(b) : null });
+  assert.equal(dayOpenFromRuns('2026-11-05', []), T('2026-11-05 12:00:00'), 'quiet day: noon');
+  assert.equal(dayOpenFromRuns('2026-11-05', [run('2026-11-05 10:00:00', '2026-11-05 15:00:00')]), T('2026-11-05 10:00:00'), 'fresh morning opening');
+  assert.equal(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00', '2026-11-05 03:30:00'), run('2026-11-05 18:00:00')]), T('2026-11-05 12:00:00'), 'night ended before 06:00: noon');
+  assert.equal(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00', '2026-11-05 09:00:00')]), T('2026-11-05 12:00:00'), 'night ran to 09:00: still noon, and the morning stays with the night');
+  assert.equal(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00', '2026-11-05 13:30:00'), run('2026-11-05 18:00:00')]), T('2026-11-05 13:30:00'), 'night ran past noon: the day starts when it ends');
+  assert.equal(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00', '2026-11-05 07:00:00'), run('2026-11-05 07:30:00', '2026-11-05 11:00:00')]), T('2026-11-05 12:00:00'), 'a pause under an hour is the same game');
+  assert.equal(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00', '2026-11-05 07:00:00'), run('2026-11-05 09:30:00')]), T('2026-11-05 09:30:00'), 'closed, then a fresh opening');
+  assert.ok(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00')]) > T('2026-11-06 00:00:00'), 'night game still running: the day has not started');
+}
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');

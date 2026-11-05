@@ -747,7 +747,7 @@ async function viewOperation(view) {
   const bbj = d.bbj ? `<section class="bbj" aria-label="Bad Beat Jackpot">${bbjBtn}<div class="bbj-date">${esc(ordinalDate(d.bbj.day))}</div><div class="bbj-main">MAIN: ${peso2(d.bbj.main)}</div><div class="bbj-res">1st Reserved: ${peso2(d.bbj.reserve)}</div></section>`
     : (isManager() ? `<div class="msg row between">Bad Beat Jackpot board is empty. ${bbjBtn}</div>` : '');
   view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Live Operation</h1>
-      <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A day starts at 12:00, or when the first table opens that morning.</p></div>
+      <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A game that runs through the night stays on the day it started; the next day begins when tables open again after it ends (12:00 at the latest).</p></div>
     <div class="row">${prevDay ? `<a class="btn" href="#/liveoperation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/liveoperation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/liveoperation">Today</a>`}<a class="btn" href="#/operationreport">Operation Report →</a></div></div>
     ${d.is_today ? `<section class="card"><div class="row between" style="margin-bottom:12px"><h2>Floor <span class="small muted" style="font-weight:400">· ${d.open_tables} open · ${v.at_table_now} players</span></h2><span class="small muted">Live from PPM · refreshes every 30 s · tap a table, then a player</span></div>
       <div class="floor"><div class="floor-tables">${tables.map((t) => tableOval(t, t.name === floorTable)).join('')}</div>
@@ -913,7 +913,7 @@ async function viewReport(view) {
   const revHr = per(T.revenue, T.table_seconds / 3600), revVisit = per(T.revenue, T.visits);
   const bbHrs = Object.values(T.tables || {}).filter((v) => v.revenue).reduce((a, v) => a + (v.bb_hours || 0), 0), revBB = per(Object.values(T.tables || {}).reduce((a, v) => a + (v.bb_hours ? v.revenue : 0), 0), bbHrs);
   view.innerHTML = `<div class="row between" style="align-items:flex-end;gap:12px"><div><h1>Operation Report</h1>
-      <p class="sub">${esc(d.from)} → ${esc(d.to)} · ${T.days} business day${T.days === 1 ? '' : 's'} (each starts at 12:00, or when the first table opens that morning). Totals add up every day in the range.</p></div>
+      <p class="sub">${esc(d.from)} → ${esc(d.to)} · ${T.days} business day${T.days === 1 ? '' : 's'} (a game that runs through the night stays on the day it started). Totals add up every day in the range.</p></div>
     <button class="btn" id="csv">Export CSV</button></div>
     <section class="card"><form id="rangeF" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
       <label class="f">From<input type="date" name="from" value="${esc(d.from)}" max="${esc(d.today)}"></label>
