@@ -379,7 +379,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
   if (parts[0] === 'groups' && parts.length === 1 && method === 'GET') {
     const counts = await all(env.DB.prepare("SELECT group_id,COUNT(*) n FROM members WHERE status='active' GROUP BY group_id"));
     const byGroup = new Map(counts.map((c) => [c.group_id, c.n]));
-    return reply({ groups: [...groups.values()].map((g) => ({ ...g, members: byGroup.get(g.id) || 0 })), unassigned: byGroup.get(null) || 0 });
+    // Retired groups (active=0) are hidden unless someone is still in them.
+    return reply({ groups: [...groups.values()].filter((g) => g.active !== 0 || byGroup.get(g.id)).map((g) => ({ ...g, members: byGroup.get(g.id) || 0 })), unassigned: byGroup.get(null) || 0 });
   }
   if (parts[0] === 'groups' && parts[1] === 'summary' && method === 'GET') {
     const r = range(url, now);
@@ -411,7 +412,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       }
       return b.players.get(row.member_id);
     };
-    for (const g of groups.values()) bucket(g.id);
+    for (const g of groups.values()) if (g.active !== 0) bucket(g.id); // retired groups only appear if they still have data
     // Current members of each group, even with no finished play in this period.
     const current = await all(env.DB.prepare("SELECT id AS member_id, member_no, surname, middle_name, family_name, nickname, nationality, group_id, group_id AS current_group FROM members WHERE status='active' AND group_id IS NOT NULL"));
     for (const row of current) { const b = bucket(row.group_id); player(b, row); }
@@ -467,7 +468,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const fields = pickFields(b);
     if (!fields.surname && !fields.family_name && !fields.nickname) return bad(reply, 'Name or nickname is required.');
     const groupId = b.group_id ? str(b.group_id, 30) : null;
-    if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
+    if (groupId && (!groups.has(groupId) || groups.get(groupId).active === 0)) return bad(reply, 'Unknown group.');
     if (!b.confirm_duplicate) {
       const dups = await possibleDuplicates(env, fields);
       if (dups.length) return reply({ error: 'This player may already be a member.', code: 'possible_duplicate', matches: dups }, 409);
@@ -504,7 +505,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       if (no && existingNos.has(no.toLowerCase())) { result.skipped++; return; }
       if (!no && fields.passport_id && existingPassports.has(fields.passport_id)) { result.skipped++; return; }
       const groupText = str(row.group, 30).toLowerCase();
-      const group = groupText ? [...groups.values()].find((g) => g.id === groupText || g.name.toLowerCase() === groupText) : null;
+      const group = groupText ? [...groups.values()].find((g) => g.active !== 0 && (g.id === groupText || g.name.toLowerCase() === groupText)) : null;
       if (groupText && !group) result.errors.push({ row: i, error: 'Unknown group "' + row.group + '" — imported without group' });
       if (!no) { const n = smallestFree(usedNos); usedNos.add(n); no = formatNo(n); }
       existingNos.add(no.toLowerCase()); if (fields.passport_id) existingPassports.add(fields.passport_id);
@@ -679,7 +680,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       if (!master) return masterOnly();
       const b = await readJson(req, 5000);
       const groupId = b.group_id ? str(b.group_id, 30) : null;
-      if (groupId && !groups.has(groupId)) return bad(reply, 'Unknown group.');
+      if (groupId && (!groups.has(groupId) || groups.get(groupId).active === 0)) return bad(reply, 'Unknown group.');
       if (!who(b)) return bad(reply, 'Staff name is required.');
       if (b.move_past) {
         // Correction of a wrong assignment (master only): all past hours and rewards move to the new group too.
