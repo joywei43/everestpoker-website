@@ -112,6 +112,9 @@ assert.equal(r2.visitors, 4); assert.equal(r2.members, 2); assert.equal(r2.sessi
 assert.equal(r2.levels['50 / 100 NLH'].table_seconds, r2.table_seconds);
 assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.entered_days, 1);
 { const t3 = rep.totals.tables.T3; assert.equal(t3.revenue, 35000); assert.equal(t3.table_seconds, 8 * 3600); assert.equal(t3.days, 1); assert.equal(t3.bb_hours, 800, '8 h × BB 100'); }
+// Only days with that table's revenue entered count toward revenue per hour.
+{ const t1 = rep.totals.tables.T1; assert.equal(t1.revenue_days, 1); assert.equal(t1.revenue_seconds, rep.days[1].table_seconds_by.T1); assert.ok(t1.table_seconds >= t1.revenue_seconds); }
+assert.equal(rep.totals.revenue_table_seconds, rep.days[1].table_seconds, 'only 11-02 has revenue');
 // Clearing one table keeps the other; the BBJ board is untouched.
 assert.equal((await call('/report/day/2026-11-02', 'PUT', { tables: { T3: '' } }, boss)).status, 200);
 let chk = (await call('/report?from=2026-11-02&to=2026-11-02', 'GET', null, boss)).body.days[0];

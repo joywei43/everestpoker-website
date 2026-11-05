@@ -66,7 +66,8 @@ export async function handleReport(req, env, path, now, reply, user, role) {
   if (path !== '/report' || method !== 'GET') return null;
 
   const url = new URL(req.url);
-  const today = (await businessDay(env, now)).day; // before the day opens (usually noon) it is still yesterday's business day
+  const current = await businessDay(env, now);
+  const today = current.day; // before the day opens (usually noon) it is still yesterday's business day
   let to = isDate(url.searchParams.get('to')) ? url.searchParams.get('to') : today;
   let from = isDate(url.searchParams.get('from')) ? url.searchParams.get('from') : addDays(to, -6);
   if (to > today) to = today;
@@ -125,6 +126,7 @@ export async function handleReport(req, env, path, now, reply, user, role) {
       row.table_seconds += e - s;
       row.table_seconds_by[r.table_name] = (row.table_seconds_by[r.table_name] || 0) + (e - s);
       const tl = (tableLevels[r.table_name] ||= {}); tl[levelOf(r.blinds, r.game_type)] = (tl[levelOf(r.blinds, r.game_type)] || 0) + (e - s);
+      const dl = ((row.table_level_seconds ||= {})[r.table_name] ||= {}); dl[levelOf(r.blinds, r.game_type)] = (dl[levelOf(r.blinds, r.game_type)] || 0) + (e - s);
       level(row, levelOf(r.blinds, r.game_type)).table_seconds += e - s;
       (used[d.day] ||= new Set()).add(r.table_name);
       const sp = (span[d.day] ||= [s, e]); sp[0] = Math.min(sp[0], s); sp[1] = Math.max(sp[1], e);
@@ -157,6 +159,7 @@ export async function handleReport(req, env, path, now, reply, user, role) {
 
   // Totals across the range ("visits" adds up the days; "unique visitors" counts each player once).
   const list = days.map((d) => rows[d.day]);
+  for (const r of list) r.in_progress = r.day === current.day && current.end > now;
   const sum = (k) => list.reduce((a, r) => a + (r[k] || 0), 0);
   const levels = {};
   for (const r of list) for (const [k, v] of Object.entries(r.levels)) {
@@ -169,10 +172,20 @@ export async function handleReport(req, env, path, now, reply, user, role) {
   for (const [k, t] of Object.entries(byTable)) {
     t.levels = tableLevels[k] || {};
     t.bb_hours = Object.entries(t.levels).reduce((a, [lv, sec]) => a + (sec / 3600) * bigBlind(lv), 0);
+    t.revenue_seconds = 0; t.revenue_bb_hours = 0; t.revenue_days = 0;
+  }
+  // Revenue per table hour / BB per hour only use days where that table's revenue has been entered,
+  // so a day still in progress (or not entered yet) does not pull the averages down.
+  for (const r of list) for (const [k, sec] of Object.entries(r.table_seconds_by)) {
+    if (r.table_revenue[k] == null || !byTable[k]) continue;
+    const t = byTable[k]; t.revenue_seconds += sec; t.revenue_days++;
+    t.revenue_bb_hours += Object.entries((r.table_level_seconds || {})[k] || {}).reduce((a, [lv, x]) => a + (x / 3600) * bigBlind(lv), 0);
   }
   const totals = {
     days: list.length, open_days: list.filter((r) => r.table_seconds || r.sessions).length, entered_days: list.filter((r) => r.revenue != null).length,
     revenue: sum('revenue'), table_seconds: sum('table_seconds'), operating_seconds: sum('operating_seconds'),
+    revenue_table_seconds: Object.values(byTable).reduce((a, t) => a + t.revenue_seconds, 0), revenue_bb_hours: Object.values(byTable).reduce((a, t) => a + t.revenue_bb_hours, 0),
+    revenue_visits: list.filter((r) => r.revenue != null).reduce((a, r) => a + r.visitors, 0),
     visits: sum('visitors'), unique_visitors: everyone.size, unique_members: everyMember.size, new_members: sum('new_members'), sessions: sum('sessions'),
     tables: byTable, play_seconds: sum('play_seconds'), rest_seconds: sum('rest_seconds'), buy_in: sum('buy_in'), cash_out: sum('cash_out'), missing_cash_out: sum('missing_cash_out'), levels
   };
