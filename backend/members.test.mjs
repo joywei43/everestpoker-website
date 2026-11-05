@@ -501,4 +501,24 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal((await call('/members', 'POST', { nickname: 'Retired Test', group_id: 'dee', confirm_duplicate: true }, boss.token)).status, 400);
   sql.exec("UPDATE member_groups SET active=1 WHERE id='dee'");
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden');
+{ // PPM name check and close-table check.
+  await call('/members', 'POST', { nickname: 'NASH', member_no: '000522', confirm_duplicate: true }, boss.token);
+  let rv = (await call('/members/resolve?ref=NSH', 'GET', null, maria.token)).body;
+  assert.equal(rv.member, null); assert.equal(rv.suggestions[0].member_no, 'EV-000522', 'NSH suggests NASH');
+  rv = (await call('/members/resolve?ref=' + encodeURIComponent('NASH (000522)'), 'GET', null, maria.token)).body;
+  assert.equal(rv.member.member_no, 'EV-000522');
+  assert.equal((await call('/members/resolve?ref=Zzzqq', 'GET', null, maria.token)).body.suggestions.length, 0);
+  let cur = (await call('/ppm', 'GET', null, boss.token)).body;
+  const tn = cur.tables[2].name;
+  cur.tables[2].isRunning = true;
+  cur.tables[2].sessions = [{ seatId: 2, memberId: 'NSH', startTime: '2026-11-05 20:00:00', endTime: '2026-11-05 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 5000 },
+    { seatId: 3, memberId: 'NASH (000522)', startTime: '2026-11-05 20:00:00', endTime: '2026-11-05 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 5000, cashOutAmount: 6000 }];
+  cur.tables[2].seats[4] = { ...cur.tables[2].seats[4], status: 'seated', memberId: 'Walkin', sessionStart: '2026-11-05 21:10:00', activeSeconds: 0, restSeconds: 0, lastActiveStart: Date.now(), buyInAmount: 1000 };
+  assert.equal((await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, boss.token)).status, 200);
+  const cc = (await call('/sessions/close-check?table=' + tn, 'GET', null, maria.token)).body;
+  assert.deepEqual(cc.unmatched.map((x) => [x.seat, x.ref, x.left]), [[2, 'NSH', true], [5, 'Walkin', false]]);
+  assert.deepEqual(cc.missing_cash_out.map((x) => [x.seat, x.ref]), [[2, 'NSH']]);
+  cur = (await call('/ppm', 'GET', null, boss.token)).body; cur.tables[2].seats[4] = { id: 5, status: 'idle', memberId: '' }; cur.tables[2].isRunning = false;
+  await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, boss.token);
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check');

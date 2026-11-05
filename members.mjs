@@ -524,6 +524,59 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
   }
 
   // Smallest free member number, shown in the New member form.
+  // PPM: is this typed name a member? If not, suggest the closest members (typos like "NSH" → NASH).
+  if (parts[0] === 'members' && parts[1] === 'resolve' && method === 'GET') {
+    const ref = str(url.searchParams.get('ref'), 60);
+    if (!ref) return bad(reply, 'Type a name or member number.');
+    const id = (await matchRefs(env, [ref]))(ref);
+    const brief = (m) => ({ member_no: m.member_no, nickname: m.nickname, name: displayName(m), nationality: m.nationality, status: m.status });
+    if (id) return reply({ member: brief(await env.DB.prepare('SELECT * FROM members WHERE id=?').bind(id).first()), suggestions: [] });
+    const q = ref.toLowerCase().replace(/\s*\(.*\)\s*$/, '').trim();
+    const dist = (a, b) => { // Levenshtein, small strings only
+      if (Math.abs(a.length - b.length) > 3) return 99;
+      const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+      for (let j = 1; j <= b.length; j++) d[0][j] = j;
+      for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      return d[a.length][b.length];
+    };
+    const rows = await all(env.DB.prepare("SELECT * FROM members WHERE status='active'"));
+    const scored = [];
+    for (const m of rows) {
+      let best = 99;
+      for (const f of [m.nickname, m.surname, m.family_name, displayName(m)]) {
+        const v = String(f || '').toLowerCase().trim(); if (!v || !q) continue;
+        let sc = dist(q, v);
+        if (q.length >= 3 && (v.startsWith(q) || q.startsWith(v))) sc = Math.min(sc, 1);
+        if (q.length >= 3 && v.includes(q)) sc = Math.min(sc, 1.5);
+        best = Math.min(best, sc);
+      }
+      if (best <= Math.max(1, Math.floor(q.length / 3))) scored.push({ m, best });
+    }
+    scored.sort((a, b) => a.best - b.best || a.m.member_no.localeCompare(b.m.member_no));
+    return reply({ member: null, suggestions: scored.slice(0, 5).map((x) => brief(x.m)) });
+  }
+  // PPM: before closing a table, list players not matched to a member and sessions without a cash-out.
+  if (parts[0] === 'sessions' && parts[1] === 'close-check' && method === 'GET') {
+    const name = str(url.searchParams.get('table'), 10);
+    const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
+    const t = (ppmRow ? JSON.parse(ppmRow.data) : []).find((x) => (x.name || 'T' + x.id) === name);
+    if (!t) return reply({ unmatched: [], missing_cash_out: [] });
+    const finished = (t.sessions || []).filter((s) => s && s.memberId && s.startTime && s.endTime).map((s) => ({ s, key: [name, s.seatId, str(s.memberId, 60), s.startTime, s.endTime].join('|').slice(0, 200) }));
+    const db = new Map();
+    for (const part of chunks(finished.map((f) => f.key), 45)) {
+      (await all(env.DB.prepare(`SELECT ps.session_key, ps.member_id, sr.session_id has_result FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.session_key IN (${marks(part.length)})`).bind(...part))).forEach((r) => db.set(r.session_key, r));
+    }
+    const matched = await matchRefs(env, [...finished.map((f) => str(f.s.memberId, 60)), ...(t.seats || []).filter((x) => x.status !== 'idle').map((x) => str(x.memberId, 60))]);
+    const live = (await liveSeats(env)).filter((x) => x.table === name);
+    const unmatched = [], missing = [];
+    for (const f of finished) {
+      const row = db.get(f.key), ref = str(f.s.memberId, 60);
+      if (row ? !row.member_id : !matched(ref)) unmatched.push({ seat: f.s.seatId, ref, left: true });
+      if (row ? !row.has_result : !Number.isSafeInteger(f.s.cashOutAmount)) missing.push({ seat: f.s.seatId, ref, buy_in: f.s.buyInAmount ?? null });
+    }
+    for (const x of live) if (!x.member_id) unmatched.push({ seat: x.seat, ref: x.ref, left: false });
+    return reply({ unmatched, missing_cash_out: missing });
+  }
   if (parts[0] === 'members' && parts[1] === 'next-number' && method === 'GET') return reply({ member_no: formatNo(await nextMemberNumber(env)) });
 
   // ----- one member -----
