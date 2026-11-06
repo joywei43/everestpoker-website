@@ -1,0 +1,29 @@
+# Which D1 queries read the most rows (query text and counts only, no data).
+name: D1 usage
+
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: Look back this many hours
+        default: '24'
+
+jobs:
+  usage:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      HOURS: ${{ inputs.hours }}
+    steps:
+      - name: Top queries by rows read
+        run: |
+          SINCE=$(date -u -d "-${HOURS} hours" +%Y-%m-%dT%H:%M:%SZ); UNTIL=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          Q='query($a:String!,$s:Time!,$u:Time!){viewer{accounts(filter:{accountTag:$a}){
+            byDb:d1AnalyticsAdaptiveGroups(limit:20,filter:{datetime_geq:$s,datetime_leq:$u}){sum{rowsRead rowsWritten readQueries writeQueries} dimensions{databaseId}}
+            top:d1QueriesAdaptiveGroups(limit:40,filter:{datetime_geq:$s,datetime_leq:$u},orderBy:[sum_rowsRead_DESC]){sum{rowsRead rowsWritten} count dimensions{databaseId query}}}}}'
+          jq -n --arg q "$Q" --arg a "$CLOUDFLARE_ACCOUNT_ID" --arg s "$SINCE" --arg u "$UNTIL" '{query:$q,variables:{a:$a,s:$s,u:$u}}' > body.json
+          curl -sS https://api.cloudflare.com/client/v4/graphql -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' --data @body.json > out.json
+          jq -c '.errors' out.json
+          echo "== per database"; jq -r '.data.viewer.accounts[0].byDb[]? | "\(.dimensions.databaseId[0:8])  read=\(.sum.rowsRead) written=\(.sum.rowsWritten) rq=\(.sum.readQueries) wq=\(.sum.writeQueries)"' out.json
+          echo "== top queries"; jq -r '.data.viewer.accounts[0].top[]? | "\(.sum.rowsRead)\t\(.count)\t\(.dimensions.databaseId[0:8])\t\(.dimensions.query|gsub("\\s+";" ")|.[0:220])"' out.json
