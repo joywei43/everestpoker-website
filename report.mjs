@@ -232,13 +232,13 @@ export async function handleReport(req, env, path, now, reply, user, role) {
 }
 
 // Bad Beat Jackpot ledger. Each day's collection is split:
-//   30% taken → Pagcor 30% (9%), CDC 5% (1.5%), Everest 65% (19.5%)
+//   30% admin fee → Pagcor 25% (7.5%), CDC 5% (1.5%), Everest 70% (21%)   (as in the casino's monthly memo)
 //   70% to the pot → Main 70% (49%), 1st Reserved 30% (21%)
 // A payout takes the paid amount out of Main; 1st Reserved then becomes the new Main.
 // On a day with a payout, the payout comes first (that day's box is counted the next day).
 export function splitBbj(amountCents) {
   const taken = Math.round(amountCents * 0.3), pot = amountCents - taken;
-  const pagcor = Math.round(taken * 0.3), cdc = Math.round(taken * 0.05), main = Math.round(pot * 0.7);
+  const pagcor = Math.round(taken * 0.25), cdc = Math.round(taken * 0.05), main = Math.round(pot * 0.7);
   return { taken, pagcor, cdc, everest: taken - pagcor - cdc, pot, main, reserve: pot - main };
 }
 export async function bbjLedger(env, from, to) {
@@ -272,6 +272,8 @@ export async function bbjLedger(env, from, to) {
     lastDay = e.day;
     if (e.day >= from) rows.push(row);
   }
+  // Like the casino's monthly memo: Pagcor and CDC are worked out on the range's total admin fee, not added up day by day.
+  t.pagcor = Math.round(t.taken * 0.25); t.cdc = Math.round(t.taken * 0.05); t.everest = t.taken - t.pagcor - t.cdc;
   for (const k of Object.keys(t)) if (k !== 'days') t[k] = p(t[k]);
   return {
     opening: { day: opening.day, main: p(opening.main_cents), reserve: p(opening.reserve_cents) },
