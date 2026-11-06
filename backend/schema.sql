@@ -214,3 +214,10 @@ CREATE TABLE IF NOT EXISTS group_labels(group_id TEXT PRIMARY KEY REFERENCES mem
 INSERT OR IGNORE INTO member_groups(id,name,kind,owner,sort) VALUES ('jin','JIN pogi','host','JIN pogi',7), ('aa','A.A','host','A.A',8);
 INSERT OR IGNORE INTO group_labels(group_id,label) VALUES ('aa','Junket Operator · 100-200');
 UPDATE member_groups SET sort=99 WHERE id='inhouse' AND sort<99; -- In-House (Marketing) listed after the hosts
+
+-- Indexes so frequent lookups don't scan whole tables (D1 free plan counts every row read).
+CREATE INDEX IF NOT EXISTS audit_action ON audit_log(action,id);
+CREATE INDEX IF NOT EXISTS sessions_start ON play_sessions(start_at);
+CREATE INDEX IF NOT EXISTS sessions_table_start ON play_sessions(table_name,start_at);
+CREATE INDEX IF NOT EXISTS members_created ON members(created_at);
+CREATE INDEX IF NOT EXISTS table_runs_close ON table_runs(closed_at);

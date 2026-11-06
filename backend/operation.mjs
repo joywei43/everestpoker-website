@@ -163,16 +163,6 @@ export async function handleOperation(req, env, now, reply, role) {
   const firstOpen = runs.length ? Math.max(bd.start, Math.min(...runs.map((r) => r.opened_at))) : null;
   const lastClose = runs.length && runs.every((r) => r.closed_at != null) ? Math.min(bd.end, Math.max(...runs.map((r) => r.closed_at))) : null;
 
-  // Recent days for comparison.
-  const history = [];
-  for (let i = 1; i <= 7; i++) {
-    const d = addDays(bd.day, -i);
-    const s = await dayOpensAt(env, d), e = await dayOpensAt(env, addDays(d, 1));
-    const h = await env.DB.prepare(`SELECT COUNT(DISTINCT COALESCE('m' || ps.member_id, 'r' || lower(ps.member_ref))) visitors, COALESCE(SUM(ps.active_seconds),0) secs, COALESCE(SUM(ps.buy_in),0) buy_in, COALESCE(SUM(sr.cash_out),0) cash_out
-      FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.start_at>=? AND ps.start_at<?`).bind(s, e).first();
-    history.push({ day: d, ...h });
-  }
-
   return reply({
     day: bd.day, start: bd.start, end: bd.end, is_today: bd.is_today, now, bbj,
     open_tables: tables.filter((t) => t.running).length, tables: bd.is_today ? tables : [],
@@ -181,7 +171,7 @@ export async function handleOperation(req, env, now, reply, role) {
     visitors: { total: visitors.size + liveNew, members: matched, unmatched: visitors.size - matched, at_table_now: bd.is_today ? livePlayers : 0, new_members: newMembers.n },
     money: { buy_in_finished: fin.buy_in, buy_in_live: liveBuyIn, buy_in_total: fin.buy_in + liveBuyIn, cash_out: fin.cash_out, sessions_with_cash_out: fin.with_cash_out,
       missing_cash_out: fin.missing_cash_out, buy_in_without_cash_out: fin.buy_in_without_cash_out, busted: fin.busted },
-    history,
+    history: [],
     visitor_list: visitorList
   });
 }
@@ -252,13 +242,13 @@ export function lineupText(tables) {
 // Public (no sign-in): what the Telegram bot posts. No names — only counts by nationality.
 export async function handleLineupPublic(req, env, now) {
   const fake = { method: 'GET' };
-  let data; await handleAnnounce(fake, env, now, (d) => { data = d; return d; }, '');
+  let data; await handleAnnounce(fake, env, now, (d) => { data = d; return d; }, '', true);
   const text = lineupText(data.tables);
   const url = new URL(req.url);
   if (url.searchParams.get('format') === 'json') return new Response(JSON.stringify({ text, open_tables: data.tables.length, tables: data.tables }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
   return new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
 }
-export async function handleAnnounce(req, env, now, reply, user) {
+export async function handleAnnounce(req, env, now, reply, user, skipLast = false) {
   // Two places to post: the players' group (every hour) and the subscribed channel (every 30 minutes).
   const TARGETS = { group: 'player group', channel: 'channel' };
   if (req.method === 'POST') {
@@ -285,7 +275,8 @@ export async function handleAnnounce(req, env, now, reply, user) {
       nationalities: Object.entries(counts).map(([k, n]) => ({ nationality: k, count: n })).sort((a, b) => (a.nationality === '') - (b.nationality === '') || b.count - a.count || a.nationality.localeCompare(b.nationality)),
       waiting: queue.filter((q) => q.game === game).length });
   }
-  const lastFor = (t) => env.DB.prepare("SELECT at, actor FROM audit_log WHERE action='telegram.copy' AND detail LIKE ? ORDER BY id DESC LIMIT 1").bind('%' + TARGETS[t]).first();
+  if (skipLast) return reply({ now, tables });
+  const lastFor = (t) => env.DB.prepare("SELECT at, actor FROM audit_log WHERE action='telegram.copy' AND detail LIKE ? ORDER BY action, id DESC LIMIT 1").bind('%' + TARGETS[t]).first();
   const last = { group: (await lastFor('group')) || null, channel: (await lastFor('channel')) || null };
   return reply({ now, tables, last_copy: last.group, last });
 }

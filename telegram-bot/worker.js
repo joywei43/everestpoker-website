@@ -239,7 +239,8 @@ export async function poll(env) {
       await db.batch(statements);
     }
     await flush(env);
-    await db.batch([db.prepare('DELETE FROM bot_updates WHERE created<?').bind(time-7*86400),db.prepare("DELETE FROM bot_jobs WHERE created<? AND status!='pending'").bind(time-7*86400)]);
+    // Old-row cleanup once an hour, not every minute: each run scans the tables and D1 counts every row read.
+    if(Math.floor(time/60)%60===0)await db.batch([db.prepare('DELETE FROM bot_updates WHERE created<?').bind(time-7*86400),db.prepare("DELETE FROM bot_jobs WHERE created<? AND status!='pending'").bind(time-7*86400)]);
   });
 }
 

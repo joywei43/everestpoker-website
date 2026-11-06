@@ -753,7 +753,7 @@ async function viewOperation(view) {
   const d = await api('/operation' + q);
   const o = d.operating, mo = d.money, v = d.visitors, pl = d.play;
   const dt = (t) => t ? fmt(t, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
-  const prevDay = d.history[0] ? d.history[0].day : null;
+  const prevDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(d.day + 'T00:00:00Z') - 864e5));
   const nextDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date(Date.parse(d.day + 'T00:00:00Z') + 864e5));
   const big = (k, val, sub) => `<div class="tile"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${sub}</div></div>`;
   const tables = d.tables || [];

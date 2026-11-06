@@ -91,7 +91,7 @@ const prev = (await call('/operation?day=2026-11-02', 'GET', null, boss)).body;
 assert.equal(prev.end, at('2026-11-03 10:30:00') / 1000, 'previous day ends when the next one opens');
 assert.equal(prev.tables.length, 0, 'no live tables on a past day');
 assert.equal(prev.money.buy_in_finished, 36000, 'the 06:40 sit-down belongs to the night');
-assert.equal(op.history[0].day, '2026-11-02'); assert.equal(op.history[0].buy_in, 36000);
+assert.deepEqual(op.history, []);
 
 
 // Operation Report: managers enter revenue and BBJ per day; the rest comes from PPM.
