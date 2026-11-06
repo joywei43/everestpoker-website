@@ -944,7 +944,7 @@ async function viewReport(view) {
     </form></section>
     <div class="grid">
       ${tile('Revenue', peso(T.revenue), `${T.entered_days} of ${T.open_days} open day${T.open_days === 1 ? '' : 's'} entered${revHr != null ? ' · ' + peso(revHr) + ' per table hour' + (revBB != null ? ` (${Math.round(revBB)} BB/hr)` : '') : ''}${revVisit != null ? ' · ' + peso(revVisit) + ' per visit' : ''}`)}
-      ${J.balance ? tile('Bad Beat Jackpot', peso2(J.balance.main), `Main · 1st Reserved ${peso2(J.balance.reserve)} · as of ${esc(J.balance.as_of)}${J.totals && J.totals.days ? ` · collected ${peso2(J.totals.amount)} in this range · Everest 19.5% ${peso2(J.totals.everest)}` : ''}`) : tile('Bad Beat Jackpot', '—', isMaster() ? 'Set the opening balance in the ledger below' : 'Not set up yet')}
+      ${J.balance ? tile('Bad Beat Jackpot', peso2(J.balance.main), `Main · 1st Reserved ${peso2(J.balance.reserve)} · as of ${esc(J.balance.as_of)}${J.totals && J.totals.days ? ` · collected ${peso2(J.totals.amount)} in this range` : ''}`) : tile('Bad Beat Jackpot', '—', isMaster() ? 'Set the opening balance in the ledger below' : 'Not set up yet')}
       ${tile('Table hours', hm(T.table_seconds), `${T.open_days} open day${T.open_days === 1 ? '' : 's'} · avg ${hm(per(T.table_seconds, T.open_days) || 0)} a day · operating ${hm(T.operating_seconds)}`)}
       ${tile('Visitors', String(T.visits), `visits (days added up) · ${T.unique_visitors} different players · ${T.unique_members} members · ${T.new_members} new members`)}
       ${tile('Playing hours', `<span class="mono">${hhmm(T.play_seconds)}</span>`, `<span class="mono">${restLine(T.play_seconds, T.rest_seconds)}</span> · ${T.sessions} sessions`)}
