@@ -221,3 +221,8 @@ CREATE INDEX IF NOT EXISTS sessions_start ON play_sessions(start_at);
 CREATE INDEX IF NOT EXISTS sessions_table_start ON play_sessions(table_name,start_at);
 CREATE INDEX IF NOT EXISTS members_created ON members(created_at);
 CREATE INDEX IF NOT EXISTS table_runs_close ON table_runs(closed_at);
+
+-- Bad Beat Jackpot ledger: one collected total per business day, payouts, and the balance before the ledger started.
+CREATE TABLE IF NOT EXISTS bbj_collect(day TEXT PRIMARY KEY, amount_cents INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS bbj_payouts(id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, paid_cents INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS bbj_opening(id INTEGER PRIMARY KEY CHECK(id=1), day TEXT NOT NULL, main_cents INTEGER NOT NULL, reserve_cents INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);

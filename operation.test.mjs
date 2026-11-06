@@ -201,4 +201,35 @@ assert.equal((await call('/audit?category=login&q=Maria', 'GET', null, boss)).bo
   assert.equal(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00', '2026-11-05 07:00:00'), run('2026-11-05 09:30:00')]), T('2026-11-05 09:30:00'), 'closed, then a fresh opening');
   assert.ok(dayOpenFromRuns('2026-11-05', [run('2026-11-04 19:00:00')]) > T('2026-11-06 00:00:00'), 'night game still running: the day has not started');
 }
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');
+// Bad Beat Jackpot ledger: the paper ledger of 11-01 … 11-04 (one total a day).
+clock = at('2026-11-06 15:00:00'); await relogin(); const maria3 = (await call('/login', 'POST', { username: 'Maria', password: 'maria-pass' })).body.token;
+assert.equal((await call('/report/bbj/opening', 'PUT', { day: '2026-11-01', main: '268,829.50', reserve: 72355.5 }, maria3)).status, 403, 'opening: master only');
+assert.equal((await call('/report/bbj/opening', 'PUT', { day: '2026-11-01', main: '268,829.50', reserve: 72355.5 }, boss)).status, 200);
+for (const [day, amt] of [['2026-11-01', '10,475'], ['2026-11-02', 29450], ['2026-11-03', '14,075.00'], ['2026-11-04', 28100]]) assert.equal((await call('/report/day/' + day, 'PUT', { bbj_amount: amt }, boss)).status, 200);
+{
+  const j = (await call('/report?from=2026-11-01&to=2026-11-04', 'GET', null, boss)).body.jackpot;
+  const pick = (r) => [r.amount, r.taken, r.pot, r.to_main, r.to_reserve];
+  assert.deepEqual(j.rows.map(pick), [[10475, 3142.5, 7332.5, 5132.75, 2199.75], [29450, 8835, 20615, 14430.5, 6184.5], [14075, 4222.5, 9852.5, 6896.75, 2955.75], [28100, 8430, 19670, 13769, 5901]], 'matches the paper ledger');
+  assert.deepEqual([j.rows[0].pagcor, j.rows[0].cdc, j.rows[0].everest], [942.75, 157.13, 2042.62], 'Pagcor 9%, CDC 1.5%, Everest the rest of the 30%');
+  assert.equal(j.rows[0].main_balance, 273962.25); assert.equal(j.rows[0].reserve_balance, 74555.25, 'same as the board on 11-02');
+  assert.deepEqual(j.balance, { main: 268829.5 + 40229, reserve: 72355.5 + 17241, as_of: '2026-11-04' });
+  assert.equal(j.totals.amount, 82100); assert.equal(j.totals.taken, 24630); assert.equal(j.totals.main, 40229); assert.equal(j.totals.reserve, 17241);
+  const d = (await call('/report?from=2026-11-03&to=2026-11-04', 'GET', null, boss)).body;
+  assert.equal(d.days[0].bbj_amount, 14075); assert.deepEqual(d.jackpot.before, { main: 268829.5 + 5132.75 + 14430.5, reserve: 72355.5 + 2199.75 + 6184.5 }, 'balance before the range');
+}
+// Jackpot hit on 11-05: Main is paid, 1st Reserved becomes the new Main; the day's box is added after.
+assert.equal((await call('/report/bbj/payout', 'POST', { day: '2026-11-05', paid: 0 }, boss)).status, 400);
+assert.equal((await call('/report/bbj/payout', 'POST', { day: '2026-11-05', paid: 309058.5, note: 'T2 quads lost to straight flush' }, boss)).status, 200);
+assert.equal((await call('/report/day/2026-11-05', 'PUT', { bbj_amount: 10000 }, boss)).status, 200);
+{
+  const j = (await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, boss)).body.jackpot;
+  assert.deepEqual(j.rows.map((r) => r.kind), ['payout', 'collect']);
+  assert.equal(j.rows[0].main_balance, 89596.5); assert.equal(j.rows[0].reserve_balance, 0);
+  assert.deepEqual(j.balance, { main: 89596.5 + 4900, reserve: 2100, as_of: '2026-11-05' });
+  assert.equal(j.totals.paid, 309058.5);
+  assert.equal((await call('/report/bbj/payout/' + j.rows[0].id, 'DELETE', null, maria3)).status, 403);
+  assert.equal((await call('/report/bbj/payout/' + j.rows[0].id, 'DELETE', null, boss)).status, 200);
+}
+assert.equal((await call('/report/day/2026-11-05', 'PUT', { bbj_amount: '' }, boss)).status, 200, 'blank removes the entry');
+assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, boss)).body.jackpot.rows.length, 0);
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');

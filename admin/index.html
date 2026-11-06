@@ -819,7 +819,7 @@ const ACTION_LABELS = {
   'member.photo': ['Photo', ''], 'member.merge': ['Merged', 'red'], 'member.delete': ['Member deleted', 'red'], 'member.import': ['Import', 'blue'],
   'sessions.link': ['Linked PPM', 'blue'], 'session.delete': ['Session deleted', 'red'], 'session.edit': ['Session edited', 'amber'], 'session.move': ['Session moved', 'blue'], 'change.request': ['Change requested', 'amber'], 'change.approve': ['Change approved', 'green'], 'change.reject': ['Change rejected', 'red'], 'change.cancel': ['Request withdrawn', ''], 'session.import': ['Sessions recovered', 'green'], 'ppm.sync_error': ['PPM sync error', 'red'], 'sessions.unlink': ['Unlinked', 'red'], 'session.cash_out': ['Cash-out edit', 'amber'],
   'reward.add': ['Reward', 'green'], 'reward.approve': ['Approved', 'green'], 'reward.void': ['Voided', 'red'],
-  'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue'], 'telegram.copy': ['Telegram post', 'blue']
+  'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'report.bbj_payout': ['BBJ payout', 'red'], 'report.bbj_opening': ['BBJ opening balance', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue'], 'telegram.copy': ['Telegram post', 'blue']
 };
 async function viewHistory(view) {
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -915,7 +915,7 @@ async function viewTelegram(view) {
 async function viewReport(view) {
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
   const d = await api('/report?' + new URLSearchParams({ from: params.get('from') || daysAgo(7), to: params.get('to') || today() }));
-  const T = d.totals, setRange = (from, to) => { location.hash = '#/operationreport?' + new URLSearchParams({ from, to }); };
+  const J = d.jackpot || { rows: [] }, T = d.totals, setRange = (from, to) => { location.hash = '#/operationreport?' + new URLSearchParams({ from, to }); };
   const per = (a, b) => (b > 0 ? a / b : null);
   const opt = (v, f = peso) => (v == null ? '—' : f(v));
   const levels = Object.entries(T.levels).sort((a, b) => b[1].table_seconds - a[1].table_seconds);
@@ -944,7 +944,7 @@ async function viewReport(view) {
     </form></section>
     <div class="grid">
       ${tile('Revenue', peso(T.revenue), `${T.entered_days} of ${T.open_days} open day${T.open_days === 1 ? '' : 's'} entered${revHr != null ? ' · ' + peso(revHr) + ' per table hour' + (revBB != null ? ` (${Math.round(revBB)} BB/hr)` : '') : ''}${revVisit != null ? ' · ' + peso(revVisit) + ' per visit' : ''}`)}
-      ${tile('Bad Beat Jackpot', d.bbj.main == null ? '—' : peso2(d.bbj.main), d.bbj.as_of ? `Main · 1st Reserved ${opt(d.bbj.reserve, peso2)} · as of ${esc(d.bbj.as_of)}${d.bbj.growth != null ? ' · grew ' + peso2(d.bbj.growth) + ' in this range' : ''}${d.bbj.paid ? ' · paid out ' + peso2(d.bbj.paid) : ''}` : 'Not entered yet — click a day below')}
+      ${J.balance ? tile('Bad Beat Jackpot', peso2(J.balance.main), `Main · 1st Reserved ${peso2(J.balance.reserve)} · as of ${esc(J.balance.as_of)}${J.totals && J.totals.days ? ` · collected ${peso2(J.totals.amount)} in this range · Everest 19.5% ${peso2(J.totals.everest)}` : ''}`) : tile('Bad Beat Jackpot', '—', isMaster() ? 'Set the opening balance in the ledger below' : 'Not set up yet')}
       ${tile('Table hours', hm(T.table_seconds), `${T.open_days} open day${T.open_days === 1 ? '' : 's'} · avg ${hm(per(T.table_seconds, T.open_days) || 0)} a day · operating ${hm(T.operating_seconds)}`)}
       ${tile('Visitors', String(T.visits), `visits (days added up) · ${T.unique_visitors} different players · ${T.unique_members} members · ${T.new_members} new members`)}
       ${tile('Playing hours', `<span class="mono">${hhmm(T.play_seconds)}</span>`, `<span class="mono">${restLine(T.play_seconds, T.rest_seconds)}</span> · ${T.sessions} sessions`)}
@@ -956,19 +956,44 @@ async function viewReport(view) {
     <section class="card"><h2 style="margin-bottom:10px">By level</h2><div class="tbl"><table><thead><tr><th>Level</th><th class="num">Days</th><th class="num">Table hours</th><th style="width:30%"></th><th class="num">Player hours</th><th class="num">Sessions</th><th class="num">Players per table</th></tr></thead><tbody>
       ${levels.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td><div class="bar" style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${(100 * v.table_seconds / maxLv).toFixed(1)}%"></i></div></td><td class="num">${hm(v.play_seconds)}</td><td class="num">${v.sessions}</td><td class="num">${v.table_seconds ? (v.play_seconds / v.table_seconds).toFixed(1) : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No tables ran in this range.</td></tr>'}
     </tbody></table></div><p class="small muted" style="margin:8px 0 0">Players per table = player hours ÷ table hours (average seats in use). Level changes in PPM are split from today on.</p></section>
-    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Daily</h2><span class="small muted">Click a day to enter each table's revenue</span></div><div class="tbl"><table><thead><tr>
-      <th>Day</th><th class="num">Revenue</th><th>Tables</th><th class="num">Table hours</th><th class="num">Operating</th><th class="num">Visitors</th><th class="num">New</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>Levels</th><th>By</th></tr></thead><tbody>
+    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Daily</h2><span class="small muted">Click a day to enter each table's revenue and the BBJ collected</span></div><div class="tbl"><table><thead><tr>
+      <th>Day</th><th class="num">Revenue</th><th class="num">BBJ</th><th>Tables</th><th class="num">Table hours</th><th class="num">Operating</th><th class="num">Visitors</th><th class="num">New</th><th class="num">Player hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th>Levels</th><th>By</th></tr></thead><tbody>
       ${d.days.slice().reverse().map((r) => { const open = r.table_seconds || r.sessions; return `<tr class="click" data-day="${r.day}" tabindex="0" style="${open ? '' : 'opacity:.55'}">
         <td style="white-space:nowrap"><b>${esc(r.day)}</b> <span class="small muted">${wd(r.day)}</span></td>
         <td class="num">${r.revenue == null ? (r.in_progress ? '<span class="chip blue" title="Still open — enter revenue after closing">In progress</span>' : open ? '<span class="chip amber">Enter</span>' : '—') : '<b>' + peso(r.revenue) + '</b>' + (Object.keys(r.table_revenue).length ? `<div class="small muted" style="white-space:nowrap">${Object.entries(r.table_revenue).sort().map(([k, v]) => esc(k) + ' ' + peso(v)).join(' · ')}</div>` : '')}</td>
+        <td class="num">${r.bbj_amount == null ? (open && !r.in_progress && J.balance ? '<span class="chip amber">Enter</span>' : '—') : peso2(r.bbj_amount)}</td>
         <td>${r.tables.map(esc).join(' ') || '—'}</td><td class="num">${hm(r.table_seconds)}</td><td class="num">${hm(r.operating_seconds)}</td>
         <td class="num">${r.visitors}</td><td class="num">${r.new_members || ''}</td><td class="num">${hm(r.play_seconds)}</td><td class="num">${peso(r.buy_in)}</td><td class="num">${peso(r.cash_out)}</td>
         <td class="small">${Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `<span style="white-space:nowrap">${esc(k)} · ${hm(v.table_seconds)}</span>`).join('<br>') || '—'}</td>
         <td class="small muted">${esc(r.updated_by || '')}</td></tr>`; }).join('')}
-    </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>
+    </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td class="num">${J.totals && J.totals.days ? peso2(J.totals.amount) : '—'}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>
+    <section class="card"><div class="row between" style="margin-bottom:10px;gap:8px;flex-wrap:wrap"><div><h2>Bad Beat Jackpot ledger</h2>
+      <p class="small muted" style="margin:2px 0 0">Collected → 30% taken (Pagcor 9% · CDC 1.5% · Everest 19.5%) and 70% to the pot (Main 49% · 1st Reserved 21%). A payout comes out of Main; 1st Reserved then becomes the new Main.</p></div>
+      <span class="row" style="gap:6px">${J.balance ? '<button class="btn sm" id="bbjPay">Record payout</button><button class="btn sm" id="bbjCsv">Export BBJ CSV</button>' : ''}${isMaster() ? '<button class="btn sm" id="bbjOpen">Opening balance</button>' : ''}</span></div>
+      ${J.balance ? `<div class="tbl"><table><thead><tr><th>Day</th><th class="num">Collected</th><th class="num">Taken 30%</th><th class="num">Pagcor 9%</th><th class="num">CDC 1.5%</th><th class="num">Everest 19.5%</th><th class="num">To pot 70%</th><th class="num">Main +49%</th><th class="num">Reserved +21%</th><th class="num">Main balance</th><th class="num">1st Reserved</th><th>By</th></tr></thead><tbody>
+        <tr class="muted"><td colspan="9">Balance before ${esc(d.from)}</td><td class="num">${peso2(J.before.main)}</td><td class="num">${peso2(J.before.reserve)}</td><td></td></tr>
+        ${J.rows.map((r) => r.kind === 'payout'
+          ? `<tr style="background:var(--amber-bg,#fff4e0)"><td style="white-space:nowrap"><b>${esc(r.day)}</b> <span class="small muted">${wd(r.day)}</span></td><td colspan="8"><span class="chip red">Jackpot paid</span> <b>${peso2(r.paid)}</b>${r.note ? ' · ' + esc(r.note) : ''} <span class="small muted">— 1st Reserved moved to Main</span>${isMaster() ? ` <button class="btn sm" data-delpay="${r.id}">Delete</button>` : ''}</td><td class="num"><b>${peso2(r.main_balance)}</b></td><td class="num">${peso2(r.reserve_balance)}</td><td class="small muted">${esc(r.by || '')}</td></tr>`
+          : `<tr><td style="white-space:nowrap"><b>${esc(r.day)}</b> <span class="small muted">${wd(r.day)}</span></td><td class="num"><b>${peso2(r.amount)}</b></td><td class="num">${peso2(r.taken)}</td><td class="num">${peso2(r.pagcor)}</td><td class="num">${peso2(r.cdc)}</td><td class="num">${peso2(r.everest)}</td><td class="num">${peso2(r.pot)}</td><td class="num">${peso2(r.to_main)}</td><td class="num">${peso2(r.to_reserve)}</td><td class="num"><b>${peso2(r.main_balance)}</b></td><td class="num">${peso2(r.reserve_balance)}</td><td class="small muted">${esc(r.by || '')}</td></tr>`).join('') || '<tr><td colspan="12" class="muted">Nothing collected in this range yet. Click a day in Daily to enter it.</td></tr>'}
+      </tbody>${J.totals.days || J.totals.paid ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso2(J.totals.amount)}</td><td class="num">${peso2(J.totals.taken)}</td><td class="num">${peso2(J.totals.pagcor)}</td><td class="num">${peso2(J.totals.cdc)}</td><td class="num">${peso2(J.totals.everest)}</td><td class="num">${peso2(J.totals.pot)}</td><td class="num">${peso2(J.totals.main)}</td><td class="num">${peso2(J.totals.reserve)}</td><td class="num">${peso2(J.balance.main)}</td><td class="num">${peso2(J.balance.reserve)}</td><td></td></tr>${J.totals.paid ? `<tr><td colspan="12" class="small">Paid out in this range: <b>${peso2(J.totals.paid)}</b></td></tr>` : ''}</tfoot>` : ''}</table></div>
+      <p class="small muted" style="margin:8px 0 0">Opening balance before ${esc(J.opening.day)}: Main ${peso2(J.opening.main)} · 1st Reserved ${peso2(J.opening.reserve)}. Everest's 19.5% is not included in Revenue.</p>`
+      : `<p class="muted">${isMaster() ? 'Set the opening balance first (Main and 1st Reserved before the first day you enter).' : 'The master account has not set the opening balance yet.'}</p>`}
+    </section>
+    <dialog id="bbjPayD"><form method="dialog" id="bbjPayF"><h2>Record jackpot payout</h2>
+      <label class="f">Business day<input type="date" name="day" required max="${esc(d.today)}" value="${esc(d.today)}"></label>
+      <label class="f">Amount paid (₱)<input type="text" inputmode="decimal" name="paid" required value="${J.balance ? J.balance.main : ''}"></label>
+      <label class="f">Note (table, winners)<input type="text" name="note" maxlength="200" placeholder="e.g. T2 · quads lost to straight flush"></label>
+      <p class="small muted" style="margin:0">Prefilled with the current Main. After saving, 1st Reserved becomes the new Main and anything left from Main is added to it.</p><div id="bbjPayMsg"></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="bbjPaySave">Save</button></div></form></dialog>
+    <dialog id="bbjOpenD"><form method="dialog" id="bbjOpenF"><h2>BBJ opening balance</h2>
+      <label class="f">First day of the ledger<input type="date" name="day" required value="${esc(J.opening ? J.opening.day : d.from)}"></label>
+      <label class="f">Main before that day (₱)<input type="text" inputmode="decimal" name="main" required value="${J.opening ? J.opening.main : ''}"></label>
+      <label class="f">1st Reserved before that day (₱)<input type="text" inputmode="decimal" name="reserve" required value="${J.opening ? J.opening.reserve : ''}"></label><div id="bbjOpenMsg"></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="bbjOpenSave">Save</button></div></form></dialog>
     <dialog id="rd"><form method="dialog" id="rdf"><h2 id="rdTitle"></h2>
       <div class="form" id="rdTables"></div>
       <p style="margin:0">Total <b id="rdSum">₱0</b></p>
+      ${J.balance ? `<label class="f">BBJ collected — total for the day (₱)<input type="text" inputmode="decimal" id="rdBbj" placeholder="e.g. 28,100"></label><p class="small muted" id="rdBbjSplit" style="margin:0"></p>` : ''}
       <p class="small muted" id="rdInfo" style="margin:0"></p>
       <div id="rdMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="rdSave">Save</button></div></form></dialog>`;
   const rf = view.querySelector('#rangeF');
@@ -985,24 +1010,57 @@ async function viewReport(view) {
     const inputs = [...view.querySelectorAll('#rdTables input')];
     const sum = () => { view.querySelector('#rdSum').textContent = peso(inputs.reduce((a, i) => a + (num(i.value) || 0), 0)); };
     inputs.forEach((i) => i.oninput = sum); sum();
+    const bi = view.querySelector('#rdBbj'), bs = view.querySelector('#rdBbjSplit');
+    if (bi) {
+      bi.value = r.bbj_amount ?? '';
+      const show = () => { const v = num(bi.value); if (v == null || !(v >= 0)) { bs.textContent = ''; return; } const c = Math.round(v * 100), tk = Math.round(c * 0.3), pot = c - tk, pg = Math.round(tk * 0.3), cdc = Math.round(tk * 0.05), mn = Math.round(pot * 0.7);
+        bs.textContent = `Taken ${peso2(tk / 100)} (Pagcor ${peso2(pg / 100)} · CDC ${peso2(cdc / 100)} · Everest ${peso2((tk - pg - cdc) / 100)}) · to pot ${peso2(pot / 100)} (Main ${peso2(mn / 100)} · 1st Reserved ${peso2((pot - mn) / 100)})`; };
+      bi.oninput = show; show();
+    }
     view.querySelector('#rdInfo').textContent = names.length ? `PPM: table hours ${hm(r.table_seconds)} · ${r.visitors} visitors · buy-in ${peso(r.buy_in)}` : 'No table records for this day, so all tables are listed. Leave blank the ones that did not open.';
     flash(view.querySelector('#rdMsg'), '');
     view.querySelector('#rdSave').onclick = async (e) => {
       e.preventDefault();
       const tables = {};
       for (const i of inputs) { const v = num(i.value); if (v != null && !(v >= 0)) { flash(view.querySelector('#rdMsg'), 'Revenue must be a number, 0 or more. Leave blank if not known yet.', 'err'); return; } tables[i.dataset.t] = v == null ? '' : v; }
-      try { await api('/report/day/' + r.day, 'PUT', { tables }); dlg.close(); viewReport(view); } catch (err) { flash(view.querySelector('#rdMsg'), err.message, 'err'); }
+      const body = { tables };
+      if (bi) { const v = num(bi.value); if (v != null && !(v >= 0)) { flash(view.querySelector('#rdMsg'), 'BBJ collected must be a number, 0 or more.', 'err'); return; } body.bbj_amount = v == null ? '' : v; }
+      try { await api('/report/day/' + r.day, 'PUT', body); dlg.close(); viewReport(view); } catch (err) { flash(view.querySelector('#rdMsg'), err.message, 'err'); }
     };
     dlg.showModal(); if (inputs[0]) inputs[0].focus();
   };
   view.querySelectorAll('tr[data-day]').forEach((tr) => { const r = d.days.find((x) => x.day === tr.dataset.day); tr.onclick = () => openDay(r); tr.onkeydown = (e) => { if (e.key === 'Enter') openDay(r); }; });
   view.querySelector('#csv').onclick = () => {
-    const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ Main PHP', 'BBJ 1st Reserved PHP', 'BBJ paid out PHP', 'BBJ change PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Revenue by table', 'Entered by']]
-      .concat(d.days.map((r) => [r.day, wd(r.day), r.revenue ?? '', r.bbj_main ?? '', r.bbj_reserve ?? '', r.bbj_paid ?? '', r.bbj_growth ?? '', r.tables.join(' '), (r.table_seconds / 3600).toFixed(2), (r.operating_seconds / 3600).toFixed(2), r.visitors, r.members, r.new_members, r.sessions, (r.play_seconds / 3600).toFixed(2), r.buy_in, r.cash_out,
+    const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ collected PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Revenue by table', 'Entered by']]
+      .concat(d.days.map((r) => [r.day, wd(r.day), r.revenue ?? '', r.bbj_amount ?? '', r.tables.join(' '), (r.table_seconds / 3600).toFixed(2), (r.operating_seconds / 3600).toFixed(2), r.visitors, r.members, r.new_members, r.sessions, (r.play_seconds / 3600).toFixed(2), r.buy_in, r.cash_out,
         Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `${k} ${(v.table_seconds / 3600).toFixed(2)}`).join('; '), Object.entries(r.table_revenue).map(([k, v]) => `${k} ${v}`).join('; '), r.updated_by]))
-      .concat([['Total', '', T.revenue, d.bbj.main ?? '', d.bbj.reserve ?? '', d.bbj.paid || '', d.bbj.growth ?? '', '', (T.table_seconds / 3600).toFixed(2), (T.operating_seconds / 3600).toFixed(2), T.visits, '', T.new_members, T.sessions, (T.play_seconds / 3600).toFixed(2), T.buy_in, T.cash_out, '', '', '']]);
+      .concat([['Total', '', T.revenue, J.totals ? J.totals.amount : '', '', (T.table_seconds / 3600).toFixed(2), (T.operating_seconds / 3600).toFixed(2), T.visits, '', T.new_members, T.sessions, (T.play_seconds / 3600).toFixed(2), T.buy_in, T.cash_out, '', '', '']]);
     const csv = lines.map((row) => row.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-operation-report-${d.from}-to-${d.to}.csv`; a.click();
+  };
+  const payD = view.querySelector('#bbjPayD'), openD = view.querySelector('#bbjOpenD');
+  const bp = view.querySelector('#bbjPay'); if (bp) bp.onclick = () => { flash(view.querySelector('#bbjPayMsg'), ''); payD.showModal(); };
+  const bo = view.querySelector('#bbjOpen'); if (bo) bo.onclick = () => { flash(view.querySelector('#bbjOpenMsg'), ''); openD.showModal(); };
+  view.querySelector('#bbjPaySave').onclick = async (e) => {
+    e.preventDefault(); const f2 = view.querySelector('#bbjPayF'), paid = num(f2.paid.value);
+    if (!f2.day.value || !(paid > 0)) { flash(view.querySelector('#bbjPayMsg'), 'Pick the day and enter the amount paid.', 'err'); return; }
+    if (!confirm(`Record a jackpot payout of ${peso2(paid)} on ${f2.day.value}?`)) return;
+    try { await api('/report/bbj/payout', 'POST', { day: f2.day.value, paid, note: f2.note.value }); payD.close(); viewReport(view); } catch (err) { flash(view.querySelector('#bbjPayMsg'), err.message, 'err'); }
+  };
+  view.querySelector('#bbjOpenSave').onclick = async (e) => {
+    e.preventDefault(); const f2 = view.querySelector('#bbjOpenF'), main = num(f2.main.value), reserve = num(f2.reserve.value);
+    if (!f2.day.value || !(main >= 0) || !(reserve >= 0)) { flash(view.querySelector('#bbjOpenMsg'), 'Enter the day, Main and 1st Reserved.', 'err'); return; }
+    try { await api('/report/bbj/opening', 'PUT', { day: f2.day.value, main, reserve }); openD.close(); viewReport(view); } catch (err) { flash(view.querySelector('#bbjOpenMsg'), err.message, 'err'); }
+  };
+  view.querySelectorAll('[data-delpay]').forEach((b) => b.onclick = async () => { if (!confirm('Delete this payout record? The balances will be recalculated.')) return; try { await api('/report/bbj/payout/' + b.dataset.delpay, 'DELETE'); viewReport(view); } catch (err) { alert(err.message); } });
+  const bc = view.querySelector('#bbjCsv');
+  if (bc) bc.onclick = () => {
+    const lines = [['Date', 'Collected PHP', 'Taken 30% PHP', 'Pagcor 9% PHP', 'CDC 1.5% PHP', 'Everest 19.5% PHP', 'After deduction 70% PHP', 'Main PHP', 'Reserved PHP', 'Paid out PHP', 'Main balance PHP', '1st Reserved balance PHP', 'Note', 'Entered by']]
+      .concat([['Before ' + d.from, '', '', '', '', '', '', '', '', '', J.before.main, J.before.reserve, '', '']])
+      .concat(J.rows.map((r) => r.kind === 'payout' ? [r.day, '', '', '', '', '', '', '', '', r.paid, r.main_balance, r.reserve_balance, 'Jackpot paid' + (r.note ? ': ' + r.note : ''), r.by] : [r.day, r.amount, r.taken, r.pagcor, r.cdc, r.everest, r.pot, r.to_main, r.to_reserve, '', r.main_balance, r.reserve_balance, '', r.by]))
+      .concat([['Total', J.totals.amount, J.totals.taken, J.totals.pagcor, J.totals.cdc, J.totals.everest, J.totals.pot, J.totals.main, J.totals.reserve, J.totals.paid || '', J.balance.main, J.balance.reserve, '', '']]);
+    const csv = lines.map((row) => row.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = `everest-bbj-ledger-${d.from}-to-${d.to}.csv`; a.click();
   };
 }
 

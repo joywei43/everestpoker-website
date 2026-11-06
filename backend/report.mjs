@@ -58,9 +58,46 @@ export async function handleReport(req, env, path, now, reply, user, role) {
         .bind(day, main, reserve, paid, who, now));
       notes.push(`BBJ main ${show(main)}, 1st reserved ${show(reserve)}, paid ${show(paid)}`);
     }
+    if ('bbj_amount' in b) {
+      const amount = cents(b.bbj_amount);
+      if (Number.isNaN(amount)) return reply({ error: 'BBJ amount must be 0 or more.' }, 400);
+      stmts.push(amount == null ? env.DB.prepare('DELETE FROM bbj_collect WHERE day=?').bind(day)
+        : env.DB.prepare('INSERT INTO bbj_collect(day,amount_cents,updated_by,updated_at) VALUES(?,?,?,?) ON CONFLICT(day) DO UPDATE SET amount_cents=excluded.amount_cents,updated_by=excluded.updated_by,updated_at=excluded.updated_at').bind(day, amount, who, now));
+      notes.push(`BBJ collected ${show(amount)}`);
+    }
     if (!stmts.length) return reply({ error: 'Nothing to save.' }, 400);
     stmts.push(env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.day',NULL,?)").bind(now, who, `${day}: ${notes.join(' · ')}`));
     await env.DB.batch(stmts);
+    return reply({ ok: true });
+  }
+  // Jackpot hit: the paid amount comes out of Main, then 1st Reserved becomes the new Main.
+  if (path === '/report/bbj/payout' && method === 'POST') {
+    let b = {}; try { b = await req.json(); } catch { return reply({ error: 'Invalid JSON' }, 400); }
+    const day = b.day, paid = cents(b.paid);
+    if (!isDate(day) || day > (await businessDay(env, now)).day) return reply({ error: 'Pick the business day of the jackpot.' }, 400);
+    if (paid == null || Number.isNaN(paid) || paid <= 0) return reply({ error: 'Enter the amount paid out.' }, 400);
+    const who = str(user || 'staff', 60), note = str(b.note || '', 200);
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO bbj_payouts(day,paid_cents,note,created_by,created_at) VALUES(?,?,?,?,?)').bind(day, paid, note, who, now),
+      env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.bbj_payout',NULL,?)").bind(now, who, `${day}: BBJ paid out ${(paid / 100).toFixed(2)}${note ? ' · ' + note : ''}`)]);
+    return reply({ ok: true });
+  }
+  const pm = /^\/report\/bbj\/payout\/(\d+)$/.exec(path);
+  if (pm && method === 'DELETE') {
+    if (role !== 'master') return reply({ error: 'Only the master account can delete a payout.' }, 403);
+    const row = await env.DB.prepare('SELECT * FROM bbj_payouts WHERE id=?').bind(Number(pm[1])).first();
+    if (!row) return reply({ error: 'Payout not found.' }, 404);
+    await env.DB.batch([env.DB.prepare('DELETE FROM bbj_payouts WHERE id=?').bind(row.id),
+      env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.bbj_payout',NULL,?)").bind(now, str(user, 60), `Deleted BBJ payout of ${row.day} (${(row.paid_cents / 100).toFixed(2)})`)]);
+    return reply({ ok: true });
+  }
+  if (path === '/report/bbj/opening' && method === 'PUT') {
+    if (role !== 'master') return reply({ error: 'Only the master account can set the opening balance.' }, 403);
+    let b = {}; try { b = await req.json(); } catch { return reply({ error: 'Invalid JSON' }, 400); }
+    const main = cents(b.main), reserve = cents(b.reserve);
+    if (!isDate(b.day) || main == null || reserve == null || Number.isNaN(main) || Number.isNaN(reserve)) return reply({ error: 'Enter the start day, Main and 1st Reserved.' }, 400);
+    await env.DB.batch([env.DB.prepare('INSERT INTO bbj_opening(id,day,main_cents,reserve_cents,updated_by,updated_at) VALUES(1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET day=excluded.day,main_cents=excluded.main_cents,reserve_cents=excluded.reserve_cents,updated_by=excluded.updated_by,updated_at=excluded.updated_at').bind(b.day, main, reserve, str(user, 60), now),
+      env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.bbj_opening',NULL,?)").bind(now, str(user, 60), `BBJ opening balance before ${b.day}: Main ${(main / 100).toFixed(2)}, 1st Reserved ${(reserve / 100).toFixed(2)}`)]);
     return reply({ ok: true });
   }
   if (path !== '/report' || method !== 'GET') return null;
@@ -189,5 +226,57 @@ export async function handleReport(req, env, path, now, reply, user, role) {
     visits: sum('visitors'), unique_visitors: everyone.size, unique_members: everyMember.size, new_members: sum('new_members'), sessions: sum('sessions'),
     tables: byTable, play_seconds: sum('play_seconds'), rest_seconds: sum('rest_seconds'), buy_in: sum('buy_in'), cash_out: sum('cash_out'), missing_cash_out: sum('missing_cash_out'), levels
   };
-  return reply({ from, to, today, days: list, totals, bbj });
+  const jackpot = await bbjLedger(env, from, to);
+  for (const r of list) { const j = jackpot.rows.find((x) => x.day === r.day && x.kind === 'collect'); r.bbj_amount = j ? j.amount : null; }
+  return reply({ from, to, today, days: list, totals, bbj, jackpot });
+}
+
+// Bad Beat Jackpot ledger. Each day's collection is split:
+//   30% taken → Pagcor 30% (9%), CDC 5% (1.5%), Everest 65% (19.5%)
+//   70% to the pot → Main 70% (49%), 1st Reserved 30% (21%)
+// A payout takes the paid amount out of Main; 1st Reserved then becomes the new Main.
+// On a day with a payout, the payout comes first (that day's box is counted the next day).
+export function splitBbj(amountCents) {
+  const taken = Math.round(amountCents * 0.3), pot = amountCents - taken;
+  const pagcor = Math.round(taken * 0.3), cdc = Math.round(taken * 0.05), main = Math.round(pot * 0.7);
+  return { taken, pagcor, cdc, everest: taken - pagcor - cdc, pot, main, reserve: pot - main };
+}
+export async function bbjLedger(env, from, to) {
+  const p = (c) => Math.round(c) / 100;
+  const opening = await env.DB.prepare('SELECT day,main_cents,reserve_cents FROM bbj_opening WHERE id=1').first();
+  const empty = { opening: null, balance: null, rows: [], totals: null };
+  if (!opening) return empty;
+  const collects = await all(env.DB.prepare('SELECT day,amount_cents,updated_by FROM bbj_collect WHERE day>=? AND day<=? ORDER BY day').bind(opening.day, to));
+  const payouts = await all(env.DB.prepare('SELECT id,day,paid_cents,note,created_by FROM bbj_payouts WHERE day>=? AND day<=? ORDER BY day,id').bind(opening.day, to));
+  const events = [...payouts.map((x) => ({ ...x, kind: 'payout' })), ...collects.map((x) => ({ ...x, kind: 'collect' }))]
+    .sort((a, b) => a.day.localeCompare(b.day) || (a.kind === 'payout' ? 0 : 1) - (b.kind === 'payout' ? 0 : 1) || (a.id || 0) - (b.id || 0));
+  let main = opening.main_cents, reserve = opening.reserve_cents, lastDay = null;
+  const t = { amount: 0, taken: 0, pagcor: 0, cdc: 0, everest: 0, pot: 0, main: 0, reserve: 0, paid: 0, days: 0 };
+  const rows = [];
+  let before = null;
+  for (const e of events) {
+    if (e.day >= from && before == null) before = { main: p(main), reserve: p(reserve) };
+    let row;
+    if (e.kind === 'payout') {
+      const left = main - e.paid_cents;
+      main = reserve + left; reserve = 0;
+      row = { kind: 'payout', id: e.id, day: e.day, paid: p(e.paid_cents), note: e.note, by: e.created_by };
+      if (e.day >= from) t.paid += e.paid_cents;
+    } else {
+      const s = splitBbj(e.amount_cents);
+      main += s.main; reserve += s.reserve;
+      row = { kind: 'collect', day: e.day, amount: p(e.amount_cents), taken: p(s.taken), pagcor: p(s.pagcor), cdc: p(s.cdc), everest: p(s.everest), pot: p(s.pot), to_main: p(s.main), to_reserve: p(s.reserve), by: e.updated_by };
+      if (e.day >= from) { t.amount += e.amount_cents; t.taken += s.taken; t.pagcor += s.pagcor; t.cdc += s.cdc; t.everest += s.everest; t.pot += s.pot; t.main += s.main; t.reserve += s.reserve; t.days++; }
+    }
+    row.main_balance = p(main); row.reserve_balance = p(reserve);
+    lastDay = e.day;
+    if (e.day >= from) rows.push(row);
+  }
+  for (const k of Object.keys(t)) if (k !== 'days') t[k] = p(t[k]);
+  return {
+    opening: { day: opening.day, main: p(opening.main_cents), reserve: p(opening.reserve_cents) },
+    before: before || { main: p(main), reserve: p(reserve) },
+    balance: { main: p(main), reserve: p(reserve), as_of: lastDay || opening.day },
+    rows, totals: t
+  };
 }
