@@ -19,11 +19,15 @@ jobs:
       - name: Top queries by rows read
         run: |
           SINCE=$(date -u -d "-${HOURS} hours" +%Y-%m-%dT%H:%M:%SZ); UNTIL=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          Q='query($a:String!,$s:Time!,$u:Time!){viewer{accounts(filter:{accountTag:$a}){
+          Q='query($a:String!,$s:Time!,$u:Time!,$d:Date!){viewer{accounts(filter:{accountTag:$a}){
             byDb:d1AnalyticsAdaptiveGroups(limit:20,filter:{datetime_geq:$s,datetime_leq:$u}){sum{rowsRead rowsWritten readQueries writeQueries} dimensions{databaseId}}
+            req:workersInvocationsAdaptive(limit:20,filter:{datetime_geq:$s,datetime_leq:$u}){sum{requests errors subrequests} dimensions{scriptName}}
+            store:d1StorageAdaptiveGroups(limit:5,filter:{date_geq:$d}){max{databaseSizeBytes} dimensions{databaseId}}
             top:d1QueriesAdaptiveGroups(limit:40,filter:{datetime_geq:$s,datetime_leq:$u},orderBy:[sum_rowsRead_DESC]){sum{rowsRead rowsWritten} count dimensions{databaseId query}}}}}'
-          jq -n --arg q "$Q" --arg a "$CLOUDFLARE_ACCOUNT_ID" --arg s "$SINCE" --arg u "$UNTIL" '{query:$q,variables:{a:$a,s:$s,u:$u}}' > body.json
+          jq -n --arg q "$Q" --arg a "$CLOUDFLARE_ACCOUNT_ID" --arg s "$SINCE" --arg u "$UNTIL" --arg d "$(date -u +%Y-%m-%d)" '{query:$q,variables:{a:$a,s:$s,u:$u,d:$d}}' > body.json
           curl -sS https://api.cloudflare.com/client/v4/graphql -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' --data @body.json > out.json
           jq -c '.errors' out.json
           echo "== per database"; jq -r '.data.viewer.accounts[0].byDb[]? | "\(.dimensions.databaseId[0:8])  read=\(.sum.rowsRead) written=\(.sum.rowsWritten) rq=\(.sum.readQueries) wq=\(.sum.writeQueries)"' out.json
+          echo "== worker requests"; jq -r '.data.viewer.accounts[0].req[]? | "\(.dimensions.scriptName)  requests=\(.sum.requests) errors=\(.sum.errors) sub=\(.sum.subrequests)"' out.json
+          echo "== storage"; jq -r '.data.viewer.accounts[0].store[]? | "\(.dimensions.databaseId[0:8])  bytes=\(.max.databaseSizeBytes)"' out.json
           echo "== top queries"; jq -r '.data.viewer.accounts[0].top[]? | "\(.sum.rowsRead)\t\(.count)\t\(.dimensions.databaseId[0:8])\t\(.dimensions.query|gsub("\\s+";" ")|.[0:220])"' out.json
