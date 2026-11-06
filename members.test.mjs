@@ -552,4 +552,20 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal(gs.find((g) => g.id === 'aa').label, 'Junket Operator · 100-200'); assert.equal(gs.find((g) => g.id === 'aa').kind, 'host');
   assert.equal((await call('/groups/summary', 'GET', null, boss.token)).body.groups.find((g) => g.id === 'aa').label, 'Junket Operator · 100-200');
 }
-console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval, junket label');
+// Quick add from PPM while seating: nickname, nationality and group required; marked incomplete until the name is filled in.
+{
+  const st = (await call('/login', 'POST', { username: 'maria', password: 'secret-m' })).body.token;
+  assert.equal((await call('/members', 'POST', { quick: true, nickname: 'Zed', group_id: 'hee' }, st)).status, 400, 'nationality required');
+  assert.equal((await call('/members', 'POST', { quick: true, nickname: 'Zed', nationality: 'Japan' }, st)).status, 400, 'group required');
+  assert.equal((await call('/members', 'POST', { quick: true, nationality: 'Japan', group_id: 'hee' }, st)).status, 400, 'nickname required');
+  const q = await call('/members', 'POST', { quick: true, nickname: 'Zed', nationality: 'Japan', group_id: 'hee', member_no: '999999', where: 'T2 #4' }, st);
+  assert.equal(q.status, 200); assert.notEqual(q.body.member_no, 'EV-999999', 'quick add always takes the next free number');
+  const m = (await call('/members/' + q.body.member_no, 'GET', null, token)).body.member;
+  assert.equal(m.incomplete, true); assert.equal(m.source, 'ppm'); assert.equal(m.group_id, 'hee');
+  assert.ok((await call('/members?incomplete=1', 'GET', null, token)).body.members.some((x) => x.member_no === q.body.member_no));
+  const dup = await call('/members', 'POST', { quick: true, nickname: 'Zed', nationality: 'Japan', group_id: 'hee' }, st);
+  assert.equal(dup.status, 409, 'duplicate nickname caught'); assert.equal(dup.body.matches[0].member_no, q.body.member_no);
+  assert.equal((await call('/members/' + q.body.member_no, 'PUT', { surname: 'Tanaka' }, token)).status, 200);
+  assert.equal((await call('/members/' + q.body.member_no, 'GET', null, token)).body.member.incomplete, false, 'complete once the name is in');
+}
+console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval, junket label, quick add from PPM');

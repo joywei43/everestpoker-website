@@ -238,6 +238,7 @@ async function viewMembers(view) {
     <div class="card"><form class="row" id="sf">
       <label class="sr" for="q">Search</label><input type="search" id="q" placeholder="EV-000123, nickname, name…" style="flex:1 1 240px" value="${esc(params.get('q') || '')}">
       <label class="sr" for="g">Group</label><select id="g"><option value="">All groups</option>${groupOptions(gs, params.get('group'))}<option value="unassigned" ${params.get('group') === 'unassigned' ? 'selected' : ''}>No group</option></select>
+      <label class="row small" style="gap:4px"><input type="checkbox" id="inc" ${params.get('incomplete') === '1' ? 'checked' : ''}> Incomplete only</label>
       <button class="btn">Search</button>
       <div class="seg" role="group" aria-label="Sort"><button type="button" data-sort="last" aria-pressed="${memberSort === 'last'}">Last play</button><button type="button" data-sort="no" aria-pressed="${memberSort === 'no'}">Member no.</button></div></form>
       <div id="list" style="margin-top:12px"></div></div>
@@ -246,15 +247,16 @@ async function viewMembers(view) {
   const load = async (more) => {
     if (!more) { offset = 0; rows = []; }
     const q = view.querySelector('#q').value.trim(), g = view.querySelector('#g').value;
-    const res = await api(`/members?limit=50&offset=${offset}&q=${encodeURIComponent(q)}&group=${encodeURIComponent(g)}&sort=${memberSort}`);
+    const res = await api(`/members?limit=50&offset=${offset}&q=${encodeURIComponent(q)}&group=${encodeURIComponent(g)}&sort=${memberSort}${view.querySelector('#inc').checked ? '&incomplete=1' : ''}`);
     rows = rows.concat(res.members); offset += res.members.length;
     view.querySelector('#list').innerHTML = `<p class="muted small">${res.total} member${res.total === 1 ? '' : 's'}</p><div class="tbl"><table><thead><tr><th>Member no.</th><th>Name</th><th>Nickname</th><th>Group</th><th>Status</th><th>Last play</th><th>Telegram</th><th>Phone</th></tr></thead><tbody>
-      ${rows.map((m) => `<tr class="click" data-no="${esc(m.member_no)}" tabindex="0"><td class="mono">${esc(m.member_no)}</td><td><b>${esc(m.name)}</b></td><td>${esc(m.nick_label || m.nickname)}</td><td>${groupChip(m.group_name)}</td><td>${statusChip(m.status)}</td><td class="small" style="white-space:nowrap">${m.last_play ? fmt(m.last_play, { day: 'numeric', month: 'short' }) + ' ' + time(m.last_play) : '<span class="muted">—</span>'}</td><td>${esc(m.telegram)}</td><td>${esc(m.phone)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No members yet. Import the Google Sheet or add one.</td></tr>'}
+      ${rows.map((m) => `<tr class="click" data-no="${esc(m.member_no)}" tabindex="0"><td class="mono">${esc(m.member_no)}</td><td><b>${esc(m.name)}</b>${m.incomplete ? ' <span class="chip amber" title="Added in PPM — fill in the name and other details">Incomplete</span>' : ''}</td><td>${esc(m.nick_label || m.nickname)}</td><td>${groupChip(m.group_name)}</td><td>${statusChip(m.status)}</td><td class="small" style="white-space:nowrap">${m.last_play ? fmt(m.last_play, { day: 'numeric', month: 'short' }) + ' ' + time(m.last_play) : '<span class="muted">—</span>'}</td><td>${esc(m.telegram)}</td><td>${esc(m.phone)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No members yet. Import the Google Sheet or add one.</td></tr>'}
       </tbody></table></div>${offset < res.total ? '<button class="btn" id="more" style="margin-top:10px">Load more</button>' : ''}`;
     view.querySelectorAll('tr.click').forEach((tr) => { const go = () => location.hash = '#/member/' + encodeURIComponent(tr.dataset.no); tr.onclick = go; tr.onkeydown = (e) => { if (e.key === 'Enter') go(); }; });
     const moreBtn = view.querySelector('#more'); if (moreBtn) moreBtn.onclick = () => load(true);
   };
   view.querySelector('#sf').onsubmit = (e) => { e.preventDefault(); load(false); };
+  view.querySelector('#inc').onchange = () => load(false);
   view.querySelectorAll('[data-sort]').forEach((b) => b.onclick = () => { memberSort = b.dataset.sort; try { localStorage.setItem('everest-member-sort', memberSort); } catch (e) {} view.querySelectorAll('[data-sort]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); load(false); });
   view.querySelector('#newBtn').onclick = () => openMemberDialog(view, null, async (data) => {
     let res;
@@ -336,7 +338,7 @@ async function viewMember(view, no) {
       </div>
       <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:8px">
         <div class="row" style="align-items:baseline"><h1>${esc(m.name)}</h1>${m.nickname ? `<span class="muted">“${esc(m.nick_label || m.nickname)}”</span>` : ''}</div>
-        <div class="row">${statusChip(m.status)}${m.language ? `<span class="chip">Language: ${esc(m.language)}</span>` : ''}${m.nationality ? `<span class="chip">${esc(m.nationality)}</span>` : ''}</div>
+        <div class="row">${statusChip(m.status)}${m.incomplete ? '<span class="chip amber">Incomplete — added in PPM, fill in the full name and details</span>' : ''}${m.language ? `<span class="chip">Language: ${esc(m.language)}</span>` : ''}${m.nationality ? `<span class="chip">${esc(m.nationality)}</span>` : ''}</div>
         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:6px;gap:10px 20px">
           ${[['Member no.', `<span class="mono">${esc(m.member_no)}</span>`], ['Birthday', esc(m.birthday) || '—'], ['Passport / ID', m.passport_last4 ? '•••• ' + esc(m.passport_last4) : '—'], ['Phone', esc(m.phone) || '—'], ['WhatsApp', esc(m.whatsapp) || '—'], ['Telegram', esc(m.telegram) || '—'], ['LINE', esc(m.line) || '—'], ['Email', esc(m.email) || '—'], ['Referral', esc(m.referral_id) || '—'], ['Member since', day(m.created_at)]]
             .map(([k, v]) => `<div><div class="small muted">${k}</div><div>${v}</div></div>`).join('')}

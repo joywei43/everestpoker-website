@@ -52,6 +52,8 @@ export function nickLabel(m, dups) {
 export function displayName(m) {
   return [m.surname, m.middle_name, m.family_name].filter(Boolean).join(' ') || m.nickname || m.member_no;
 }
+// Added at the table in PPM with just nickname, nationality and group: the rest of the profile is still to fill in.
+const isIncomplete = (m) => m.source === 'ppm' && !m.surname && !m.family_name;
 function publicMember(m, groups, dups) {
   const g = m.group_id ? groups.get(m.group_id) : null;
   return {
@@ -61,7 +63,7 @@ function publicMember(m, groups, dups) {
     email: m.email, phone: m.phone, whatsapp: m.whatsapp, telegram: m.telegram, line: m.line,
     referral_id: m.referral_id, language: m.language, status: m.status, staff_notes: m.staff_notes,
     group_id: m.group_id, group_name: g ? g.name : null, group_owner: g ? g.owner : null,
-    source: m.source, created_at: m.created_at, updated_at: m.updated_at, has_photo: !!m.has_photo, nick_label: nickLabel(m, dups)
+    source: m.source, incomplete: isIncomplete(m), created_at: m.created_at, updated_at: m.updated_at, has_photo: !!m.has_photo, nick_label: nickLabel(m, dups)
   };
 }
 const audit = (env, now, actor, action, memberId, detail) =>
@@ -468,6 +470,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       where.push("(member_no LIKE ? ESCAPE '\\' OR member_no LIKE ? ESCAPE '\\' OR nickname LIKE ? ESCAPE '\\' OR surname LIKE ? ESCAPE '\\' OR family_name LIKE ? ESCAPE '\\' OR telegram LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')");
       args.push(pre, digits, like, like, like, like, like);
     }
+    if (url.searchParams.get('incomplete') === '1') where.push("source='ppm' AND COALESCE(surname,'')='' AND COALESCE(family_name,'')=''");
     if (group === 'unassigned') where.push('group_id IS NULL');
     else if (group) { where.push('group_id=?'); args.push(group); }
     const status = str(url.searchParams.get('status'), 20);
@@ -486,6 +489,9 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const fields = pickFields(b);
     if (!fields.surname && !fields.family_name && !fields.nickname) return bad(reply, 'Name or nickname is required.');
     const groupId = b.group_id ? str(b.group_id, 30) : null;
+    // Quick add from PPM while seating: nickname, nationality and group are all required; the rest is filled in later.
+    const quick = b.quick === true;
+    if (quick && (!fields.nickname || !fields.nationality || !groupId)) return bad(reply, 'Nickname, nationality and player group are all required.');
     if (groupId && (!groups.has(groupId) || groups.get(groupId).active === 0)) return bad(reply, 'Unknown group.');
     if (!b.confirm_duplicate) {
       const dups = await possibleDuplicates(env, fields);
@@ -497,7 +503,9 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       if (!master) return bad(reply, 'That number was used before. Ask the master account.', 409);
       await env.DB.prepare('DELETE FROM member_number_history WHERE old_no=? COLLATE NOCASE').bind(wanted).run();
     }
-    const created = await createMember(env, now, fields, groupId, 'staff', who(b), wanted || null);
+    const created = await createMember(env, now, fields, groupId, quick ? 'ppm' : 'staff', who(b), quick ? null : wanted || null);
+    if (quick) await env.DB.prepare("UPDATE audit_log SET detail=? WHERE action='member.create' AND at=? AND member_id=(SELECT id FROM members WHERE member_no=?)")
+      .bind(str(`Added in PPM while seating${b.where ? ' at ' + str(b.where, 40) : ''}: ${fields.nickname} · ${fields.nationality} · ${groups.get(groupId).name}`, 500), now, created.member_no).run();
     const remark = str(b.staff_notes, 4000);
     if (remark) await env.DB.prepare('UPDATE members SET staff_notes=? WHERE member_no=?').bind(remark, created.member_no).run();
     return reply({ ok: true, member_no: created.member_no });
