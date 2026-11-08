@@ -34,6 +34,8 @@ input:focus,select:focus{outline:2px solid var(--gold);outline-offset:0}
 .btn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-height:44px;font-size:15px}
 .btn.gold{background:var(--gold);border-color:var(--gold);color:#16120a;font-weight:700}
 .btn.ghost{background:none}
+.btn.clearall{border-color:var(--red);color:var(--red);font-weight:700;min-height:48px;padding:10px 16px}
+.btn.clearall:active{background:rgba(255,93,108,.15)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .players{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
 .player{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px}
@@ -120,19 +122,19 @@ const T = {
     pickHint: 'Tap a slot, then tap the card. The next empty slot is picked for you.', needCards: 'Enter both cards of every player and the flop.', leads: 'leads', tie: 'Tied now — no insurance.',
     outs: 'Outs', odds: 'Odds', max: 'Max buy', capped: 'capped at 1000 BB', none: 'No outs — nothing to insure.', tooMany: 'More than 15 outs — not sold.', buyAmt: 'Amount', fillMax: 'MAX', even: 'EVEN', confirm: 'Confirm', seat: 'Seat', evenHint: 'EVEN = own share of the pot ÷ odds',
     float: 'Insurance float', capital: 'Starting capital', profit: 'Profit since start', dayNet: 'This day', setFloat: 'Set float', closeDay: 'Closing day', closeBal: 'Closing balance', save: 'Save', cancel: 'Cancel', asOf: 'end of',
-    pays: 'Pays', sell: 'Confirm', sold: 'Sold', settleHint: 'When the next card is dealt, tap it in the blue slot to settle.', hitMsg: 'OUT hit — pay', netLbl: 'net', premium: 'premium', newLeader: 'New leader — can buy River insurance', missMsg: 'Missed — house keeps', newHand: 'New hand',
+    pays: 'Pays', sell: 'Confirm', sold: 'Sold', settleHint: 'When the next card is dealt, tap it in the blue slot to settle.', hitMsg: 'OUT hit — pay', netLbl: 'net', premium: 'premium', newLeader: 'New leader — can buy River insurance', missMsg: 'Missed — house keeps', newHand: 'New hand', clearAll: 'Clear all', cleared: 'Cleared — ready for the next hand.', undo: 'Undo',
     pending: 'Pending', hit: 'Paid out', miss: 'Kept', void: 'Void', net: 'House result', soldT: 'Sold', paidT: 'Paid out', tickets: 'Tickets', time: 'Time', pot: 'Pot', amount: 'Bought', result: 'Result',
     voidBtn: 'Void', reason: 'Reason for voiding this ticket:', signin: 'Sign in', user: 'Username', pass: 'Password', signout: 'Sign out', clear: 'Clear', day: 'Business day', overMax: 'Above the max.',
-    river5: 'Hand complete. Start a new hand.', by: 'by', cards: 'Cards', street: 'Street' },
+    river5: 'Hand complete. Tap Clear all for the next hand.', by: 'by', cards: 'Cards', street: 'Street' },
   zh: { title: '保險', calc: '計算', today: '紀錄', table: '桌', level: '級別', players: '人數', board: '公牌', flop: 'Flop', turn: 'Turn', river: 'River', next: '下一張',
     pots: '底池', main: 'Main', side1: '1st Side', side2: '2nd Side', add: '+ 邊池', remove: '移除', potAmt: '底池金額', inPot: '池內玩家',
     pickHint: '先點空格，再點牌；會自動跳到下一個空格。', needCards: '請輸入每位玩家的兩張手牌和 Flop。', leads: '領先', tie: '目前平手，不賣保險。',
     outs: 'Outs', odds: '賠率', max: '最多可買', capped: '已達 1000 BB 上限', none: '沒有 outs，不需保險。', tooMany: '超過 15 outs，不賣。', buyAmt: '購買金額', fillMax: '最大', even: '保本', confirm: '確認', seat: '座位', evenHint: '保本 = 自己在池內的份額 ÷ 賠率',
     float: '保險庫存', capital: '起始金', profit: '累計盈虧', dayNet: '本日', setFloat: '設定庫存', closeDay: '關帳日', closeBal: '關帳金額', save: '儲存', cancel: '取消', asOf: '截至',
-    pays: '賠付', sell: '確認', sold: '已賣', settleHint: '發下一張牌時，在藍框點那張牌即自動結算。', hitMsg: '中 OUT，賠付', netLbl: '實拿', premium: '保費', newLeader: '領先者換人 — 可以買 River 保險', missMsg: '沒中，保費入帳', newHand: '新的一手',
+    pays: '賠付', sell: '確認', sold: '已賣', settleHint: '發下一張牌時，在藍框點那張牌即自動結算。', hitMsg: '中 OUT，賠付', netLbl: '實拿', premium: '保費', newLeader: '領先者換人 — 可以買 River 保險', missMsg: '沒中，保費入帳', newHand: '新的一手', clearAll: '全部清除', cleared: '已清除，可以開始下一手。', undo: '復原',
     pending: '待開', hit: '已賠付', miss: '保費入帳', void: '作廢', net: '保險盈虧', soldT: '賣出總額', paidT: '賠付總額', tickets: '張數', time: '時間', pot: '池', amount: '購買', result: '結果',
     voidBtn: '作廢', reason: '作廢原因：', signin: '登入', user: '帳號', pass: '密碼', signout: '登出', clear: '清除', day: '營業日', overMax: '超過最大可買額。',
-    river5: '這手已結束，請按「新的一手」。', by: '由', cards: '牌', street: '階段' }
+    river5: '這手已結束，按「全部清除」開始下一手。', by: '由', cards: '牌', street: '階段' }
 };
 let lang = (() => { try { return localStorage.getItem('ins-lang') || 'en'; } catch { return 'en'; } })();
 const t = (k) => T[lang][k] ?? k;
@@ -154,10 +156,11 @@ async function api(path, method = 'GET', body) {
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
-function toast(msg, kind = '') {
+function toast(msg, kind = '', ms = 4500) {
   let el = document.querySelector('.toast'); if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); }
   el.innerHTML = msg; el.style.borderColor = kind === 'bad' ? 'var(--red)' : kind === 'good' ? 'var(--green)' : 'var(--line)';
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), 4500);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), ms);
+  return el;
 }
 
 // ---------- hand state ----------
@@ -246,7 +249,7 @@ function renderCalc(main) {
     <div><div class="lbl">${t('table')}</div><select id="tbl">${(cfg.tables || []).map((x) => `<option ${x.name === table ? 'selected' : ''} value="${esc(x.name)}">${esc(x.name)}${x.running ? ' ●' : ''}</option>`).join('')}</select></div>
     <div><div class="lbl">${t('level')}</div><select id="lvl">${levels.map((l) => `<option ${l === blinds ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
     <div><div class="lbl">${t('players')}</div><div class="seg" id="np">${[2, 3, 4].map((k) => `<button data-n="${k}" class="${H.n === k ? 'on' : ''}">${k}P</button>`).join('')}</div></div>
-    <button class="btn ghost" id="newHand" style="margin-left:auto">${t('newHand')}</button>
+    <button class="btn clearall" id="newHand" style="margin-left:auto">✕ ${t('clearAll')}</button>
   </div></section>
 
   <section class="panel">
@@ -272,7 +275,15 @@ function renderCalc(main) {
   main.querySelector('#tbl').onchange = (e) => { table = e.target.value; H.seats = [null, null, null, null]; const x = cfg.tables.find((y) => y.name === table); if (x) blinds = x.blinds; renderCalc(main); };
   main.querySelector('#lvl').onchange = (e) => { blinds = e.target.value; renderCalc(main); };
   main.querySelectorAll('#np button').forEach((b) => b.onclick = () => { H.n = Number(b.dataset.n); H.active = nextEmpty(null); renderCalc(main); });
-  main.querySelector('#newHand').onclick = () => { if (H.tickets.some((x) => x.result === 'pending') && !confirm(lang === 'zh' ? '還有待開的保險，確定開始新的一手？' : 'Some tickets are still pending. Start a new hand anyway?')) return; H = fresh(); renderCalc(main); };
+  // One tap clears every card, pot and amount for the next hand (player count kept); Undo brings it back for 10 seconds.
+  main.querySelector('#newHand').onclick = () => {
+    if (H.tickets.some((x) => x.result === 'pending') && !confirm(lang === 'zh' ? '還有待開的保險，確定全部清除？' : 'Some tickets are still pending. Clear everything anyway?')) return;
+    const prev = H;
+    H = fresh(); H.n = prev.n;
+    renderCalc(main); window.scrollTo({ top: 0, behavior: 'smooth' });
+    const el = toast(`${t('cleared')} <button class="btn sm" id="undo" style="margin-left:10px">${t('undo')}</button>`, '', 10000);
+    el.querySelector('#undo').onclick = () => { H = prev; el.remove(); renderCalc(main); };
+  };
   main.querySelectorAll('[data-seat]').forEach((sel) => sel.onchange = () => { H.seats[Number(sel.dataset.seat)] = sel.value ? Number(sel.value) : null; renderCalc(main); });
   main.querySelectorAll('.slot[data-k]').forEach((b) => b.onclick = () => { H.active = { k: b.dataset.k, i: Number(b.dataset.i), j: Number(b.dataset.j || 0) }; renderCalc(main); });
   main.querySelector('#clearSlot').onclick = () => {
