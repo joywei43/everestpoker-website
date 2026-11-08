@@ -190,8 +190,9 @@ export async function handleReport(req, env, path, now, reply, user, role) {
     const lv = level(row, levelOf(s.blinds, s.game_type)); lv.play_seconds += s.active_seconds; lv.sessions++;
   }
   for (const d of days) if (seen[d.day]) { rows[d.day].visitors = seen[d.day].all.size; rows[d.day].members = seen[d.day].members.size; }
-  for (const { created_at } of await all(env.DB.prepare('SELECT created_at FROM members WHERE created_at>=? AND created_at<?').bind(start, end))) {
-    const d = dayOf(created_at); if (d) rows[d.day].new_members++;
+  // New = members whose first game ever falls on that business day (not when the record was created).
+  for (const { first } of await all(env.DB.prepare('SELECT MIN(start_at) first FROM play_sessions WHERE member_id IS NOT NULL GROUP BY member_id HAVING MIN(start_at)>=? AND MIN(start_at)<?').bind(start, end))) {
+    const d = dayOf(first); if (d) rows[d.day].new_members++;
   }
 
   // Totals across the range ("visits" adds up the days; "unique visitors" counts each player once).

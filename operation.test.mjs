@@ -266,4 +266,9 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
     assert.equal(r.tickets.length, 3); assert.equal(r.days.length, 1); assert.equal(r.days[0].net, 8550 + 2000 - 14000); assert.equal(r.days[0].float_end, 178635 + 8550 + 2000 - 14000); assert.equal(r.float.balance, r.days[0].float_end); }
   assert.deepEqual(day.float, { opening_day: '2026-11-04', opening: 178635, capital: 100000, balance: 178635 + 8550 + 2000 - 14000 });
 }
+{ // New = first game ever on that day: over all of history every member is new exactly once.
+  const all = (await call('/report?from=2026-10-01&to=2026-11-10', 'GET', null, boss)).body;
+  assert.equal(all.totals.new_members, all.totals.unique_members, 'each member is new once, on their first day');
+  assert.ok(all.days.every((r) => r.new_members <= r.members), 'new players are among that day\'s members');
+}
 console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, table insurance, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');

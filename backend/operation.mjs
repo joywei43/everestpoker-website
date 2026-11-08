@@ -127,7 +127,7 @@ export async function handleOperation(req, env, now, reply, role) {
   let liveNew = 0;
   if (bd.is_today) for (const r of liveRefs) if (!finishedRefs.has(r)) liveNew++;
   const matched = vis.filter((v) => v.member_no).length;
-  const newMembers = await env.DB.prepare('SELECT COUNT(*) n FROM members WHERE created_at>=? AND created_at<?').bind(bd.start, bd.end).first();
+  const newMembers = await env.DB.prepare('SELECT COUNT(*) n FROM (SELECT member_id FROM play_sessions WHERE member_id IS NOT NULL GROUP BY member_id HAVING MIN(start_at)>=? AND MIN(start_at)<?)').bind(bd.start, bd.end).first(); // first game ever today
 
   // Today's visitors: one row per player, finished sessions plus anyone still at a table.
   const people = new Map();
