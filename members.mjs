@@ -476,8 +476,9 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     const status = str(url.searchParams.get('status'), 20);
     if (STATUSES.includes(status)) { where.push('status=?'); args.push(status); }
     const sqlWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
-    // sort=last: most recent finished session first (never played at the end); default: member number.
-    const byLast = url.searchParams.get('sort') === 'last', tail = byLast ? 'last_play IS NULL, last_play DESC, member_no' : 'member_no';
+    // sort=new: active members first, newest added on top; sort=last: most recent finished session first; else member number.
+    const sort = url.searchParams.get('sort');
+    const tail = sort === 'last' ? 'last_play IS NULL, last_play DESC, member_no' : sort === 'new' ? "CASE WHEN status='active' THEN 0 ELSE 1 END, created_at DESC, member_no DESC" : 'member_no';
     const order = q ? `ORDER BY CASE WHEN lower(member_no)=lower(?) OR lower(member_no)=lower(?) OR lower(nickname)=lower(?) THEN 0 ELSE 1 END, ${tail}` : `ORDER BY ${tail}`;
     const rows = await all(env.DB.prepare(`SELECT members.*, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=members.id) AS has_photo, (SELECT MAX(end_at) FROM play_sessions ps WHERE ps.member_id=members.id) AS last_play FROM members ${sqlWhere} ${order} LIMIT ? OFFSET ?`).bind(...args, ...(q ? [q, normNo(q), q] : []), limit, offset));
     const total = await env.DB.prepare(`SELECT COUNT(*) n FROM members ${sqlWhere}`).bind(...args).first();

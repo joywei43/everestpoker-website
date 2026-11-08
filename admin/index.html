@@ -230,7 +230,16 @@ function memberPicker(input, onPick) {
 }
 
 // ---------- Members list ----------
-let memberSort = (() => { try { return localStorage.getItem('everest-member-sort') || 'last'; } catch (e) { return 'last'; } })();
+let memberSort = (() => { try { return localStorage.getItem('everest-member-sort2') || 'new'; } catch (e) { return 'new'; } })();
+const PER_PAGE = 50;
+// Page buttons: first, last, and two either side of the current page.
+function pager(page, pages) {
+  if (pages <= 1) return '';
+  const want = new Set([1, pages]); for (let p = page - 2; p <= page + 2; p++) if (p >= 1 && p <= pages) want.add(p);
+  const list = [...want].sort((a, b) => a - b); let out = '', prev = 0;
+  for (const p of list) { if (p - prev > 1) out += '<span class="muted" style="padding:0 4px">…</span>'; out += `<button type="button" class="btn sm" data-page="${p}" ${p === page ? 'aria-current="page" style="background:var(--gold);border-color:var(--gold);color:#121212;font-weight:700"' : ''}>${p}</button>`; prev = p; }
+  return `<nav class="row" aria-label="Pages" style="gap:4px;justify-content:center;margin-top:12px;flex-wrap:wrap"><button type="button" class="btn sm" data-page="${page - 1}" ${page === 1 ? 'disabled' : ''} aria-label="Previous page">‹</button>${out}<button type="button" class="btn sm" data-page="${page + 1}" ${page === pages ? 'disabled' : ''} aria-label="Next page">›</button></nav>`;
+}
 async function viewMembers(view) {
   const gs = await groups();
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -240,23 +249,23 @@ async function viewMembers(view) {
       <label class="sr" for="q">Search</label><input type="search" id="q" placeholder="EV-000123, nickname, name…" style="flex:1 1 240px" value="${esc(params.get('q') || '')}">
       <label class="sr" for="g">Group</label><select id="g"><option value="">All groups</option>${groupOptions(gs, params.get('group'))}<option value="unassigned" ${params.get('group') === 'unassigned' ? 'selected' : ''}>No group</option></select>
       <button class="btn">Search</button>
-      <div class="seg" role="group" aria-label="Sort"><button type="button" data-sort="last" aria-pressed="${memberSort === 'last'}">Last play</button><button type="button" data-sort="no" aria-pressed="${memberSort === 'no'}">Member no.</button></div></form>
+      <div class="seg" role="group" aria-label="Sort"><button type="button" data-sort="new" aria-pressed="${memberSort === 'new'}">Active · newest</button><button type="button" data-sort="last" aria-pressed="${memberSort === 'last'}">Last play</button><button type="button" data-sort="no" aria-pressed="${memberSort === 'no'}">Member no.</button></div></form>
       <div id="list" style="margin-top:12px"></div></div>
     ${memberDialog(gs)}`;
-  let offset = 0, rows = [];
-  const load = async (more) => {
-    if (!more) { offset = 0; rows = []; }
+  let page = 1;
+  const load = async (to) => {
+    page = Math.max(1, Number(to) || 1);
     const q = view.querySelector('#q').value.trim(), g = view.querySelector('#g').value;
-    const res = await api(`/members?limit=50&offset=${offset}&q=${encodeURIComponent(q)}&group=${encodeURIComponent(g)}&sort=${memberSort}`);
-    rows = rows.concat(res.members); offset += res.members.length;
-    view.querySelector('#list').innerHTML = `<p class="muted small">${res.total} member${res.total === 1 ? '' : 's'}</p><div class="tbl"><table><thead><tr><th>Member no.</th><th>Name</th><th>Nickname</th><th>Group</th><th>Status</th><th>Last play</th><th>Telegram</th><th>Phone</th></tr></thead><tbody>
+    const res = await api(`/members?limit=${PER_PAGE}&offset=${(page - 1) * PER_PAGE}&q=${encodeURIComponent(q)}&group=${encodeURIComponent(g)}&sort=${memberSort}`);
+    const rows = res.members, pages = Math.max(1, Math.ceil(res.total / PER_PAGE));
+    view.querySelector('#list').innerHTML = `<p class="muted small">${res.total} member${res.total === 1 ? '' : 's'}${pages > 1 ? ` · page ${page} of ${pages}` : ''}</p><div class="tbl"><table><thead><tr><th>Member no.</th><th>Name</th><th>Nickname</th><th>Group</th><th>Status</th><th>Last play</th><th>Telegram</th><th>Phone</th></tr></thead><tbody>
       ${rows.map((m) => `<tr class="click" data-no="${esc(m.member_no)}" tabindex="0"><td class="mono">${esc(m.member_no)}</td><td><b>${esc(m.name)}</b></td><td>${esc(m.nick_label || m.nickname)}</td><td>${groupChip(m.group_name)}</td><td>${statusChip(m.status)}</td><td class="small" style="white-space:nowrap">${m.last_play ? fmt(m.last_play, { day: 'numeric', month: 'short' }) + ' ' + time(m.last_play) : '<span class="muted">—</span>'}</td><td>${esc(m.telegram)}</td><td>${esc(m.phone)}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No members yet. Import the Google Sheet or add one.</td></tr>'}
-      </tbody></table></div>${offset < res.total ? '<button class="btn" id="more" style="margin-top:10px">Load more</button>' : ''}`;
+      </tbody></table></div>${pager(page, pages)}`;
     view.querySelectorAll('tr.click').forEach((tr) => { const go = () => location.hash = '#/member/' + encodeURIComponent(tr.dataset.no); tr.onclick = go; tr.onkeydown = (e) => { if (e.key === 'Enter') go(); }; });
-    const moreBtn = view.querySelector('#more'); if (moreBtn) moreBtn.onclick = () => load(true);
+    view.querySelectorAll('[data-page]').forEach((b) => b.onclick = () => { load(Number(b.dataset.page)); view.querySelector('#list').scrollIntoView({ block: 'start' }); });
   };
-  view.querySelector('#sf').onsubmit = (e) => { e.preventDefault(); load(false); };
-  view.querySelectorAll('[data-sort]').forEach((b) => b.onclick = () => { memberSort = b.dataset.sort; try { localStorage.setItem('everest-member-sort', memberSort); } catch (e) {} view.querySelectorAll('[data-sort]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); load(false); });
+  view.querySelector('#sf').onsubmit = (e) => { e.preventDefault(); load(1); };
+  view.querySelectorAll('[data-sort]').forEach((b) => b.onclick = () => { memberSort = b.dataset.sort; try { localStorage.setItem('everest-member-sort2', memberSort); } catch (e) {} view.querySelectorAll('[data-sort]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); load(1); });
   view.querySelector('#newBtn').onclick = () => openMemberDialog(view, null, async (data) => {
     let res;
     try { res = await api('/members', 'POST', { ...data, staff: needStaff() }); }

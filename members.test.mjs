@@ -568,4 +568,13 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal((await call('/members/' + q.body.member_no, 'PUT', { surname: 'Tanaka' }, token)).status, 200);
   assert.equal((await call('/members/' + q.body.member_no, 'GET', null, token)).body.member.incomplete, false, 'complete once the name is in');
 }
+{ // sort=new: active first, newest added on top
+  const all = (await call('/members?limit=200&sort=new', 'GET', null, token)).body.members;
+  const firstInactive = all.findIndex((m) => m.status !== 'active');
+  assert.ok(firstInactive === -1 || all.slice(firstInactive).every((m) => m.status !== 'active'), 'active members first');
+  const act = all.filter((m) => m.status === 'active');
+  assert.ok(act.every((m, i) => i === 0 || act[i - 1].created_at >= m.created_at), 'newest first');
+  const p2 = (await call('/members?limit=2&offset=2&sort=new', 'GET', null, token)).body;
+  assert.deepEqual(p2.members.map((m) => m.member_no), all.slice(2, 4).map((m) => m.member_no), 'pages line up');
+}
 console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval, junket label, quick add from PPM');
