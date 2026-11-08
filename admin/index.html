@@ -844,6 +844,22 @@ async function viewInsurance(view) {
   const short = (x) => String(x || '').replace(/\s*\(\d{6}\)\s*$/, '');
   const buyer = (x) => { const b = x.detail && x.detail.buyer; return b ? `${esc(b.player || '')}${b.seat ? ` · #${b.seat} ${esc(short(b.name))}` : ''}` : '—'; };
   const street = (x) => x.street === 'flop' ? 'Flop→Turn' : 'Turn→River';
+  // Tickets of the same hand (same hand id from the insurance app) go in one row.
+  const groupHands = (tickets) => {
+    const map = new Map();
+    for (const x of tickets.slice().sort((a, b) => a.id - b.id)) { const k = (x.detail && x.detail.hand_id) || 't' + x.id; if (!map.has(k)) map.set(k, []); map.get(k).push(x); }
+    return [...map.values()].map((list) => {
+      const live = list.filter((x) => x.result !== 'void');
+      const board = (list.reduce((b, x) => ((x.detail.board || []).length > b.length ? x.detail.board : b), [])).slice();
+      for (const x of list) if (x.result_card && board.length < 5 && !board.includes(x.result_card)) board.push(x.result_card);
+      const holes = {}, seat = {};
+      for (const x of list) { Object.assign(holes, x.detail.hands || {}); for (const [p, v] of Object.entries(x.detail.seats || {})) if (v) seat[p] = v; }
+      return { day: list[0].day, at: list[0].created_at, table: list[0].table_name, blinds: list[0].blinds, list, board, holes: Object.entries(holes), seat, live: live.length,
+        bought: live.reduce((n, x) => n + x.amount, 0), paid: live.filter((x) => x.result === 'hit').reduce((n, x) => n + x.payout, 0),
+        net: live.reduce((n, x) => n + (x.result === 'miss' ? x.amount : x.result === 'hit' ? x.amount - x.payout : 0), 0), by: [...new Set(list.map((x) => x.created_by))] };
+    }).sort((a, b) => b.at - a.at);
+  };
+  const hands = groupHands(d.tickets);
   view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Insurance</h1><p class="sub">Every insurance ticket sold at the tables, by day. Sold = premiums taken; Paid out = premium × odds when an out hit.</p></div>
       <span class="row" style="gap:6px"><a class="btn" href="../insurance/" target="_blank" rel="noopener">Open insurance app ↗</a><button class="btn" id="csv">Export CSV</button></span></div>
     <section class="card"><form id="rf" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
@@ -858,21 +874,22 @@ async function viewInsurance(view) {
     <section class="card"><h2>By day</h2><div class="tbl"><table><thead><tr><th>Day</th><th class="num">Tickets</th><th class="num">Sold</th><th class="num">Paid out</th><th class="num">House result</th><th class="num">Float at end of day</th></tr></thead><tbody>
       ${d.days.map((x) => `<tr><td><b>${esc(x.day)}</b></td><td class="num">${x.tickets}${x.pending ? ` <span class="chip amber">${x.pending} pending</span>` : ''}</td><td class="num">${peso(x.sold)}</td><td class="num">${peso(x.paid)}</td><td class="num">${signed(x.net)}</td><td class="num">${x.float_end == null ? '—' : peso(x.float_end)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No insurance sold in this range.</td></tr>'}
     </tbody></table></div>${F ? `<p class="small muted" style="margin:8px 0 0">Float closed ${esc(F.opening_day)} at ${peso(F.opening)}; later days add each day's house result.</p>` : ''}</section>
-    <section class="card"><h2>Tickets</h2><div class="tbl"><table><thead><tr><th>Time</th><th>Table</th><th>Pot</th><th>Buyer</th><th>Street · board</th><th class="num">Outs × odds</th><th class="num">Bought</th><th class="num">Pays</th><th>Result</th><th>By</th>${isManager() ? '<th></th>' : ''}</tr></thead><tbody>
-      ${d.tickets.map((x) => { const [rl, rc] = RES[x.result] || [x.result, '']; return `<tr><td class="small" style="white-space:nowrap">${esc(x.day.slice(5))} <b>${fmt(x.created_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</b></td>
-        <td>${esc(x.table_name)}<div class="small muted">${esc(x.blinds)}</div></td><td>${esc(x.pot)}<div class="small muted">${peso(x.pot_amount)} · ${x.players}P</div></td><td>${buyer(x)}</td>
-        <td>${street(x)}<div class="small muted mono">${esc((x.detail.board || []).join(' '))}${x.result_card ? ' → ' + esc(x.result_card) : ''}</div></td>
-        <td class="num">${x.outs} × ${x.odds}</td><td class="num">${peso(x.amount)}<div class="small muted">max ${peso(x.max_buy)}</div></td><td class="num">${peso(x.payout)}</td>
-        <td><span class="chip ${rc}">${rl}</span>${x.void_reason ? `<div class="small muted">${esc(x.void_reason)}</div>` : ''}</td><td class="small">${esc(x.created_by)}${x.settled_by && x.settled_by !== x.created_by ? '<br>' + esc(x.settled_by) : ''}</td>
-        ${isManager() ? `<td>${x.result !== 'void' ? `<button class="btn sm" data-void="${x.id}">Void</button>` : ''}</td>` : ''}</tr>`; }).join('') || `<tr><td colspan="11" class="muted">No tickets.</td></tr>`}
+    <section class="card"><h2>Hands</h2><p class="small muted" style="margin:-4px 0 8px">One row per hand; each insurance bought in that hand is a line in it.</p><div class="tbl"><table><thead><tr><th>Time</th><th>Table</th><th>Cards</th><th style="min-width:360px">Insurance in this hand</th><th class="num">Bought</th><th class="num">Paid out</th><th class="num">House result</th><th>By</th></tr></thead><tbody>
+      ${hands.map((h) => `<tr><td class="small" style="white-space:nowrap">${esc(h.day.slice(5))} <b>${fmt(h.at, { hour: '2-digit', minute: '2-digit', hour12: false })}</b></td>
+        <td>${esc(h.table)}<div class="small muted">${esc(h.blinds)}</div></td>
+        <td class="small mono">${h.holes.map(([p, c]) => `<div>${esc(p)} ${esc(c.join(' '))}${h.seat[p] ? ` <span class="muted">#${h.seat[p].seat} ${esc(short(h.seat[p].name))}</span>` : ''}</div>`).join('')}<div class="muted">${esc(h.board.join(' '))}</div></td>
+        <td>${h.list.map((x) => { const [rl, rc] = RES[x.result] || [x.result, '']; return `<div style="display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:8px;align-items:center;padding:4px 0;border-top:${x === h.list[0] ? '0' : '1px dashed var(--line)'}"><span class="chip ${rc}" style="justify-self:start">${rl}</span>
+          <span class="small"><b>${esc(x.pot)}</b> · ${buyer(x)} · ${street(x)} · ${x.outs} × ${x.odds}<br><span class="mono">${peso(x.amount)} → ${peso(x.payout)}</span>${x.result_card ? ` · <span class="mono">${esc(x.result_card)}</span>` : ''}${x.void_reason ? ` · <span class="muted">${esc(x.void_reason)}</span>` : ''}</span>
+          ${isManager() && x.result !== 'void' ? `<button class="btn sm" data-void="${x.id}">Void</button>` : '<span></span>'}</div>`; }).join('')}</td>
+        <td class="num">${peso(h.bought)}</td><td class="num">${peso(h.paid)}</td><td class="num">${h.live ? signed(h.net) : '—'}</td><td class="small">${esc(h.by.join(', '))}</td></tr>`).join('') || `<tr><td colspan="8" class="muted">No tickets.</td></tr>`}
     </tbody></table></div></section>`;
   const rf = view.querySelector('#rf');
   rf.onsubmit = (e) => { e.preventDefault(); go({ from: rf.from.value, to: rf.to.value }); };
   rf.querySelectorAll('[data-days]').forEach((b) => b.onclick = () => go({ from: daysAgo(Number(b.dataset.days)), to: today() }));
   view.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => { const reason = prompt('Reason for voiding this ticket:'); if (!reason) return; try { await api(`/insurance/${b.dataset.void}/void`, 'POST', { reason }); viewInsurance(view); } catch (err) { alert(err.message); } });
   view.querySelector('#csv').onclick = () => {
-    const lines = [['Day', 'Time', 'Table', 'Level', 'Pot', 'Pot amount', 'Players', 'Buyer', 'Street', 'Board', 'Next card', 'Outs', 'Odds', 'Max buy', 'Bought', 'Pays', 'Result', 'House result', 'Sold by', 'Void reason']]
-      .concat(d.tickets.slice().reverse().map((x) => [x.day, fmt(x.created_at, { hour: '2-digit', minute: '2-digit', hour12: false }), x.table_name, x.blinds, x.pot, x.pot_amount, x.players, (x.detail.buyer ? `${x.detail.buyer.player || ''} ${x.detail.buyer.seat ? '#' + x.detail.buyer.seat + ' ' + x.detail.buyer.name : ''}` : '').trim(), street(x), (x.detail.board || []).join(' '), x.result_card || '', x.outs, x.odds, x.max_buy, x.amount, x.payout, RES[x.result] ? RES[x.result][0] : x.result, x.result === 'miss' ? x.amount : x.result === 'hit' ? x.amount - x.payout : '', x.created_by, x.void_reason || '']));
+    const lines = [['Day', 'Time', 'Hand', 'Table', 'Level', 'Pot', 'Pot amount', 'Players', 'Buyer', 'Street', 'Board', 'Next card', 'Outs', 'Odds', 'Max buy', 'Bought', 'Pays', 'Result', 'House result', 'Sold by', 'Void reason']]
+      .concat(d.tickets.slice().reverse().map((x) => [x.day, fmt(x.created_at, { hour: '2-digit', minute: '2-digit', hour12: false }), (x.detail && x.detail.hand_id) || '', x.table_name, x.blinds, x.pot, x.pot_amount, x.players, (x.detail.buyer ? `${x.detail.buyer.player || ''} ${x.detail.buyer.seat ? '#' + x.detail.buyer.seat + ' ' + x.detail.buyer.name : ''}` : '').trim(), street(x), (x.detail.board || []).join(' '), x.result_card || '', x.outs, x.odds, x.max_buy, x.amount, x.payout, RES[x.result] ? RES[x.result][0] : x.result, x.result === 'miss' ? x.amount : x.result === 'hit' ? x.amount - x.payout : '', x.created_by, x.void_reason || '']));
     const csv = lines.map((r) => r.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = `everest-insurance-${d.from}-to-${d.to}.csv`; a.click();
   };

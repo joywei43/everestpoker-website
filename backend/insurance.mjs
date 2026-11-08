@@ -95,7 +95,7 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
     const potName = POTS.includes(b.pot) ? b.pot : 'Main';
     const payout = Math.round(amount * odds);
     const bd = await businessDay(env, now);
-    const detail = JSON.stringify({ hands: b.hands, board: b.board, out_cards: b.out_cards, leader: b.leader, hand_id: b.hand_id, buyer: b.buyer }).slice(0, 4000);
+    const detail = JSON.stringify({ hands: b.hands, board: b.board, out_cards: b.out_cards, leader: b.leader, hand_id: b.hand_id, buyer: b.buyer, seats: b.seats }).slice(0, 4000);
     const row = await env.DB.prepare(`INSERT INTO insurance_tickets(day,created_at,created_by,table_name,blinds,street,pot,players,outs,odds,pot_amount,max_buy,amount,payout,result,detail)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?) RETURNING *`)
       .bind(bd.day, now, str(who, 60), str(b.table || '', 10), str(b.blinds, 20), b.street, potName, players, outs, odds, pot, max, amount, payout, detail).first();
