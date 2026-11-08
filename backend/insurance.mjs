@@ -40,17 +40,44 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
     let tables = [];
     try {
       const row = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
-      tables = (row ? JSON.parse(row.data) : []).map((t) => ({ name: t.name || 'T' + t.id, blinds: t.blinds, game: t.gameType, running: t.isRunning === true }));
+      tables = (row ? JSON.parse(row.data) : []).map((t) => ({ name: t.name || 'T' + t.id, blinds: t.blinds, game: t.gameType, running: t.isRunning === true,
+        seats: (t.seats || []).filter((x) => x.status !== 'idle' && x.memberId).map((x) => ({ seat: x.id, name: str(x.memberId, 60) })) }));
     } catch {}
     return reply({ odds: ODDS, cap_bb: CAP_BB, chip: CHIP, tables });
   }
 
+  // Date range for the admin console: tickets, totals, a line per day and the float at the end of the range.
+  if (path === '/insurance/range' && method === 'GET') {
+    if (role === 'staff') return reply({ error: 'Manager only.' }, 403);
+    const q = new URL(req.url).searchParams, ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+    const to = ok(q.get('to')) ? q.get('to') : (await businessDay(env, now)).day, from = ok(q.get('from')) && q.get('from') <= to ? q.get('from') : to;
+    const rows = await all(env.DB.prepare('SELECT * FROM insurance_tickets WHERE day>=? AND day<=? ORDER BY id DESC LIMIT 2000').bind(from, to));
+    for (const r of rows) { try { r.detail = JSON.parse(r.detail || '{}'); } catch { r.detail = {}; } }
+    const byDay = new Map();
+    for (const r of rows) { if (!byDay.has(r.day)) byDay.set(r.day, []); byDay.get(r.day).push(r); }
+    const days = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, list]) => ({ day, ...totals(list) }));
+    const f = await env.DB.prepare('SELECT day,balance,capital FROM insurance_float WHERE id=1').first();
+    let float = null;
+    if (f) {
+      const net = async (d) => (await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN result='miss' THEN amount WHEN result='hit' THEN amount-payout ELSE 0 END),0) n FROM insurance_tickets WHERE day>? AND day<=?").bind(f.day, d).first()).n;
+      float = { opening_day: f.day, opening: f.balance, capital: f.capital, balance: f.balance + (to > f.day ? await net(to) : 0) };
+      for (const d of days) d.float_end = d.day > f.day ? f.balance + await net(d.day) : null;
+    }
+    return reply({ from, to, tickets: rows, totals: totals(rows), days, float });
+  }
   if (path === '/insurance' && method === 'GET') {
     const url = new URL(req.url);
     const bd = await businessDay(env, now, url.searchParams.get('day'));
     const rows = await all(env.DB.prepare('SELECT * FROM insurance_tickets WHERE day=? ORDER BY id DESC').bind(bd.day));
     for (const r of rows) { try { r.detail = JSON.parse(r.detail || '{}'); } catch { r.detail = {}; } }
-    return reply({ day: bd.day, is_today: bd.is_today, tickets: rows, totals: totals(rows) });
+    // Insurance float: the cash set aside for insurance, from the last closed balance plus every settled ticket since.
+    const f = await env.DB.prepare('SELECT day,balance,capital FROM insurance_float WHERE id=1').first();
+    let float = null;
+    if (f) {
+      const since = await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN result='miss' THEN amount WHEN result='hit' THEN amount-payout ELSE 0 END),0) net FROM insurance_tickets WHERE day>? AND day<=?").bind(f.day, bd.day).first();
+      float = { opening_day: f.day, opening: f.balance, capital: f.capital, balance: f.balance + (bd.day > f.day ? since.net : 0) };
+    }
+    return reply({ day: bd.day, is_today: bd.is_today, tickets: rows, totals: totals(rows), float });
   }
 
   if (path === '/insurance' && method === 'POST') {
@@ -77,6 +104,17 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
     return reply({ ticket: row });
   }
 
+  if (path === '/insurance/float' && method === 'PUT') {
+    if (role !== 'master') return reply({ error: 'Only the master account can set the insurance float.' }, 403);
+    let b = {}; try { b = await req.json(); } catch { return reply({ error: 'Invalid JSON' }, 400); }
+    const balance = int(b.balance), capital = int(b.capital);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.day || '') || !(balance >= 0) || !(capital >= 0)) return reply({ error: 'Enter the closing day, its balance and the starting capital.' }, 400);
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO insurance_float(id,day,balance,capital,updated_by,updated_at) VALUES(1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET day=excluded.day,balance=excluded.balance,capital=excluded.capital,updated_by=excluded.updated_by,updated_at=excluded.updated_at').bind(b.day, balance, capital, str(who, 60), now),
+      audit(env, now, who, 'insurance.float', `Insurance float closed ${b.day} at ${n(balance)} (starting capital ${n(capital)})`)
+    ]);
+    return reply({ ok: true });
+  }
   const m = /^\/insurance\/(\d+)\/(settle|void)$/.exec(path);
   if (m && method === 'POST') {
     let b = {}; try { b = await req.json(); } catch { return reply({ error: 'Invalid JSON' }, 400); }

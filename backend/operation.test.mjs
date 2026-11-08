@@ -257,7 +257,13 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
   assert.equal((await call(`/insurance/${capped.id}/void`, 'POST', { reason: 'test' }, maria3)).status, 403, 'staff cannot void');
   assert.equal((await call(`/insurance/${capped.id}/void`, 'POST', { reason: '' }, boss)).status, 400);
   assert.equal((await call(`/insurance/${capped.id}/void`, 'POST', { reason: 'Entered twice' }, boss)).status, 200);
+  assert.equal((await call('/insurance/float', 'PUT', { day: '2026-11-04', balance: 178635, capital: 100000 }, maria3)).status, 403);
+  assert.equal((await call('/insurance/float', 'PUT', { day: '2026-11-04', balance: 178635, capital: 100000 }, boss)).status, 200);
   const day = (await call('/insurance', 'GET', null, maria3)).body;
   assert.deepEqual([day.totals.tickets, day.totals.sold, day.totals.paid, day.totals.hits, day.totals.misses, day.totals.net], [2, 10550, 14000, 1, 1, 8550 + 2000 - 14000]);
+  assert.equal((await call('/insurance/range?from=2026-11-01&to=2026-11-30', 'GET', null, maria3)).status, 403, 'range: managers only');
+  { const r = (await call('/insurance/range?from=2026-11-01&to=2026-11-30', 'GET', null, boss)).body;
+    assert.equal(r.tickets.length, 3); assert.equal(r.days.length, 1); assert.equal(r.days[0].net, 8550 + 2000 - 14000); assert.equal(r.days[0].float_end, 178635 + 8550 + 2000 - 14000); assert.equal(r.float.balance, r.days[0].float_end); }
+  assert.deepEqual(day.float, { opening_day: '2026-11-04', opening: 178635, capital: 100000, balance: 178635 + 8550 + 2000 - 14000 });
 }
 console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, table insurance, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');

@@ -65,7 +65,7 @@ export function ppmChanges(prev, next) {
 const CATEGORIES = {
   login: ['staff.login', 'staff.login_failed', 'staff.logout'],
   ppm: ['ppm.%'], tables: ['table.%'], members: ['member.%'], sessions: ['session.%', 'sessions.%'],
-  rewards: ['reward.%'], changes: ['change.%', 'session.edit', 'session.move', 'session.delete'], report: ['report.%'], promotions: ['promotion.%'], staff: ['staff.create', 'staff.update', 'staff.delete']
+  rewards: ['reward.%'], changes: ['change.%', 'session.edit', 'session.move', 'session.delete'], report: ['report.%'], insurance: ['insurance.%'], promotions: ['promotion.%'], staff: ['staff.create', 'staff.update', 'staff.delete']
 };
 
 export async function handleAudit(req, env, now, reply, role) {

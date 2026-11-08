@@ -19,9 +19,10 @@ header .wrap{display:flex;align-items:center;gap:10px;min-height:54px}
 header img{width:30px;height:30px}
 header h1{font-size:17px;margin:0;letter-spacing:.06em;color:var(--gold2)}
 .tabs{display:flex;gap:4px;margin-left:auto}
+.tabs button{white-space:nowrap}
 .tabs button,.lang{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:14px}
 .tabs button.on{background:var(--gold);color:#16120a;border-color:var(--gold);font-weight:700}
-.lang{padding:7px 10px}
+.lang{padding:7px 10px;white-space:nowrap}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-top:12px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
@@ -39,6 +40,8 @@ input:focus,select:focus{outline:2px solid var(--gold);outline-offset:0}
 .player.lead{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
 .player .top{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);margin-bottom:6px}
 .player .top b{color:var(--text);font-size:15px}
+.seatsel{width:100%;min-height:38px;padding:6px 8px;font-size:14px;border-radius:8px;margin-top:6px}
+.player .top{gap:4px}
 .slots{display:flex;gap:6px}
 .slot{width:48px;height:66px;border-radius:8px;border:1.5px dashed #3a4357;background:#0f1219;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;line-height:1;flex-direction:column;padding:0}
 .slot.active{border:2px solid var(--gold);box-shadow:0 0 0 3px rgba(224,181,82,.25)}
@@ -71,8 +74,9 @@ input:focus,select:focus{outline:2px solid var(--gold);outline-offset:0}
 .outs{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
 .mini{background:#f7f7f4;color:#111;border-radius:5px;padding:2px 5px;font-weight:800;font-size:13px}
 .mini.red{color:#d21f32}
-.buy{display:flex;gap:8px;align-items:stretch;margin-top:10px;flex-wrap:wrap}
-.buy input{flex:1;min-width:130px;font-size:20px;font-weight:700}
+.buy{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:8px;margin-top:10px}
+.pot .buy input{grid-column:1/-1;width:100%;font-size:22px;font-weight:700;min-height:52px}
+.buy .btn{min-height:50px;font-weight:700;letter-spacing:.04em}
 .pay{font-size:15px;margin-top:6px;color:var(--muted)}
 .pay b{color:var(--text);font-size:20px}
 .warn{color:var(--amber)}
@@ -99,6 +103,7 @@ td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 .login h2{color:var(--gold2);margin:0 0 4px}
 .login input{width:100%;margin-top:10px}
 .err{color:var(--red);font-size:14px;margin-top:8px;min-height:18px}
+@media (max-width:440px){header h1{font-size:14px;letter-spacing:.02em}header img{width:24px;height:24px}.tabs button,.lang{padding:7px 9px;font-size:13px}}
 @media (max-width:520px){.stat .v{font-size:19px}.slot{width:42px;height:58px;font-size:18px}.pot input{width:120px}}
 </style>
 </head>
@@ -110,24 +115,26 @@ import { potOuts, quote, best, categoryName, RANKS, SUITS, SUIT_SYMBOL } from '.
 
 const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
 const T = {
-  en: { title: 'INSURANCE', calc: 'Calculator', today: 'Today', table: 'Table', level: 'Level', players: 'Players', board: 'Board', flop: 'Flop', turn: 'Turn', river: 'River', next: 'Next card',
+  en: { title: 'INSURANCE', calc: 'Calculator', today: 'History', table: 'Table', level: 'Level', players: 'Players', board: 'Board', flop: 'Flop', turn: 'Turn', river: 'River', next: 'Next card',
     pots: 'Pots', main: 'Main', side1: '1st Side', side2: '2nd Side', add: '+ Side pot', remove: 'Remove', potAmt: 'Pot amount', inPot: 'In pot',
     pickHint: 'Tap a slot, then tap the card. The next empty slot is picked for you.', needCards: 'Enter both cards of every player and the flop.', leads: 'leads', tie: 'Tied now — no insurance.',
-    outs: 'Outs', odds: 'Odds', max: 'Max buy', capped: 'capped at 1000 BB', none: 'No outs — nothing to insure.', tooMany: 'More than 15 outs — not sold.', buyAmt: 'Amount bought', fillMax: 'Max',
-    pays: 'Pays', sell: 'Sell', sold: 'Sold', settleHint: 'When the next card is dealt, tap it in the blue slot to settle.', hitMsg: 'OUT hit — pay', missMsg: 'Missed — house keeps', newHand: 'New hand',
+    outs: 'Outs', odds: 'Odds', max: 'Max buy', capped: 'capped at 1000 BB', none: 'No outs — nothing to insure.', tooMany: 'More than 15 outs — not sold.', buyAmt: 'Amount', fillMax: 'MAX', even: 'EVEN', confirm: 'Confirm', seat: 'Seat', evenHint: 'EVEN = own share of the pot ÷ odds',
+    float: 'Insurance float', capital: 'Starting capital', profit: 'Profit since start', dayNet: 'This day', setFloat: 'Set float', closeDay: 'Closing day', closeBal: 'Closing balance', save: 'Save', cancel: 'Cancel', asOf: 'end of',
+    pays: 'Pays', sell: 'Confirm', sold: 'Sold', settleHint: 'When the next card is dealt, tap it in the blue slot to settle.', hitMsg: 'OUT hit — pay', netLbl: 'net', premium: 'premium', newLeader: 'New leader — can buy River insurance', missMsg: 'Missed — house keeps', newHand: 'New hand',
     pending: 'Pending', hit: 'Paid out', miss: 'Kept', void: 'Void', net: 'House result', soldT: 'Sold', paidT: 'Paid out', tickets: 'Tickets', time: 'Time', pot: 'Pot', amount: 'Bought', result: 'Result',
     voidBtn: 'Void', reason: 'Reason for voiding this ticket:', signin: 'Sign in', user: 'Username', pass: 'Password', signout: 'Sign out', clear: 'Clear', day: 'Business day', overMax: 'Above the max.',
     river5: 'Hand complete. Start a new hand.', by: 'by', cards: 'Cards', street: 'Street' },
-  zh: { title: '保險', calc: '計算', today: '今日', table: '桌', level: '級別', players: '人數', board: '公牌', flop: 'Flop', turn: 'Turn', river: 'River', next: '下一張',
+  zh: { title: '保險', calc: '計算', today: '紀錄', table: '桌', level: '級別', players: '人數', board: '公牌', flop: 'Flop', turn: 'Turn', river: 'River', next: '下一張',
     pots: '底池', main: 'Main', side1: '1st Side', side2: '2nd Side', add: '+ 邊池', remove: '移除', potAmt: '底池金額', inPot: '池內玩家',
     pickHint: '先點空格，再點牌；會自動跳到下一個空格。', needCards: '請輸入每位玩家的兩張手牌和 Flop。', leads: '領先', tie: '目前平手，不賣保險。',
-    outs: 'Outs', odds: '賠率', max: '最多可買', capped: '已達 1000 BB 上限', none: '沒有 outs，不需保險。', tooMany: '超過 15 outs，不賣。', buyAmt: '購買金額', fillMax: '最大',
-    pays: '賠付', sell: '賣出', sold: '已賣', settleHint: '發下一張牌時，在藍框點那張牌即自動結算。', hitMsg: '中 OUT，賠付', missMsg: '沒中，保費入帳', newHand: '新的一手',
+    outs: 'Outs', odds: '賠率', max: '最多可買', capped: '已達 1000 BB 上限', none: '沒有 outs，不需保險。', tooMany: '超過 15 outs，不賣。', buyAmt: '購買金額', fillMax: '最大', even: '保本', confirm: '確認', seat: '座位', evenHint: '保本 = 自己在池內的份額 ÷ 賠率',
+    float: '保險庫存', capital: '起始金', profit: '累計盈虧', dayNet: '本日', setFloat: '設定庫存', closeDay: '關帳日', closeBal: '關帳金額', save: '儲存', cancel: '取消', asOf: '截至',
+    pays: '賠付', sell: '確認', sold: '已賣', settleHint: '發下一張牌時，在藍框點那張牌即自動結算。', hitMsg: '中 OUT，賠付', netLbl: '實拿', premium: '保費', newLeader: '領先者換人 — 可以買 River 保險', missMsg: '沒中，保費入帳', newHand: '新的一手',
     pending: '待開', hit: '已賠付', miss: '保費入帳', void: '作廢', net: '保險盈虧', soldT: '賣出總額', paidT: '賠付總額', tickets: '張數', time: '時間', pot: '池', amount: '購買', result: '結果',
     voidBtn: '作廢', reason: '作廢原因：', signin: '登入', user: '帳號', pass: '密碼', signout: '登出', clear: '清除', day: '營業日', overMax: '超過最大可買額。',
     river5: '這手已結束，請按「新的一手」。', by: '由', cards: '牌', street: '階段' }
 };
-let lang = (() => { try { return localStorage.getItem('ins-lang') || 'zh'; } catch { return 'zh'; } })();
+let lang = (() => { try { return localStorage.getItem('ins-lang') || 'en'; } catch { return 'en'; } })();
 const t = (k) => T[lang][k] ?? k;
 let token = sessionStorage.getItem('ins-token') || '';
 let role = sessionStorage.getItem('ins-role') || '';
@@ -154,7 +161,7 @@ function toast(msg, kind = '') {
 }
 
 // ---------- hand state ----------
-const fresh = () => ({ n: 2, hands: [[null, null], [null, null], [null, null], [null, null]], board: [null, null, null, null, null], pots: [{ name: 'Main', amount: '', inPot: [true, true, true, true] }], active: { k: 'p', i: 0, j: 0 }, tickets: [], id: Date.now().toString(36), buys: {} });
+const fresh = () => ({ n: 2, seats: [null, null, null, null], hands: [[null, null], [null, null], [null, null], [null, null]], board: [null, null, null, null, null], pots: [{ name: 'Main', amount: '', inPot: [true, true, true, true] }], active: { k: 'p', i: 0, j: 0 }, tickets: [], id: Date.now().toString(36), buys: {} });
 let H = fresh();
 let table = '', blinds = '';
 
@@ -244,7 +251,7 @@ function renderCalc(main) {
 
   <section class="panel">
     <div class="players">${PNAMES.slice(0, H.n).map((p, i) => `<div class="player ${lead.has(p) ? 'lead' : ''}"><div class="top"><b>${p}</b><span>${handsReady() && bc >= 3 ? esc(categoryName(best([...H.hands[i], ...H.board.filter((c) => c != null)]), lang === 'zh')) : ''}</span></div>
-      <div class="slots">${H.hands[i].map((c, j) => cardHtml(c, 'slot' + (H.active && H.active.k === 'p' && H.active.i === i && H.active.j === j ? ' active' : ''), `data-k="p" data-i="${i}" data-j="${j}"`)).join('')}</div></div>`).join('')}</div>
+      <div class="slots">${H.hands[i].map((c, j) => cardHtml(c, 'slot' + (H.active && H.active.k === 'p' && H.active.i === i && H.active.j === j ? ' active' : ''), `data-k="p" data-i="${i}" data-j="${j}"`)).join('')}</div>${seatSelect(i)}</div>`).join('')}</div>
     <div class="lbl" style="margin-top:12px">${t('board')}</div>
     <div class="board">${H.board.map((c, i) => {
       const isNext = (bc === 3 && i === 3) || (bc === 4 && i === 4);
@@ -262,10 +269,11 @@ function renderCalc(main) {
   ${H.tickets.length ? `<section class="panel"><div class="lbl">${t('sold')}</div>${H.tickets.map(ticketLine).join('')}</section>` : ''}
   ${bc === 5 ? `<section class="panel"><b>${t('river5')}</b></section>` : ''}`;
 
-  main.querySelector('#tbl').onchange = (e) => { table = e.target.value; const x = cfg.tables.find((y) => y.name === table); if (x) blinds = x.blinds; renderCalc(main); };
+  main.querySelector('#tbl').onchange = (e) => { table = e.target.value; H.seats = [null, null, null, null]; const x = cfg.tables.find((y) => y.name === table); if (x) blinds = x.blinds; renderCalc(main); };
   main.querySelector('#lvl').onchange = (e) => { blinds = e.target.value; renderCalc(main); };
   main.querySelectorAll('#np button').forEach((b) => b.onclick = () => { H.n = Number(b.dataset.n); H.active = nextEmpty(null); renderCalc(main); });
   main.querySelector('#newHand').onclick = () => { if (H.tickets.some((x) => x.result === 'pending') && !confirm(lang === 'zh' ? '還有待開的保險，確定開始新的一手？' : 'Some tickets are still pending. Start a new hand anyway?')) return; H = fresh(); renderCalc(main); };
+  main.querySelectorAll('[data-seat]').forEach((sel) => sel.onchange = () => { H.seats[Number(sel.dataset.seat)] = sel.value ? Number(sel.value) : null; renderCalc(main); });
   main.querySelectorAll('.slot[data-k]').forEach((b) => b.onclick = () => { H.active = { k: b.dataset.k, i: Number(b.dataset.i), j: Number(b.dataset.j || 0) }; renderCalc(main); });
   main.querySelector('#clearSlot').onclick = () => {
     if (!H.active) return;
@@ -287,10 +295,19 @@ function renderCalc(main) {
       out.innerHTML = v > 0 ? `${t('pays')} <b>${fmt(v * r.q.odds)}</b> <span class="${v > r.q.max ? 'bad' : 'muted'}">(${fmt(v)} × ${r.q.odds})${v > r.q.max ? ' · ' + t('overMax') : ''}</span>` : ''; };
     inp.oninput = upd; upd();
   });
+  main.querySelectorAll('[data-even]').forEach((b) => b.onclick = () => { const pi = Number(b.dataset.even); const inp = main.querySelector(`[data-buy="${pi}"]`); inp.value = fmt(evenBuy(res[pi])); inp.oninput(); });
   main.querySelectorAll('[data-max]').forEach((b) => b.onclick = () => { const pi = Number(b.dataset.max); const inp = main.querySelector(`[data-buy="${pi}"]`); inp.value = fmt(res[pi].q.max); inp.oninput(); });
   main.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => sell(Number(b.dataset.sell), res, main));
 }
 
+const short = (name) => String(name || '').replace(/\s*\(\d{6}\)\s*$/, '');
+const tableSeats = () => ((cfg.tables || []).find((x) => x.name === table) || {}).seats || [];
+const seatOf = (i) => tableSeats().find((x) => x.seat === H.seats[i]);
+const label = (id) => { const i = PNAMES.indexOf(id), s = seatOf(i); return s ? `${id} · #${s.seat} ${esc(short(s.name))}` : id; };
+function seatSelect(i) {
+  const seats = tableSeats();
+  return `<select class="seatsel" data-seat="${i}" aria-label="${t('seat')}"><option value="">${t('seat')} —</option>${seats.map((x) => `<option value="${x.seat}" ${H.seats[i] === x.seat ? 'selected' : ''}>#${x.seat} ${esc(short(x.name))}</option>`).join('')}</select>`;
+}
 function potHtml(p, pi, r, st) {
   const head = `<div class="head"><span class="name">${esc(p.name === 'Main' ? t('main') : p.name === '1st Side' ? t('side1') : t('side2'))}</span>
     <input inputmode="numeric" data-amt="${pi}" placeholder="${t('potAmt')}" value="${esc(p.amount)}">
@@ -301,7 +318,8 @@ function potHtml(p, pi, r, st) {
   if (!r.r.leader) return `<div class="pot">${head}<div class="result warn">${t('tie')}</div></div>`;
   const outs = r.r.outs.length, q = r.q;
   const already = H.tickets.find((x) => x.potIndex === pi && x.street === st && x.result !== 'void');
-  let body = `<div class="result"><div class="row" style="justify-content:space-between"><div><b class="good">${r.r.leader}</b> ${t('leads')} · ${r.ids.length}P</div></div>
+  const flipped = st === 'turn' && H.tickets.some((x) => x.potIndex === pi && x.street === 'flop' && x.result === 'hit' && x.detail && x.detail.buyer && x.detail.buyer.player !== r.r.leader);
+  let body = `<div class="result">${flipped ? `<div class="hint warn" style="margin:0 0 6px">↺ ${t('newLeader')}</div>` : ''}<div class="row" style="justify-content:space-between"><div><b class="good">${label(r.r.leader)}</b> ${t('leads')} · ${r.ids.length}P</div></div>
     <div class="big" style="margin-top:8px"><div class="stat"><div class="k">${t('outs')}</div><div class="v">${outs}</div></div>
       <div class="stat"><div class="k">${t('odds')}</div><div class="v gold">${q && q.ok ? q.odds : '—'}</div></div>
       <div class="stat"><div class="k">${t('max')}</div><div class="v">${q && q.ok && r.pot > 0 ? fmt(q.max) : '—'}</div></div></div>
@@ -310,12 +328,16 @@ function potHtml(p, pi, r, st) {
   if (!outs) body += `<div class="hint">${t('none')}</div>`;
   else if (!q.ok) body += `<div class="hint warn">${t('tooMany')}</div>`;
   else if (already) body += `<div class="hint">${t('sold')}: ${fmt(already.amount)} → ${t('pays')} ${fmt(already.payout)}</div>`;
-  else body += `<div class="buy"><input inputmode="numeric" data-buy="${pi}" placeholder="${t('buyAmt')}" value="${esc(H.buys[pi] || '')}"><button class="btn" data-max="${pi}" ${r.pot > 0 ? '' : 'disabled'}>${t('fillMax')}</button><button class="btn gold" data-sell="${pi}" ${r.pot > 0 ? '' : 'disabled'}>${t('sell')}</button></div><div class="pay" data-pay="${pi}"></div>`;
+  else body += `<div class="buy"><input inputmode="numeric" data-buy="${pi}" placeholder="${t('buyAmt')}" value="${esc(H.buys[pi] || '')}"><button class="btn" data-max="${pi}" ${r.pot > 0 ? '' : 'disabled'}>${t('fillMax')}</button><button class="btn" data-even="${pi}" ${r.pot > 0 ? '' : 'disabled'}>${t('even')}</button><button class="btn gold" data-sell="${pi}" ${r.pot > 0 ? '' : 'disabled'}>${t('sell')}</button></div><div class="pay" data-pay="${pi}"></div>
+    ${r.pot > 0 ? `<div class="hint">${t('evenHint')}: ${fmt(r.pot / r.ids.length)} ÷ ${q.odds} → ${fmt(evenBuy(r))}</div>` : ''}`;
   return `<div class="pot">${head}${body}</div></div>`;
 }
 
-const ticketLine = (x) => `<div class="tk"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.pot)}</b> <span>${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'}</span>
-  <span>${x.outs} outs × ${x.odds}</span><span class="num" style="margin-left:auto">${fmt(x.amount)} → ${fmt(x.payout)}</span>${x.result_card ? ' · ' + esc(x.result_card) : ''}</div>`;
+// Break-even: the insured player's own share of the pot comes back if the out hits (rounded up to the chip, never above the max).
+const evenBuy = (r) => Math.min(r.q.max, Math.ceil(r.pot / r.ids.length / r.q.odds / cfg.chip) * cfg.chip);
+const buyerOf = (x) => { const b = x.detail && x.detail.buyer; return b ? `${esc(b.player || '')}${b.seat ? ' · #' + b.seat + ' ' + esc(short(b.name)) : ''}` : ''; };
+const ticketLine = (x) => `<div class="tk"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.pot)}</b> <span>${buyerOf(x)}</span> <span>${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'}</span>
+  <span>${x.outs} outs × ${x.odds}</span><span class="num" style="margin-left:auto">${fmt(x.amount)} → ${fmt(x.payout)}${x.result === 'hit' ? ` <span class="hint">(${t('netLbl')} +${fmt(x.payout - x.amount)})</span>` : ''}</span>${x.result_card ? ' · ' + esc(x.result_card) : ''}</div>`;
 
 async function sell(pi, res, main) {
   const r = res[pi], inp = main.querySelector(`[data-buy="${pi}"]`), v = num(inp.value);
@@ -324,7 +346,8 @@ async function sell(pi, res, main) {
   const st = street(), p = H.pots[pi];
   const name = (c) => RANKS[c >> 2] + SUITS[c & 3];
   try {
-    const d = await api('/insurance', 'POST', { table, blinds, street: st, pot: p.name, players: r.ids.length, outs: r.r.outs.length, pot_amount: r.pot, amount: v, leader: r.r.leader, buyer: r.r.leader, hand_id: H.id,
+    const d = await api('/insurance', 'POST', { table, blinds, street: st, pot: p.name, players: r.ids.length, outs: r.r.outs.length, pot_amount: r.pot, amount: v, leader: r.r.leader, buyer: { player: r.r.leader, seat: seatOf(PNAMES.indexOf(r.r.leader))?.seat || null, name: seatOf(PNAMES.indexOf(r.r.leader))?.name || '' }, hand_id: H.id,
+      seats: Object.fromEntries(r.ids.map((id) => [id, seatOf(PNAMES.indexOf(id)) || null])),
       hands: Object.fromEntries(r.ids.map((id) => [id, H.hands[PNAMES.indexOf(id)].map(name)])), board: H.board.filter((c) => c != null).map(name), out_cards: r.r.outs.map((o) => name(o.card)) });
     H.tickets.push({ ...d.ticket, potIndex: pi, outSet: new Set(r.r.outs.map((o) => o.card)) });
     delete H.buys[pi];
@@ -348,7 +371,7 @@ async function pick(c, main) {
     for (const x of due) {
       const hit = x.outSet.has(c);
       try { await api(`/insurance/${x.id}/settle`, 'POST', { card: RANKS[c >> 2] + SUITS[c & 3], hit }); x.result = hit ? 'hit' : 'miss'; x.result_card = RANKS[c >> 2] + SUITS[c & 3];
-        msgs.push(`${x.pot}: ${hit ? `<span class="bad">${t('hitMsg')} ${fmt(x.payout)}</span>` : `<span class="good">${t('missMsg')} ${fmt(x.amount)}</span>`}`); }
+        msgs.push(`${x.pot}: ${hit ? `<span class="bad">${t('hitMsg')} ${fmt(x.payout)}</span> <span style="font-weight:400">(${t('premium')} ${fmt(x.amount)} · ${t('netLbl')} +${fmt(x.payout - x.amount)})</span>` : `<span class="good">${t('missMsg')} ${fmt(x.amount)}</span>`}`); }
       catch (err) { msgs.push(`<span class="bad">${esc(err.message)}</span>`); }
     }
     if (msgs.length) toast(msgs.join('<br>'), msgs.some((m) => m.includes('bad')) ? 'bad' : 'good');
@@ -360,7 +383,7 @@ async function pick(c, main) {
 async function renderToday(main, day) {
   main.innerHTML = `<section class="panel"><div class="hint">…</div></section>`;
   let d; try { d = await api('/insurance' + (day ? '?day=' + day : '')); } catch (err) { main.innerHTML = `<section class="panel bad">${esc(err.message)}</section>`; return; }
-  const tt = d.totals;
+  const tt = d.totals, fl = d.float;
   main.innerHTML = `<section class="panel"><div class="row"><div><div class="lbl">${t('day')}</div><input type="date" id="day" value="${d.day}" style="min-height:44px"></div>
       <button class="btn ghost" id="out" style="margin-left:auto">${t('signout')}</button></div>
     <div class="big" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
@@ -369,12 +392,24 @@ async function renderToday(main, day) {
       <div class="stat"><div class="k">${t('net')}</div><div class="v ${tt.net >= 0 ? 'good' : 'bad'}">${tt.net >= 0 ? '+' : '−'}${fmt(Math.abs(tt.net))}</div></div>
       <div class="stat"><div class="k">${t('tickets')}</div><div class="v">${tt.tickets}</div><div class="hint" style="margin:0">${tt.hits} ${t('hit')} · ${tt.misses} ${t('miss')}${tt.pending ? ` · <span class="warn">${tt.pending} ${t('pending')} (${fmt(tt.pending_amount)})</span>` : ''}</div></div>
     </div></section>
+    <section class="panel"><div class="row"><div class="lbl" style="margin:0">${t('float')} · ${t('asOf')} ${esc(d.day)}</div>${role === 'master' ? `<button class="btn ghost sm" id="setFloat" style="margin-left:auto">${t('setFloat')}</button>` : ''}</div>
+      ${fl ? `<div class="big" style="margin-top:8px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+        <div class="stat"><div class="k">${t('float')}</div><div class="v gold">${fmt(fl.balance)}</div><div class="hint" style="margin:0">${t('closeDay')} ${esc(fl.opening_day)}: ${fmt(fl.opening)}</div></div>
+        <div class="stat"><div class="k">${t('capital')}</div><div class="v">${fmt(fl.capital)}</div></div>
+        <div class="stat"><div class="k">${t('profit')}</div><div class="v ${fl.balance - fl.capital >= 0 ? 'good' : 'bad'}">${fl.balance - fl.capital >= 0 ? '+' : '−'}${fmt(Math.abs(fl.balance - fl.capital))}</div></div></div>`
+      : `<div class="hint">${role === 'master' ? t('setFloat') + ' →' : '—'}</div>`}
+      <form id="floatForm" hidden class="row" style="margin-top:10px"><label>${t('closeDay')}<br><input type="date" name="day" value="${esc(fl ? fl.opening_day : '')}" required></label>
+        <label>${t('closeBal')}<br><input inputmode="numeric" name="balance" value="${fl ? fmt(fl.opening) : ''}" required></label><label>${t('capital')}<br><input inputmode="numeric" name="capital" value="${fl ? fmt(fl.capital) : ''}" required></label>
+        <button class="btn gold">${t('save')}</button></form></section>
     <section class="panel">${d.tickets.map((x) => `<div class="tcard">
-      <div class="row"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.table_name)} · ${esc(x.pot)}</b><span class="hint" style="margin:0">${new Date(x.created_at * 1000).toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} · ${esc(x.created_by)}</span>
+      <div class="row"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.table_name)} · ${esc(x.pot)}</b>${x.detail.buyer && x.detail.buyer.seat ? `<span>#${x.detail.buyer.seat} ${esc(x.detail.buyer.name)}</span>` : ''}<span class="hint" style="margin:0">${new Date(x.created_at * 1000).toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} · ${esc(x.created_by)}</span>
         ${role !== 'staff' && x.result !== 'void' ? `<button class="btn ghost sm" data-void="${x.id}" style="margin-left:auto">${t('voidBtn')}</button>` : ''}</div>
-      <div class="tgrid"><div><span class="k">${t('amount')}</span>${fmt(x.amount)}</div><div><span class="k">${t('pays')}</span>${fmt(x.payout)}</div><div><span class="k">Outs × ${t('odds')}</span>${x.outs} × ${x.odds}</div><div><span class="k">${t('pot')}</span>${fmt(x.pot_amount)} · ${x.players}P</div></div>
+      <div class="tgrid"><div><span class="k">${t('amount')}</span>${fmt(x.amount)}</div><div><span class="k">${t('pays')}</span>${fmt(x.payout)}${x.result === 'hit' ? `<div class="hint" style="margin:0;font-weight:400">${t('netLbl')} +${fmt(x.payout - x.amount)}</div>` : ''}</div><div><span class="k">Outs × ${t('odds')}</span>${x.outs} × ${x.odds}</div><div><span class="k">${t('pot')}</span>${fmt(x.pot_amount)} · ${x.players}P</div></div>
       <div class="hint" style="margin:4px 0 0">${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'} · ${esc(x.blinds)} · ${(x.detail.board || []).join(' ')}${x.result_card ? ' → <b>' + esc(x.result_card) + '</b>' : ''}${x.void_reason ? ' · ' + esc(x.void_reason) : ''}</div></div>`).join('') || `<div class="hint">—</div>`}</section>`;
   main.querySelector('#day').onchange = (e) => renderToday(main, e.target.value);
+  const sf = main.querySelector('#setFloat'), ff = main.querySelector('#floatForm');
+  if (sf) sf.onclick = () => { ff.hidden = !ff.hidden; };
+  ff.onsubmit = async (e) => { e.preventDefault(); try { await api('/insurance/float', 'PUT', { day: ff.day.value, balance: num(ff.balance.value), capital: num(ff.capital.value) }); renderToday(main, d.day); } catch (err) { toast(esc(err.message), 'bad'); } };
   main.querySelector('#out').onclick = async () => { try { await api('/logout', 'POST', {}); } catch {} token = ''; sessionStorage.removeItem('ins-token'); render(); };
   main.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => { const reason = prompt(t('reason')); if (!reason) return; try { await api(`/insurance/${b.dataset.void}/void`, 'POST', { reason }); renderToday(main, d.day); } catch (err) { toast(esc(err.message), 'bad'); } });
 }

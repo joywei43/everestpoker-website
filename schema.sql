@@ -233,3 +233,4 @@ CREATE TABLE IF NOT EXISTS insurance_tickets(id INTEGER PRIMARY KEY AUTOINCREMEN
   odds REAL NOT NULL, pot_amount INTEGER NOT NULL, max_buy INTEGER NOT NULL, amount INTEGER NOT NULL, payout INTEGER NOT NULL, result TEXT NOT NULL DEFAULT 'pending',
   result_card TEXT, settled_at INTEGER, settled_by TEXT, void_reason TEXT, detail TEXT);
 CREATE INDEX IF NOT EXISTS insurance_day ON insurance_tickets(day,id);
+CREATE TABLE IF NOT EXISTS insurance_float(id INTEGER PRIMARY KEY CHECK(id=1), day TEXT NOT NULL, balance INTEGER NOT NULL, capital INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
