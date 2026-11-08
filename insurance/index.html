@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Everest Insurance</title>
+<link rel="icon" href="/admin/logo.png">
+<style>
+:root{color-scheme:dark;--bg:#0d0f14;--panel:#161a22;--panel2:#1d2230;--line:#2a3142;--text:#eef1f6;--muted:#8b93a7;--gold:#e0b552;--gold2:#f5d27a;--green:#3ecf8e;--red:#ff5d6c;--blue:#5aa2ff;--amber:#ffb547;--radius:14px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;-webkit-tap-highlight-color:transparent}
+body{padding:0 0 calc(24px + env(safe-area-inset-bottom))}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+.wrap{max-width:860px;margin:0 auto;padding:0 12px}
+header{position:sticky;top:0;z-index:5;background:rgba(13,15,20,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;gap:10px;min-height:54px}
+header img{width:30px;height:30px}
+header h1{font-size:17px;margin:0;letter-spacing:.06em;color:var(--gold2)}
+.tabs{display:flex;gap:4px;margin-left:auto}
+.tabs button,.lang{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:14px}
+.tabs button.on{background:var(--gold);color:#16120a;border-color:var(--gold);font-weight:700}
+.lang{padding:7px 10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-top:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+select,input[type=text],input[type=password],input[inputmode]{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:16px;min-height:44px}
+input:focus,select:focus{outline:2px solid var(--gold);outline-offset:0}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:none;border:0;padding:10px 16px;font-size:16px;min-width:48px}
+.seg button.on{background:var(--gold);color:#16120a;font-weight:700}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-height:44px;font-size:15px}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#16120a;font-weight:700}
+.btn.ghost{background:none}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.players{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.player{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px}
+.player.lead{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
+.player .top{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);margin-bottom:6px}
+.player .top b{color:var(--text);font-size:15px}
+.slots{display:flex;gap:6px}
+.slot{width:48px;height:66px;border-radius:8px;border:1.5px dashed #3a4357;background:#0f1219;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;line-height:1;flex-direction:column;padding:0}
+.slot.active{border:2px solid var(--gold);box-shadow:0 0 0 3px rgba(224,181,82,.25)}
+.slot.f{background:#f7f7f4;border:1.5px solid #f7f7f4;color:#111}
+.slot.f.red{color:#d21f32}
+.slot .s{font-size:18px;margin-top:2px}
+.slot.next{border-color:var(--blue)}
+.slot.next:not(.f)::after{content:attr(data-tag);font-size:10px;color:var(--blue);font-weight:600}
+.board{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.board .sep{width:6px}
+.picker{display:grid;grid-template-columns:repeat(13,1fr);gap:4px;margin-top:10px;user-select:none}
+.picker button{aspect-ratio:5/7;border-radius:6px;border:0;background:#f7f7f4;color:#111;font-weight:800;font-size:clamp(11px,3.4vw,16px);padding:0;line-height:1.05;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.picker button.red{color:#d21f32}
+.picker button:disabled{background:#262b37;color:#495066}
+.picker button .s{font-size:.9em}
+.hint{font-size:13px;color:var(--muted);margin-top:8px}
+.pot{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px}
+.pot .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pot .name{font-weight:800;color:var(--gold2);min-width:74px}
+.pot input{width:150px}
+.who{display:inline-flex;gap:4px}
+.who button{background:#0f1219;border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:44px;min-height:40px;font-weight:700;color:var(--muted)}
+.who button.on{background:#203049;border-color:var(--blue);color:var(--text)}
+.result{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+.big{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:#0f1219;border-radius:10px;padding:8px 10px}
+.stat .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.stat .v{font-size:24px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+.stat .v.gold{color:var(--gold2)}
+.outs{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.mini{background:#f7f7f4;color:#111;border-radius:5px;padding:2px 5px;font-weight:800;font-size:13px}
+.mini.red{color:#d21f32}
+.buy{display:flex;gap:8px;align-items:stretch;margin-top:10px;flex-wrap:wrap}
+.buy input{flex:1;min-width:130px;font-size:20px;font-weight:700}
+.pay{font-size:15px;margin-top:6px;color:var(--muted)}
+.pay b{color:var(--text);font-size:20px}
+.warn{color:var(--amber)}
+.bad{color:var(--red)}
+.good{color:var(--green)}
+.tk{display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px;flex-wrap:wrap}
+.chip{display:inline-block;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700}
+.chip.pending{background:#2c2a1a;color:var(--amber)}
+.chip.hit{background:#3a1820;color:var(--red)}
+.chip.miss{background:#123024;color:var(--green)}
+.chip.void{background:#262b37;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#202634;border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-weight:700;z-index:20;max-width:92vw;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:11px;color:var(--muted);text-align:left;text-transform:uppercase;letter-spacing:.06em;padding:6px;border-bottom:1px solid var(--line)}
+td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.tcard{padding:10px 0;border-top:1px solid var(--line)}.tcard:first-child{border-top:0}
+.tgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px;font-variant-numeric:tabular-nums;font-weight:700}
+.tgrid .k{display:block;font-size:11px;color:var(--muted);font-weight:400;text-transform:uppercase;letter-spacing:.05em}
+.btn.sm{min-height:34px;padding:6px 10px;font-size:13px}
+@media (max-width:520px){.tgrid{grid-template-columns:repeat(2,1fr)}}
+.login{max-width:360px;margin:12vh auto 0;padding:0 16px}
+.login h2{color:var(--gold2);margin:0 0 4px}
+.login input{width:100%;margin-top:10px}
+.err{color:var(--red);font-size:14px;margin-top:8px;min-height:18px}
+@media (max-width:520px){.stat .v{font-size:19px}.slot{width:42px;height:58px;font-size:18px}.pot input{width:120px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="/config.js"></script>
+<script type="module">
+import { potOuts, quote, best, categoryName, RANKS, SUITS, SUIT_SYMBOL } from './core.js';
+
+const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
+const T = {
+  en: { title: 'INSURANCE', calc: 'Calculator', today: 'Today', table: 'Table', level: 'Level', players: 'Players', board: 'Board', flop: 'Flop', turn: 'Turn', river: 'River', next: 'Next card',
+    pots: 'Pots', main: 'Main', side1: '1st Side', side2: '2nd Side', add: '+ Side pot', remove: 'Remove', potAmt: 'Pot amount', inPot: 'In pot',
+    pickHint: 'Tap a slot, then tap the card. The next empty slot is picked for you.', needCards: 'Enter both cards of every player and the flop.', leads: 'leads', tie: 'Tied now — no insurance.',
+    outs: 'Outs', odds: 'Odds', max: 'Max buy', capped: 'capped at 1000 BB', none: 'No outs — nothing to insure.', tooMany: 'More than 15 outs — not sold.', buyAmt: 'Amount bought', fillMax: 'Max',
+    pays: 'Pays', sell: 'Sell', sold: 'Sold', settleHint: 'When the next card is dealt, tap it in the blue slot to settle.', hitMsg: 'OUT hit — pay', missMsg: 'Missed — house keeps', newHand: 'New hand',
+    pending: 'Pending', hit: 'Paid out', miss: 'Kept', void: 'Void', net: 'House result', soldT: 'Sold', paidT: 'Paid out', tickets: 'Tickets', time: 'Time', pot: 'Pot', amount: 'Bought', result: 'Result',
+    voidBtn: 'Void', reason: 'Reason for voiding this ticket:', signin: 'Sign in', user: 'Username', pass: 'Password', signout: 'Sign out', clear: 'Clear', day: 'Business day', overMax: 'Above the max.',
+    river5: 'Hand complete. Start a new hand.', by: 'by', cards: 'Cards', street: 'Street' },
+  zh: { title: '保險', calc: '計算', today: '今日', table: '桌', level: '級別', players: '人數', board: '公牌', flop: 'Flop', turn: 'Turn', river: 'River', next: '下一張',
+    pots: '底池', main: 'Main', side1: '1st Side', side2: '2nd Side', add: '+ 邊池', remove: '移除', potAmt: '底池金額', inPot: '池內玩家',
+    pickHint: '先點空格，再點牌；會自動跳到下一個空格。', needCards: '請輸入每位玩家的兩張手牌和 Flop。', leads: '領先', tie: '目前平手，不賣保險。',
+    outs: 'Outs', odds: '賠率', max: '最多可買', capped: '已達 1000 BB 上限', none: '沒有 outs，不需保險。', tooMany: '超過 15 outs，不賣。', buyAmt: '購買金額', fillMax: '最大',
+    pays: '賠付', sell: '賣出', sold: '已賣', settleHint: '發下一張牌時，在藍框點那張牌即自動結算。', hitMsg: '中 OUT，賠付', missMsg: '沒中，保費入帳', newHand: '新的一手',
+    pending: '待開', hit: '已賠付', miss: '保費入帳', void: '作廢', net: '保險盈虧', soldT: '賣出總額', paidT: '賠付總額', tickets: '張數', time: '時間', pot: '池', amount: '購買', result: '結果',
+    voidBtn: '作廢', reason: '作廢原因：', signin: '登入', user: '帳號', pass: '密碼', signout: '登出', clear: '清除', day: '營業日', overMax: '超過最大可買額。',
+    river5: '這手已結束，請按「新的一手」。', by: '由', cards: '牌', street: '階段' }
+};
+let lang = (() => { try { return localStorage.getItem('ins-lang') || 'zh'; } catch { return 'zh'; } })();
+const t = (k) => T[lang][k] ?? k;
+let token = sessionStorage.getItem('ins-token') || '';
+let role = sessionStorage.getItem('ins-role') || '';
+let cfg = null, tab = 'calc', toastTimer;
+const PNAMES = ['P1', 'P2', 'P3', 'P4'];
+const fmt = (v) => (Math.round(v) || 0).toLocaleString('en-US');
+const num = (s) => { const v = Number(String(s ?? '').replace(/[,\s]/g, '')); return Number.isFinite(v) ? v : NaN; };
+const isRed = (c) => (c & 3) === 1 || (c & 3) === 2;
+const face = (c) => RANKS[c >> 2].replace('T', '10');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+const bbOf = (blinds) => { const m = /\/\s*([\d,]+)/.exec(String(blinds || '')); return m ? Number(m[1].replace(/,/g, '')) : 0; };
+
+async function api(path, method = 'GET', body) {
+  const res = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { token = ''; sessionStorage.removeItem('ins-token'); render(); throw new Error('Please sign in again.'); }
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+function toast(msg, kind = '') {
+  let el = document.querySelector('.toast'); if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); }
+  el.innerHTML = msg; el.style.borderColor = kind === 'bad' ? 'var(--red)' : kind === 'good' ? 'var(--green)' : 'var(--line)';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), 4500);
+}
+
+// ---------- hand state ----------
+const fresh = () => ({ n: 2, hands: [[null, null], [null, null], [null, null], [null, null]], board: [null, null, null, null, null], pots: [{ name: 'Main', amount: '', inPot: [true, true, true, true] }], active: { k: 'p', i: 0, j: 0 }, tickets: [], id: Date.now().toString(36), buys: {} });
+let H = fresh();
+let table = '', blinds = '';
+
+const used = () => new Set([...H.hands.slice(0, H.n).flat(), ...H.board].filter((c) => c != null));
+const boardCount = () => H.board.filter((c) => c != null).length;
+const handsReady = () => H.hands.slice(0, H.n).every((h) => h[0] != null && h[1] != null);
+const street = () => (boardCount() === 3 ? 'flop' : boardCount() === 4 ? 'turn' : null);
+
+function slotOrder() {
+  const list = [];
+  for (let i = 0; i < H.n; i++) for (let j = 0; j < 2; j++) list.push({ k: 'p', i, j });
+  for (let i = 0; i < 5; i++) list.push({ k: 'b', i });
+  return list;
+}
+const slotVal = (s) => (s.k === 'p' ? H.hands[s.i][s.j] : H.board[s.i]);
+function nextEmpty(from) {
+  const order = slotOrder(); const at = from ? order.findIndex((s) => s.k === from.k && s.i === from.i && s.j === from.j) : -1;
+  for (let x = 1; x <= order.length; x++) { const s = order[(at + x) % order.length]; if (slotVal(s) == null && !(s.k === 'b' && s.i > boardCount())) return s; }
+  return null;
+}
+
+// Results for each pot.
+function analyse() {
+  if (!handsReady() || boardCount() < 3 || boardCount() > 4) return null;
+  const board = H.board.filter((c) => c != null);
+  const allKnown = H.hands.slice(0, H.n).flat();
+  return H.pots.map((p, pi) => {
+    const ids = PNAMES.slice(0, H.n).filter((_, i) => p.inPot[i]);
+    if (ids.length < 2) return { pi, err: 'players' };
+    const hands = Object.fromEntries(ids.map((id) => [id, H.hands[PNAMES.indexOf(id)]]));
+    const dead = allKnown.filter((c) => !ids.some((id) => hands[id].includes(c)));
+    const r = potOuts(hands, board, dead);
+    const pot = num(p.amount);
+    const q = r.leader ? quote(cfg, ids.length, r.outs.length, pot > 0 ? pot : 0, bbOf(blinds)) : null;
+    return { pi, ids, r, q, pot };
+  });
+}
+
+function cardHtml(c, cls = 'slot', extra = '') {
+  if (c == null) return `<button class="${cls}" ${extra}></button>`;
+  return `<button class="${cls} f ${isRed(c) ? 'red' : ''}" ${extra}><span>${face(c)}</span><span class="s">${SUIT_SYMBOL[SUITS[c & 3]]}</span></button>`;
+}
+const mini = (c) => `<span class="mini ${isRed(c) ? 'red' : ''}">${face(c)}${SUIT_SYMBOL[SUITS[c & 3]]}</span>`;
+
+// ---------- views ----------
+function render() {
+  const app = document.getElementById('app');
+  if (!token) return renderLogin(app);
+  app.innerHTML = `<header><div class="wrap"><img src="/admin/logo.png" alt=""><h1>${t('title')}</h1>
+    <div class="tabs"><button data-tab="calc" class="${tab === 'calc' ? 'on' : ''}">${t('calc')}</button><button data-tab="today" class="${tab === 'today' ? 'on' : ''}">${t('today')}</button></div>
+    <button class="lang" id="lang">${lang === 'zh' ? 'EN' : '中文'}</button></div></header><main class="wrap" id="main"></main>`;
+  app.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; render(); });
+  app.querySelector('#lang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh'; try { localStorage.setItem('ins-lang', lang); } catch {} render(); };
+  if (tab === 'calc') renderCalc(app.querySelector('#main')); else renderToday(app.querySelector('#main'));
+}
+
+function renderLogin(app) {
+  app.innerHTML = `<form class="login" id="lf"><img src="/admin/logo.png" alt="" style="width:56px"><h2>Everest ${t('title')}</h2>
+    <input id="un" type="text" placeholder="${t('user')}" autocomplete="username" required><input id="pw" type="password" placeholder="${t('pass')}" autocomplete="current-password" required>
+    <button class="btn gold" style="width:100%;margin-top:12px">${t('signin')}</button><div class="err" id="err"></div></form>`;
+  app.querySelector('#lf').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: app.querySelector('#un').value.trim(), password: app.querySelector('#pw').value }) });
+      const d = await res.json(); if (!res.ok || !d.token) throw new Error(d.error || 'Sign-in failed');
+      token = d.token; sessionStorage.setItem('ins-token', token);
+      const me = await api('/me'); role = me.role || ''; sessionStorage.setItem('ins-role', role);
+      await boot();
+    } catch (err) { app.querySelector('#err').textContent = err.message; }
+  };
+}
+
+function renderCalc(main) {
+  const levels = [...new Set([...(cfg.tables || []).map((x) => x.blinds), '25 / 50', '50 / 100', '100 / 200', '200 / 400', '500 / 1,000'])].filter(Boolean);
+  const res = analyse();
+  const lead = new Set((res || []).filter((x) => x.r && x.r.leader).map((x) => x.r.leader));
+  const bc = boardCount();
+  const st = street();
+  const pending = H.tickets.filter((x) => x.result === 'pending');
+  main.innerHTML = `
+  <section class="panel"><div class="row">
+    <div><div class="lbl">${t('table')}</div><select id="tbl">${(cfg.tables || []).map((x) => `<option ${x.name === table ? 'selected' : ''} value="${esc(x.name)}">${esc(x.name)}${x.running ? ' ●' : ''}</option>`).join('')}</select></div>
+    <div><div class="lbl">${t('level')}</div><select id="lvl">${levels.map((l) => `<option ${l === blinds ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+    <div><div class="lbl">${t('players')}</div><div class="seg" id="np">${[2, 3, 4].map((k) => `<button data-n="${k}" class="${H.n === k ? 'on' : ''}">${k}P</button>`).join('')}</div></div>
+    <button class="btn ghost" id="newHand" style="margin-left:auto">${t('newHand')}</button>
+  </div></section>
+
+  <section class="panel">
+    <div class="players">${PNAMES.slice(0, H.n).map((p, i) => `<div class="player ${lead.has(p) ? 'lead' : ''}"><div class="top"><b>${p}</b><span>${handsReady() && bc >= 3 ? esc(categoryName(best([...H.hands[i], ...H.board.filter((c) => c != null)]), lang === 'zh')) : ''}</span></div>
+      <div class="slots">${H.hands[i].map((c, j) => cardHtml(c, 'slot' + (H.active && H.active.k === 'p' && H.active.i === i && H.active.j === j ? ' active' : ''), `data-k="p" data-i="${i}" data-j="${j}"`)).join('')}</div></div>`).join('')}</div>
+    <div class="lbl" style="margin-top:12px">${t('board')}</div>
+    <div class="board">${H.board.map((c, i) => {
+      const isNext = (bc === 3 && i === 3) || (bc === 4 && i === 4);
+      const enabled = i <= bc;
+      return (i === 3 || i === 4 ? '<span class="sep"></span>' : '') + cardHtml(c, 'slot' + (H.active && H.active.k === 'b' && H.active.i === i ? ' active' : '') + (isNext ? ' next' : ''), `data-k="b" data-i="${i}" data-tag="${i === 3 ? t('turn') : i === 4 ? t('river') : ''}" ${enabled ? '' : 'disabled'}`);
+    }).join('')}<button class="btn ghost" id="clearSlot" style="margin-left:auto">${t('clear')}</button></div>
+    <div class="picker" id="picker">${SUITS.map((s) => [...RANKS].reverse().map((r) => { const c = RANKS.indexOf(r) * 4 + SUITS.indexOf(s); return `<button data-c="${c}" class="${isRed(c) ? 'red' : ''}" ${used().has(c) ? 'disabled' : ''}><span>${r.replace('T', '10')}</span><span class="s">${SUIT_SYMBOL[s]}</span></button>`; }).join('')).join('')}</div>
+    <div class="hint">${pending.length ? t('settleHint') : t('pickHint')}</div>
+  </section>
+
+  <section class="panel"><div class="row"><div class="lbl" style="margin:0">${t('pots')}</div>${H.pots.length < 3 ? `<button class="btn ghost" id="addPot" style="margin-left:auto">${t('add')}</button>` : ''}</div>
+    ${H.pots.map((p, pi) => potHtml(p, pi, res && res[pi], st)).join('')}
+  </section>
+
+  ${H.tickets.length ? `<section class="panel"><div class="lbl">${t('sold')}</div>${H.tickets.map(ticketLine).join('')}</section>` : ''}
+  ${bc === 5 ? `<section class="panel"><b>${t('river5')}</b></section>` : ''}`;
+
+  main.querySelector('#tbl').onchange = (e) => { table = e.target.value; const x = cfg.tables.find((y) => y.name === table); if (x) blinds = x.blinds; renderCalc(main); };
+  main.querySelector('#lvl').onchange = (e) => { blinds = e.target.value; renderCalc(main); };
+  main.querySelectorAll('#np button').forEach((b) => b.onclick = () => { H.n = Number(b.dataset.n); H.active = nextEmpty(null); renderCalc(main); });
+  main.querySelector('#newHand').onclick = () => { if (H.tickets.some((x) => x.result === 'pending') && !confirm(lang === 'zh' ? '還有待開的保險，確定開始新的一手？' : 'Some tickets are still pending. Start a new hand anyway?')) return; H = fresh(); renderCalc(main); };
+  main.querySelectorAll('.slot[data-k]').forEach((b) => b.onclick = () => { H.active = { k: b.dataset.k, i: Number(b.dataset.i), j: Number(b.dataset.j || 0) }; renderCalc(main); });
+  main.querySelector('#clearSlot').onclick = () => {
+    if (!H.active) return;
+    if (H.active.k === 'b' && H.active.i < 5 && H.tickets.some((x) => x.result !== 'pending' && x.street === (H.active.i === 3 ? 'flop' : 'turn'))) { toast(lang === 'zh' ? '這張牌已用來結算保險，不能清除。' : 'This card settled a ticket and cannot be cleared.', 'bad'); return; }
+    if (H.active.k === 'p') H.hands[H.active.i][H.active.j] = null; else for (let i = H.active.i; i < 5; i++) H.board[i] = null;
+    renderCalc(main);
+  };
+  main.querySelectorAll('#picker button').forEach((b) => b.onclick = () => pick(Number(b.dataset.c), main));
+  const ap = main.querySelector('#addPot'); if (ap) ap.onclick = () => { H.pots.push({ name: H.pots.length === 1 ? '1st Side' : '2nd Side', amount: '', inPot: [...H.pots[H.pots.length - 1].inPot] }); renderCalc(main); };
+  main.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { H.pots.splice(Number(b.dataset.rm), 1); renderCalc(main); });
+  main.querySelectorAll('[data-amt]').forEach((inp) => {
+    inp.oninput = () => { H.pots[Number(inp.dataset.amt)].amount = inp.value; };
+    inp.onchange = () => { const v = num(inp.value); H.pots[Number(inp.dataset.amt)].amount = v > 0 ? fmt(v) : ''; renderCalc(main); };
+  });
+  main.querySelectorAll('[data-who]').forEach((b) => b.onclick = () => { const [pi, i] = b.dataset.who.split(':').map(Number); H.pots[pi].inPot[i] = !H.pots[pi].inPot[i]; renderCalc(main); });
+  main.querySelectorAll('[data-buy]').forEach((inp) => {
+    const pi = Number(inp.dataset.buy), out = main.querySelector(`[data-pay="${pi}"]`);
+    const upd = () => { H.buys[pi] = inp.value; const r = res && res[pi]; const v = num(inp.value); if (!r || !r.q || !r.q.ok) return;
+      out.innerHTML = v > 0 ? `${t('pays')} <b>${fmt(v * r.q.odds)}</b> <span class="${v > r.q.max ? 'bad' : 'muted'}">(${fmt(v)} × ${r.q.odds})${v > r.q.max ? ' · ' + t('overMax') : ''}</span>` : ''; };
+    inp.oninput = upd; upd();
+  });
+  main.querySelectorAll('[data-max]').forEach((b) => b.onclick = () => { const pi = Number(b.dataset.max); const inp = main.querySelector(`[data-buy="${pi}"]`); inp.value = fmt(res[pi].q.max); inp.oninput(); });
+  main.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => sell(Number(b.dataset.sell), res, main));
+}
+
+function potHtml(p, pi, r, st) {
+  const head = `<div class="head"><span class="name">${esc(p.name === 'Main' ? t('main') : p.name === '1st Side' ? t('side1') : t('side2'))}</span>
+    <input inputmode="numeric" data-amt="${pi}" placeholder="${t('potAmt')}" value="${esc(p.amount)}">
+    <span class="who">${PNAMES.slice(0, H.n).map((n, i) => `<button data-who="${pi}:${i}" class="${p.inPot[i] ? 'on' : ''}">${n}</button>`).join('')}</span>
+    ${pi > 0 ? `<button class="btn ghost" data-rm="${pi}">${t('remove')}</button>` : ''}</div>`;
+  if (!r) return `<div class="pot">${head}${st === null && boardCount() < 3 ? `<div class="hint">${t('needCards')}</div>` : ''}</div>`;
+  if (r.err) return `<div class="pot">${head}<div class="hint warn">${lang === 'zh' ? '池內至少要 2 位玩家。' : 'At least 2 players in the pot.'}</div></div>`;
+  if (!r.r.leader) return `<div class="pot">${head}<div class="result warn">${t('tie')}</div></div>`;
+  const outs = r.r.outs.length, q = r.q;
+  const already = H.tickets.find((x) => x.potIndex === pi && x.street === st && x.result !== 'void');
+  let body = `<div class="result"><div class="row" style="justify-content:space-between"><div><b class="good">${r.r.leader}</b> ${t('leads')} · ${r.ids.length}P</div></div>
+    <div class="big" style="margin-top:8px"><div class="stat"><div class="k">${t('outs')}</div><div class="v">${outs}</div></div>
+      <div class="stat"><div class="k">${t('odds')}</div><div class="v gold">${q && q.ok ? q.odds : '—'}</div></div>
+      <div class="stat"><div class="k">${t('max')}</div><div class="v">${q && q.ok && r.pot > 0 ? fmt(q.max) : '—'}</div></div></div>
+    ${q && q.ok && q.capped ? `<div class="hint warn">${t('capped')} (${fmt(q.cap)})</div>` : ''}
+    ${outs ? `<div class="outs">${r.r.outs.map((o) => mini(o.card)).join('')}</div>` : ''}`;
+  if (!outs) body += `<div class="hint">${t('none')}</div>`;
+  else if (!q.ok) body += `<div class="hint warn">${t('tooMany')}</div>`;
+  else if (already) body += `<div class="hint">${t('sold')}: ${fmt(already.amount)} → ${t('pays')} ${fmt(already.payout)}</div>`;
+  else body += `<div class="buy"><input inputmode="numeric" data-buy="${pi}" placeholder="${t('buyAmt')}" value="${esc(H.buys[pi] || '')}"><button class="btn" data-max="${pi}" ${r.pot > 0 ? '' : 'disabled'}>${t('fillMax')}</button><button class="btn gold" data-sell="${pi}" ${r.pot > 0 ? '' : 'disabled'}>${t('sell')}</button></div><div class="pay" data-pay="${pi}"></div>`;
+  return `<div class="pot">${head}${body}</div></div>`;
+}
+
+const ticketLine = (x) => `<div class="tk"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.pot)}</b> <span>${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'}</span>
+  <span>${x.outs} outs × ${x.odds}</span><span class="num" style="margin-left:auto">${fmt(x.amount)} → ${fmt(x.payout)}</span>${x.result_card ? ' · ' + esc(x.result_card) : ''}</div>`;
+
+async function sell(pi, res, main) {
+  const r = res[pi], inp = main.querySelector(`[data-buy="${pi}"]`), v = num(inp.value);
+  if (!(v > 0)) { toast(t('buyAmt') + '?', 'bad'); return; }
+  if (v > r.q.max) { toast(t('overMax') + ' ' + t('max') + ' ' + fmt(r.q.max), 'bad'); return; }
+  const st = street(), p = H.pots[pi];
+  const name = (c) => RANKS[c >> 2] + SUITS[c & 3];
+  try {
+    const d = await api('/insurance', 'POST', { table, blinds, street: st, pot: p.name, players: r.ids.length, outs: r.r.outs.length, pot_amount: r.pot, amount: v, leader: r.r.leader, buyer: r.r.leader, hand_id: H.id,
+      hands: Object.fromEntries(r.ids.map((id) => [id, H.hands[PNAMES.indexOf(id)].map(name)])), board: H.board.filter((c) => c != null).map(name), out_cards: r.r.outs.map((o) => name(o.card)) });
+    H.tickets.push({ ...d.ticket, potIndex: pi, outSet: new Set(r.r.outs.map((o) => o.card)) });
+    delete H.buys[pi];
+    toast(`${t('sold')} ${fmt(v)} · ${t('pays')} ${fmt(d.ticket.payout)}`, 'good');
+    H.active = { k: 'b', i: boardCount() };
+    renderCalc(main);
+  } catch (err) { toast(esc(err.message), 'bad'); }
+}
+
+async function pick(c, main) {
+  if (!H.active) H.active = nextEmpty(null);
+  if (!H.active) return;
+  const s = H.active;
+  if (s.k === 'b' && s.i > boardCount()) return;
+  const settling = s.k === 'b' && (s.i === 3 || s.i === 4) && H.board[s.i] == null && boardCount() === s.i;
+  if (s.k === 'p') H.hands[s.i][s.j] = c; else H.board[s.i] = c;
+  if (settling) {
+    const st = s.i === 3 ? 'flop' : 'turn';
+    const due = H.tickets.filter((x) => x.result === 'pending' && x.street === st);
+    const msgs = [];
+    for (const x of due) {
+      const hit = x.outSet.has(c);
+      try { await api(`/insurance/${x.id}/settle`, 'POST', { card: RANKS[c >> 2] + SUITS[c & 3], hit }); x.result = hit ? 'hit' : 'miss'; x.result_card = RANKS[c >> 2] + SUITS[c & 3];
+        msgs.push(`${x.pot}: ${hit ? `<span class="bad">${t('hitMsg')} ${fmt(x.payout)}</span>` : `<span class="good">${t('missMsg')} ${fmt(x.amount)}</span>`}`); }
+      catch (err) { msgs.push(`<span class="bad">${esc(err.message)}</span>`); }
+    }
+    if (msgs.length) toast(msgs.join('<br>'), msgs.some((m) => m.includes('bad')) ? 'bad' : 'good');
+  }
+  H.active = nextEmpty(s);
+  renderCalc(main);
+}
+
+async function renderToday(main, day) {
+  main.innerHTML = `<section class="panel"><div class="hint">…</div></section>`;
+  let d; try { d = await api('/insurance' + (day ? '?day=' + day : '')); } catch (err) { main.innerHTML = `<section class="panel bad">${esc(err.message)}</section>`; return; }
+  const tt = d.totals;
+  main.innerHTML = `<section class="panel"><div class="row"><div><div class="lbl">${t('day')}</div><input type="date" id="day" value="${d.day}" style="min-height:44px"></div>
+      <button class="btn ghost" id="out" style="margin-left:auto">${t('signout')}</button></div>
+    <div class="big" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+      <div class="stat"><div class="k">${t('soldT')}</div><div class="v">${fmt(tt.sold)}</div></div>
+      <div class="stat"><div class="k">${t('paidT')}</div><div class="v">${fmt(tt.paid)}</div></div>
+      <div class="stat"><div class="k">${t('net')}</div><div class="v ${tt.net >= 0 ? 'good' : 'bad'}">${tt.net >= 0 ? '+' : '−'}${fmt(Math.abs(tt.net))}</div></div>
+      <div class="stat"><div class="k">${t('tickets')}</div><div class="v">${tt.tickets}</div><div class="hint" style="margin:0">${tt.hits} ${t('hit')} · ${tt.misses} ${t('miss')}${tt.pending ? ` · <span class="warn">${tt.pending} ${t('pending')} (${fmt(tt.pending_amount)})</span>` : ''}</div></div>
+    </div></section>
+    <section class="panel">${d.tickets.map((x) => `<div class="tcard">
+      <div class="row"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.table_name)} · ${esc(x.pot)}</b><span class="hint" style="margin:0">${new Date(x.created_at * 1000).toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} · ${esc(x.created_by)}</span>
+        ${role !== 'staff' && x.result !== 'void' ? `<button class="btn ghost sm" data-void="${x.id}" style="margin-left:auto">${t('voidBtn')}</button>` : ''}</div>
+      <div class="tgrid"><div><span class="k">${t('amount')}</span>${fmt(x.amount)}</div><div><span class="k">${t('pays')}</span>${fmt(x.payout)}</div><div><span class="k">Outs × ${t('odds')}</span>${x.outs} × ${x.odds}</div><div><span class="k">${t('pot')}</span>${fmt(x.pot_amount)} · ${x.players}P</div></div>
+      <div class="hint" style="margin:4px 0 0">${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'} · ${esc(x.blinds)} · ${(x.detail.board || []).join(' ')}${x.result_card ? ' → <b>' + esc(x.result_card) + '</b>' : ''}${x.void_reason ? ' · ' + esc(x.void_reason) : ''}</div></div>`).join('') || `<div class="hint">—</div>`}</section>`;
+  main.querySelector('#day').onchange = (e) => renderToday(main, e.target.value);
+  main.querySelector('#out').onclick = async () => { try { await api('/logout', 'POST', {}); } catch {} token = ''; sessionStorage.removeItem('ins-token'); render(); };
+  main.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => { const reason = prompt(t('reason')); if (!reason) return; try { await api(`/insurance/${b.dataset.void}/void`, 'POST', { reason }); renderToday(main, d.day); } catch (err) { toast(esc(err.message), 'bad'); } });
+}
+
+async function boot() {
+  try {
+    cfg = await api('/insurance/config');
+    if (!(cfg.tables || []).length) cfg.tables = ['T1', 'T2', 'T3', 'T5'].map((name) => ({ name, blinds: '50 / 100', running: false }));
+    const run = (cfg.tables || []).find((x) => x.running) || (cfg.tables || [])[0];
+    if (!table && run) { table = run.name; blinds = run.blinds; }
+    if (!blinds) blinds = '50 / 100';
+    if (!role) { const me = await api('/me'); role = me.role || ''; sessionStorage.setItem('ins-role', role); }
+  } catch (err) { if (!token) return render(); toast(esc(err.message), 'bad'); }
+  render();
+}
+if (token) boot(); else render();
+</script>
+</body>
+</html>

@@ -237,4 +237,27 @@ assert.equal((await call('/report/day/2026-11-05', 'PUT', { bbj_amount: 10000 },
 }
 assert.equal((await call('/report/day/2026-11-05', 'PUT', { bbj_amount: '' }, boss)).status, 200, 'blank removes the entry');
 assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, boss)).body.jackpot.rows.length, 0);
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');
+// Table insurance: odds by players/outs, max = min(pot, 1000 BB) ÷ odds (rounded down to 25), settle and the day's result.
+{
+  const cfg = (await call('/insurance/config', 'GET', null, maria3)).body;
+  assert.equal(cfg.odds[3][7], 3.2); assert.equal(cfg.cap_bb, 1000);
+  const sell = (b, tok = maria3) => call('/insurance', 'POST', { table: 'T2', blinds: '50 / 100', street: 'turn', pot: 'Main', players: 2, outs: 8, pot_amount: 30000, amount: 8550, ...b }, tok);
+  assert.equal((await sell({ amount: 8575 })).status, 400, 'over the max');
+  assert.equal((await sell({ outs: 16 })).status, 400, 'more than 15 outs not sold');
+  assert.equal((await sell({ outs: 0 })).status, 400);
+  const a = (await sell({})).body.ticket;
+  assert.equal(a.odds, 3.5); assert.equal(a.max_buy, 8550); assert.equal(a.payout, 29925); assert.equal(a.result, 'pending');
+  const capped = (await sell({ outs: 1, pot_amount: 500000, amount: 3325 })).body.ticket;
+  assert.equal(capped.max_buy, 3325, '1000 BB cap: 100,000 ÷ 30'); assert.equal(capped.payout, 99750);
+  const c = (await sell({ players: 3, outs: 4, pot: '1st Side', pot_amount: 14000, amount: 2000 })).body.ticket;
+  assert.equal(c.odds, 7); assert.equal(c.pot, '1st Side');
+  assert.equal((await call(`/insurance/${a.id}/settle`, 'POST', { card: 'Kh', hit: false }, maria3)).status, 200);
+  assert.equal((await call(`/insurance/${a.id}/settle`, 'POST', { card: 'Kh', hit: true }, maria3)).status, 409, 'settled once');
+  assert.equal((await call(`/insurance/${c.id}/settle`, 'POST', { card: '9c', hit: true }, maria3)).status, 200);
+  assert.equal((await call(`/insurance/${capped.id}/void`, 'POST', { reason: 'test' }, maria3)).status, 403, 'staff cannot void');
+  assert.equal((await call(`/insurance/${capped.id}/void`, 'POST', { reason: '' }, boss)).status, 400);
+  assert.equal((await call(`/insurance/${capped.id}/void`, 'POST', { reason: 'Entered twice' }, boss)).status, 200);
+  const day = (await call('/insurance', 'GET', null, maria3)).body;
+  assert.deepEqual([day.totals.tickets, day.totals.sold, day.totals.paid, day.totals.hits, day.totals.misses, day.totals.net], [2, 10550, 14000, 1, 1, 8550 + 2000 - 14000]);
+}
+console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, table insurance, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');

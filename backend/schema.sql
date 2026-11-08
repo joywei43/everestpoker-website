@@ -226,3 +226,10 @@ CREATE INDEX IF NOT EXISTS table_runs_close ON table_runs(closed_at);
 CREATE TABLE IF NOT EXISTS bbj_collect(day TEXT PRIMARY KEY, amount_cents INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS bbj_payouts(id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, paid_cents INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS bbj_opening(id INTEGER PRIMARY KEY CHECK(id=1), day TEXT NOT NULL, main_cents INTEGER NOT NULL, reserve_cents INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
+
+-- Table insurance sold by the supervisor: one row per ticket. result: pending / hit (house paid payout) / miss (house kept amount) / void.
+CREATE TABLE IF NOT EXISTS insurance_tickets(id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, created_at INTEGER NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+  table_name TEXT NOT NULL DEFAULT '', blinds TEXT NOT NULL DEFAULT '', street TEXT NOT NULL, pot TEXT NOT NULL DEFAULT 'Main', players INTEGER NOT NULL, outs INTEGER NOT NULL,
+  odds REAL NOT NULL, pot_amount INTEGER NOT NULL, max_buy INTEGER NOT NULL, amount INTEGER NOT NULL, payout INTEGER NOT NULL, result TEXT NOT NULL DEFAULT 'pending',
+  result_card TEXT, settled_at INTEGER, settled_by TEXT, void_reason TEXT, detail TEXT);
+CREATE INDEX IF NOT EXISTS insurance_day ON insurance_tickets(day,id);
