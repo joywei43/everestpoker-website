@@ -1,3 +1,4 @@
+import { businessDay, runsAround, dayOpenFromRuns } from './operation.mjs';
 // Everest member system — staff API (phase 1).
 // Members, player groups, group history, PPM play time and rewards.
 // All routes here run after the staff session check in worker.mjs, except /register.
@@ -244,11 +245,18 @@ async function readJson(req, max = 200000) {
   return text ? JSON.parse(text) : {};
 }
 const bad = (reply, msg, status = 400) => reply({ error: msg }, status);
-function range(url, now) {
-  const to = url.searchParams.get('to'), from = url.searchParams.get('from');
-  const end = to && isDate(to) ? dayStart(to) + DAY : dayStart(localDate(now)) + DAY;
-  const start = from && isDate(from) ? dayStart(from) : end - 30 * DAY;
-  return { start, end, from: localDate(start), to: localDate(end - 1) };
+// A date range in BUSINESS days: a game that runs past midnight stays on the day it started (as in Operation and the report).
+const plusDays = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * DAY * 1000).toISOString().slice(0, 10);
+async function range(env, url, now) {
+  const qTo = url.searchParams.get('to'), qFrom = url.searchParams.get('from');
+  const to = qTo && isDate(qTo) ? qTo : (await businessDay(env, now)).day;
+  const from = qFrom && isDate(qFrom) && qFrom <= to ? qFrom : plusDays(to, -29);
+  const runs = await runsAround(env, from, plusDays(to, 1));
+  const starts = []; for (let d = from; d <= plusDays(to, 1); d = plusDays(d, 1)) starts.push([d, dayOpenFromRuns(d, runs)]);
+  const start = starts[0][1], end = starts[starts.length - 1][1];
+  // Business day of a moment inside the range.
+  const dayOf = (t) => { let day = null; for (const [d, s0] of starts) { if (t >= s0) day = d; else break; } return day; };
+  return { start, end, from, to, dayOf };
 }
 
 export const isMemberApi = (path) => /^\/(members|groups|rewards|sessions|change-requests)(\/|$)/.test(path) || path === '/ppm/sync';
@@ -403,11 +411,18 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     return reply({ groups: [...groups.values()].filter((g) => g.active !== 0 || byGroup.get(g.id)).map((g) => ({ ...g, members: byGroup.get(g.id) || 0 })), unassigned: byGroup.get(null) || 0 });
   }
   if (parts[0] === 'groups' && parts[1] === 'summary' && method === 'GET') {
-    const r = range(url, now);
+    const r = await range(env, url, now);
     const play = await all(env.DB.prepare(`SELECT ps.group_id, ps.member_id, SUM(ps.active_seconds) secs, COUNT(*) sessions, COUNT(DISTINCT ps.play_date) days, MAX(ps.start_at) last,
         m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.nationality, m.group_id AS current_group
       FROM play_sessions ps JOIN members m ON m.id=ps.member_id
       WHERE ps.start_at>=? AND ps.start_at<? GROUP BY ps.group_id, ps.member_id`).bind(r.start, r.end));
+    { // visit days counted by business day, not calendar date
+      const daysBy = new Map();
+      for (const x of await all(env.DB.prepare('SELECT group_id, member_id, start_at FROM play_sessions WHERE member_id IS NOT NULL AND start_at>=? AND start_at<?').bind(r.start, r.end))) {
+        const k = (x.group_id || '') + '|' + x.member_id; if (!daysBy.has(k)) daysBy.set(k, new Set()); daysBy.get(k).add(r.dayOf(x.start_at));
+      }
+      for (const p of play) { const set = daysBy.get((p.group_id || '') + '|' + p.member_id); if (set) p.days = set.size; }
+    }
     const rw = await all(env.DB.prepare(`SELECT rw.group_id, rw.member_id, SUM(rw.amount) amt, m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.nationality, m.group_id AS current_group
       FROM rewards rw JOIN members m ON m.id=rw.member_id
       WHERE rw.voided=0 AND rw.approved_at IS NOT NULL AND rw.given_at>=? AND rw.given_at<? GROUP BY rw.group_id, rw.member_id`).bind(r.start, r.end));

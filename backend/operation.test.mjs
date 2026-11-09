@@ -271,4 +271,13 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
   assert.equal(all.totals.new_members, all.totals.unique_members, 'each member is new once, on their first day');
   assert.ok(all.days.every((r) => r.new_members <= r.members), 'new players are among that day\'s members');
 }
+{ // Player groups use business days: a session after midnight stays on the night it started.
+  const m = sql.prepare("SELECT id, group_id FROM members LIMIT 1").get() || (sql.prepare("INSERT INTO members(member_no,nickname,status,created_at,updated_at,group_id) VALUES('EV-000900','Late','active',1,1,'hee') RETURNING id, group_id").get());
+  sql.prepare("INSERT INTO table_runs(run_key,table_name,opened_at,closed_at,game_type,blinds) VALUES('T9|night','T9',?,?,'NLH','50 / 100')").run(at('2026-10-20 20:00:00') / 1000, at('2026-10-21 03:00:00') / 1000);
+  sql.prepare("INSERT INTO play_sessions(session_key,member_id,member_ref,group_id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,created_at) VALUES('T9|1|late|x|y',?,'late',?,'2026-10-21','T9',1,'NLH','50 / 100',?,?,3600,0,1)")
+    .run(m.id, 'hee', at('2026-10-21 01:00:00') / 1000, at('2026-10-21 02:00:00') / 1000);
+  const secs = async (d) => (await call(`/groups/summary?from=${d}&to=${d}`, 'GET', null, boss)).body.total_seconds;
+  assert.equal(await secs('2026-10-20'), 3600, 'after-midnight session counts on the night it started');
+  assert.equal(await secs('2026-10-21'), 0, 'not on the next calendar day');
+}
 console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, table insurance, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');
