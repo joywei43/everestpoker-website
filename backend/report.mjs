@@ -1,6 +1,6 @@
 // Operation Report: one row per business day over a date range, with totals.
 // Revenue and the Bad Beat Jackpot are entered by managers per day; everything else comes from PPM.
-import { str, localDate, dayStart } from './members.mjs';
+import { str, localDate, dayStart, liveSeats } from './members.mjs';
 import { businessDay, dayOpenFromRuns, runsAround } from './operation.mjs';
 
 const HOUR = 3600, DAY = 86400, TZ = 8 * HOUR, MAX_DAYS = 120;
@@ -189,11 +189,24 @@ export async function handleReport(req, env, path, now, reply, user, role) {
     if (!s.has_result && s.buy_in != null) row.missing_cash_out++;
     const lv = level(row, levelOf(s.blinds, s.game_type)); lv.play_seconds += s.active_seconds; lv.sessions++;
   }
+  // Players still at a table count too, on the day they sat down (time and buy-in so far, no cash-out yet).
+  const liveNow = await liveSeats(env);
+  for (const x of liveNow) {
+    if (x.started == null || x.started < start || x.started >= end) continue;
+    const d = dayOf(x.started); if (!d) continue;
+    const row = rows[d.day], who = x.member_id ? 'm' + x.member_id : 'r' + String(x.ref).toLowerCase();
+    const set = (seen[d.day] ||= { all: new Set(), members: new Set() });
+    set.all.add(who); everyone.add(who);
+    if (x.member_id) { set.members.add(who); everyMember.add(who); }
+    row.sessions++; row.play_seconds += x.active_seconds; row.rest_seconds += x.rest_seconds; row.buy_in += x.buy_in || 0; row.playing_now = (row.playing_now || 0) + 1;
+    const lv = level(row, levelOf(x.blinds, x.game_type)); lv.play_seconds += x.active_seconds; lv.sessions++;
+  }
   for (const d of days) if (seen[d.day]) { rows[d.day].visitors = seen[d.day].all.size; rows[d.day].members = seen[d.day].members.size; }
   // New = members whose first game ever falls on that business day (not when the record was created).
-  for (const { first } of await all(env.DB.prepare('SELECT MIN(start_at) first FROM play_sessions WHERE member_id IS NOT NULL GROUP BY member_id HAVING MIN(start_at)>=? AND MIN(start_at)<?').bind(start, end))) {
-    const d = dayOf(first); if (d) rows[d.day].new_members++;
-  }
+  const firstGame = new Map();
+  for (const { member_id, first } of await all(env.DB.prepare('SELECT member_id, MIN(start_at) first FROM play_sessions WHERE member_id IS NOT NULL GROUP BY member_id HAVING MIN(start_at)<?').bind(end))) firstGame.set(member_id, first);
+  for (const x of liveNow) if (x.member_id && x.started != null && (!firstGame.has(x.member_id) || x.started < firstGame.get(x.member_id))) firstGame.set(x.member_id, x.started); // first game still in progress
+  for (const first of firstGame.values()) { if (first < start || first >= end) continue; const d = dayOf(first); if (d) rows[d.day].new_members++; }
 
   // Totals across the range ("visits" adds up the days; "unique visitors" counts each player once).
   const list = days.map((d) => rows[d.day]);

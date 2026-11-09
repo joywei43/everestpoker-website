@@ -142,7 +142,7 @@ async function seatLinks(env, keys) {
 }
 
 // Players sitting in PPM right now, with the member each one counts for (by typed number/nickname or a seat link).
-async function liveSeats(env) {
+export async function liveSeats(env) {
   const ppmRow = await env.DB.prepare('SELECT data FROM ppm WHERE id=1').first();
   const live = [];
   for (const t of ppmRow ? JSON.parse(ppmRow.data) : []) {
@@ -416,8 +416,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         m.member_no, m.surname, m.middle_name, m.family_name, m.nickname, m.nationality, m.group_id AS current_group
       FROM play_sessions ps JOIN members m ON m.id=ps.member_id
       WHERE ps.start_at>=? AND ps.start_at<? GROUP BY ps.group_id, ps.member_id`).bind(r.start, r.end));
-    { // visit days counted by business day, not calendar date
-      const daysBy = new Map();
+    const daysBy = new Map(); // visit days counted by business day, not calendar date
+    {
       for (const x of await all(env.DB.prepare('SELECT group_id, member_id, start_at FROM play_sessions WHERE member_id IS NOT NULL AND start_at>=? AND start_at<?').bind(r.start, r.end))) {
         const k = (x.group_id || '') + '|' + x.member_id; if (!daysBy.has(k)) daysBy.set(k, new Set()); daysBy.get(k).add(r.dayOf(x.start_at));
       }
@@ -454,13 +454,21 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     // Players at a table right now count for their current group, shown separately until they leave.
     const live = await liveSeats(env);
     const groupOfMember = new Map(current.map((c) => [c.member_id, c.group_id]));
-    for (const x of live) {
-      if (!x.member_id) continue;
-      const b = bucket(groupOfMember.get(x.member_id) || null);
-      b.live_seconds = (b.live_seconds || 0) + x.active_seconds; b.playing_now = (b.playing_now || 0) + 1;
-      const p = b.players.get(x.member_id); if (p) { p.playing_now = { table: x.table, seat: x.seat, seconds: x.active_seconds }; }
-    }
     for (const row of play) { const b = bucket(row.group_id); const p = player(b, row); p.seconds += row.secs; p.sessions += row.sessions; p.days += row.days; p.last = row.last; b.seconds += row.secs; }
+    // Players still at a table count too (time so far), for their current group, when they sat down inside the range.
+    for (const x of live) {
+      if (!x.member_id || x.started == null || x.started < r.start || x.started >= r.end) continue;
+      const gid = groupOfMember.get(x.member_id) || null;
+      const b = bucket(gid);
+      b.live_seconds = (b.live_seconds || 0) + x.active_seconds; b.playing_now = (b.playing_now || 0) + 1;
+      const p = b.players.get(x.member_id); if (!p) continue;
+      p.playing_now = { table: x.table, seat: x.seat, seconds: x.active_seconds };
+      p.seconds += x.active_seconds; p.sessions += 1; b.seconds += x.active_seconds;
+      const k = (gid || '') + '|' + x.member_id, day = r.dayOf(x.started);
+      if (!daysBy.has(k)) daysBy.set(k, new Set());
+      if (!daysBy.get(k).has(day)) { daysBy.get(k).add(day); p.days += 1; }
+      p.last = Math.max(p.last || 0, x.started);
+    }
     for (const row of rw) { const b = bucket(row.group_id); const p = player(b, row); p.rewards += row.amt; b.rewards += row.amt; }
     const list = [...buckets.values()].map((b) => {
       const players = [...b.players.values()].sort((x, y) => y.seconds - x.seconds || (y.playing_now ? 1 : 0) - (x.playing_now ? 1 : 0) || x.member_no.localeCompare(y.member_no));
@@ -638,6 +646,14 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.member_id=? AND ps.start_at>=?`).bind(m.id, since).first();
       const rwSum = (since) => env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN approved_at IS NOT NULL THEN amount ELSE 0 END),0) amt, COALESCE(SUM(CASE WHEN approved_at IS NULL THEN amount ELSE 0 END),0) pending FROM rewards WHERE member_id=? AND voided=0 AND given_at>=?').bind(m.id, since).first();
       const [s30, sAll, r30, rAll] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0)]);
+      { // a game still in progress counts too (time and buy-in so far; no cash-out yet)
+        const seat = (await liveSeats(env)).find((x) => x.member_id === m.id && x.started != null);
+        if (seat) {
+          const bd = await businessDay(env, now);
+          const playedToday = await env.DB.prepare('SELECT 1 FROM play_sessions WHERE member_id=? AND start_at>=? LIMIT 1').bind(m.id, bd.start).first();
+          for (const st of [s30, sAll]) { st.sessions += 1; st.secs += seat.active_seconds; st.rest_secs += seat.rest_seconds; st.buy_in += seat.buy_in || 0; if (!playedToday) st.days += 1; }
+        }
+      }
       let share = null;
       if (m.group_id) {
         const g = await env.DB.prepare('SELECT COALESCE(SUM(active_seconds),0) secs FROM play_sessions WHERE group_id=? AND start_at>=?').bind(m.group_id, t30).first();

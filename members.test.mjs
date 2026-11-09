@@ -290,7 +290,9 @@ t4[1].sessions = [...(t4[1].sessions || []), { seatId: 1, memberId: 'ELLY', star
 t4[1].seats[0] = { ...t4[1].seats[0], status: 'idle', memberId: '', sessionStart: null };
 assert.equal((await call('/ppm', 'PUT', { version: ppmLive.version, tables: t4 }, boss.token)).status, 200);
 const ev7 = (await call('/members/EV-777777', 'GET', null, boss.token)).body;
-assert.equal(ev7.stats.all.secs, before6 + 9000, 'hours go to the linked member when the player leaves');
+// Before leaving, the member page already showed the game in progress (time so far); after leaving it is one finished 9000 s session.
+assert.ok(before6 > 0, 'game in progress shows on the member page');
+assert.equal(ev7.stats.all.secs, 9000, 'hours go to the linked member when the player leaves'); assert.equal(ev7.stats.all.sessions, 1, 'the live game became one finished session');
 // Master can undo a wrong link on a finished session; it returns to Unmatched.
 assert.equal((await call(`/sessions/${ev7.sessions[0].id}/unlink`, 'POST', {}, maria.token)).status, 403);
 assert.equal((await call(`/sessions/${ev7.sessions[0].id}/unlink`, 'POST', {}, boss.token)).status, 200);

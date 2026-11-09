@@ -606,7 +606,7 @@ async function viewGroups(view) {
   const max = Math.max(1, ...data.groups.map((g) => g.seconds));
   const current = data.groups.find((g) => (g.id || 'none') === sel) || data.groups[0];
   const setParams = (p) => { const n = new URLSearchParams({ from, to, g: sel, ...p }); location.hash = '#/playergroups?' + n.toString(); };
-  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Player groups</h1><p class="sub">Hours are finished PPM sessions (rest excluded), credited to the group the player belonged to when they sat down. Players still at a table are shown as "Playing now" and added when they leave.</p></div>
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Player groups</h1><p class="sub">Playing hours from PPM (rest excluded), credited to the group the player belonged to when they sat down. Players still at a table are included with their time so far.</p></div>
       <form id="rangeF" class="row"><label class="f">From<input type="date" name="from" value="${from}"></label><label class="f">To<input type="date" name="to" value="${to}"></label>
         <button class="btn" style="align-self:flex-end">Apply</button><button type="button" class="btn" data-days="30" style="align-self:flex-end">30 days</button><button type="button" class="btn" data-month style="align-self:flex-end">This month</button></form></div>
     <div class="grid">
@@ -623,7 +623,7 @@ async function viewGroups(view) {
         <div class="row between" style="width:100%;align-items:baseline"><span style="font-size:22px;font-weight:700">${hm(g.seconds)}</span><span class="small muted">${data.total_seconds ? Math.round(g.seconds / data.total_seconds * 100) : 0}% of total</span></div>
         <div class="bar" style="width:100%;flex:none"><i style="width:${Math.round(g.seconds / max * 100)}%"></i></div>
         <div class="small muted">${g.member_count} member${g.member_count === 1 ? '' : 's'} · ${g.player_count} played${g.owner ? ' · owner ' + esc(g.owner) : ''}</div>
-        ${g.playing_now ? `<div class="small" style="color:var(--green);font-weight:600">● ${g.playing_now} at a table now · ${hm(g.live_seconds)} so far</div>` : ''}
+        ${g.playing_now ? `<div class="small" style="color:var(--green);font-weight:600">● ${g.playing_now} at a table now · ${hm(g.live_seconds)} so far (included)</div>` : ''}
         <div class="row between small" style="width:100%;border-top:1px solid var(--line2);padding-top:8px"><span class="muted">Rewards</span><span><b>${peso(g.rewards)}</b> <span class="muted">· ${perHour(g.rewards, g.seconds)}/h</span></span></div>
       </button>`).join('')}
     </div>
@@ -1036,7 +1036,7 @@ async function viewReport(view) {
         <td class="num">${r.revenue == null ? (r.in_progress ? '<span class="chip blue" title="Still open — enter revenue after closing">In progress</span>' : open ? '<span class="chip amber">Enter</span>' : '—') : '<b>' + peso(r.revenue) + '</b>' + (Object.keys(r.table_revenue).length ? `<div class="small muted" style="white-space:nowrap">${Object.entries(r.table_revenue).sort().map(([k, v]) => esc(k) + ' ' + peso(v)).join(' · ')}</div>` : '')}</td>
         <td class="num">${r.bbj_amount == null ? (open && !r.in_progress && J.balance ? '<span class="chip amber">Enter</span>' : '—') : peso2(r.bbj_amount)}</td>
         <td>${r.tables.map(esc).join(' ') || '—'}</td><td class="num">${hm(r.table_seconds)}</td><td class="num">${hm(r.operating_seconds)}</td>
-        <td class="num">${r.visitors}</td><td class="num">${r.new_members || ''}</td><td class="num">${hm(r.play_seconds)}</td><td class="num">${peso(r.buy_in)}</td><td class="num">${peso(r.cash_out)}</td>
+        <td class="num">${r.visitors}${r.playing_now ? `<div class="small" style="color:var(--green)">● ${r.playing_now} playing</div>` : ''}</td><td class="num">${r.new_members || ''}</td><td class="num">${hm(r.play_seconds)}</td><td class="num">${peso(r.buy_in)}</td><td class="num">${peso(r.cash_out)}</td>
         <td class="small">${Object.entries(r.levels).filter(([, v]) => v.table_seconds).map(([k, v]) => `<span style="white-space:nowrap">${esc(k)} · ${hm(v.table_seconds)}</span>`).join('<br>') || '—'}</td>
         <td class="small muted">${esc(r.updated_by || '')}</td></tr>`; }).join('')}
     </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td class="num">${J.totals && J.totals.days ? peso2(J.totals.amount) : '—'}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>

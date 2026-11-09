@@ -1,7 +1,7 @@
 // Daily operation: business day, live tables, hours, visitors, buy-in and cash-out.
 // Business day D starts at 12:00 Manila, or earlier if a table opened (or a session started) between 06:00 and 12:00 that day.
 // It ends when business day D+1 starts. Sessions belong to the business day in which they started.
-import { str, localDate, dayStart, ppmTime, normNo, liveSeatPlayers, displayName } from './members.mjs';
+import { str, localDate, dayStart, ppmTime, normNo, liveSeatPlayers, liveSeats, displayName } from './members.mjs';
 
 const HOUR = 3600, DAY = 86400;
 const all = async (stmt) => (await stmt.all()).results || [];
@@ -128,6 +128,10 @@ export async function handleOperation(req, env, now, reply, role) {
   if (bd.is_today) for (const r of liveRefs) if (!finishedRefs.has(r)) liveNew++;
   const matched = vis.filter((v) => v.member_no).length;
   const newMembers = await env.DB.prepare('SELECT COUNT(*) n FROM (SELECT member_id FROM play_sessions WHERE member_id IS NOT NULL GROUP BY member_id HAVING MIN(start_at)>=? AND MIN(start_at)<?)').bind(bd.start, bd.end).first(); // first game ever today
+  if (bd.is_today) { // first game ever still in progress
+    const liveIds = [...new Set((await liveSeats(env)).filter((x) => x.member_id && x.started != null && x.started >= bd.start).map((x) => x.member_id))];
+    for (const id of liveIds) if (!(await env.DB.prepare('SELECT 1 FROM play_sessions WHERE member_id=? LIMIT 1').bind(id).first())) newMembers.n++;
+  }
 
   // Today's visitors: one row per player, finished sessions plus anyone still at a table.
   const people = new Map();

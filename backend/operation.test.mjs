@@ -108,7 +108,8 @@ const r2 = rep.days[1];
 assert.equal(r2.revenue, 85000); assert.deepEqual(r2.table_revenue, { T1: 50000, T3: 35000 }); assert.equal(r2.bbj_main, 273962.25); assert.equal(r2.bbj_reserve, 74555.25); assert.equal(r2.updated_by, 'Boss');
 assert.equal(r2.table_seconds, 19 * 3600 + 8 * 3600, 'T1 13:00 → 08:00 when the night game ended, T3 8 h');
 assert.deepEqual(r2.tables, ['T1', 'T3']);
-assert.equal(r2.visitors, 4); assert.equal(r2.members, 2); assert.equal(r2.sessions, 4); assert.equal(r2.buy_in, 36000); assert.equal(r2.cash_out, 32000);
+// Players still seated (000001 and Ann since 11-02) count too: +1 visitor (Ann), +2 sessions, their buy-ins so far, no cash-out yet.
+assert.equal(r2.visitors, 5); assert.equal(r2.members, 2); assert.equal(r2.sessions, 6); assert.equal(r2.buy_in, 36000 + 15000 + 8000); assert.equal(r2.cash_out, 32000); assert.equal(r2.playing_now, 2);
 assert.equal(r2.levels['50 / 100 NLH'].table_seconds, r2.table_seconds);
 assert.equal(rep.totals.revenue, 85000); assert.equal(rep.totals.entered_days, 1);
 { const t3 = rep.totals.tables.T3; assert.equal(t3.revenue, 35000); assert.equal(t3.table_seconds, 8 * 3600); assert.equal(t3.days, 1); assert.equal(t3.bb_hours, 800, '8 h × BB 100'); }
