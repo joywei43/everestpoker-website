@@ -61,6 +61,8 @@ export function lineupMessage(selected, lineupTables, tables) {
   const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' })[n % 10] || 'TH');
   const open = tables.filter((t) => t.open);
   const allFull = open.length > 0 && open.every((t) => t.players >= t.capacity);
+  // Level and game come from PPM (the live table) when the lineup has them; the waiting-list copy can lag behind a table move.
+  selected = selected.map((t) => { const l = (lineupTables || []).find((x) => x.name === t.id); return l && l.blinds && l.game_type ? { ...t, stakes: l.blinds, game: l.game_type } : t; });
   const games = [...new Set(selected.map((t) => `${bl(t.stakes)} ${t.game}`))];
   const L = ['🔥 THE ACTION IS ON AT EVEREST POKER! 🃏🔥', 'Check our Latest Update on website:', 'www.everestpokerroom.com/waiting-list', '',
     ` ${selected.length} TABLE${selected.length === 1 ? '' : 'S'} ONGOING – ${games.join(' & ')}`, '👥 Current Lineup:'];
