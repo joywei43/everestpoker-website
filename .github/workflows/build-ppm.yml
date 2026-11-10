@@ -1,6 +1,6 @@
 # Builds PPM (joywei43/everwin-ppm-system, main branch) and publishes it to /ppm/ on this site.
 # Runs when this file changes, or by hand: Actions → Build PPM → Run workflow.
-# Last requested: 2026-11-07T11:41:55Z open the running table on load
+# Last requested: 2026-11-10T11:10:05Z room layout map
 name: Build PPM
 
 on:
