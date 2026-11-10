@@ -756,6 +756,36 @@ function bbjDialog(view, d) {
   };
   dlg.showModal(); f.main.focus();
 }
+// Today's visitors, optionally for one table only: that table's sessions, buy-in, cash-out and W/L.
+let visitorTable = '';
+function visitorsHtml(d) {
+  const tablesSeen = [...new Set(d.visitor_list.flatMap((p) => p.segments.map((g) => g.table)))].sort();
+  const vt = tablesSeen.includes(visitorTable) ? visitorTable : '';
+  const rows = !vt ? d.visitor_list : d.visitor_list.map((p) => {
+    const segs = p.segments.filter((g) => g.table === vt); if (!segs.length) return null;
+    const done = segs.filter((g) => g.cash_out != null), add = (list, k) => list.reduce((a, g) => a + (g[k] || 0), 0);
+    return { ...p, segments: segs, sessions: segs.length, play_seconds: add(segs, 'active_seconds'), rest_seconds: add(segs, 'rest_seconds'), buy_in: add(segs, 'buy_in'),
+      cash_out: add(done, 'cash_out'), with_cash_out: done.length, busted: done.filter((g) => g.busted).length, missing_cash_out: segs.filter((g) => !g.live && g.cash_out == null && g.buy_in != null).length,
+      win_loss: done.length ? add(done, 'cash_out') - add(done, 'buy_in') : null, tables: [vt], playing_now: p.playing_now && p.playing_now.table === vt ? p.playing_now : null };
+  }).filter(Boolean);
+  const sum = (k) => rows.reduce((a, p) => a + (p[k] || 0), 0);
+  const anyWl = rows.some((p) => p.win_loss != null), wl = rows.reduce((a, p) => a + (p.win_loss || 0), 0);
+  const liveSegs = rows.flatMap((p) => p.segments.filter((g) => g.live)), live = liveSegs.length, liveBuy = liveSegs.reduce((a, g) => a + (g.buy_in || 0), 0);
+  return `    <section class="card" id="visCard"><div class="row between" style="margin-bottom:10px"><h2>${d.is_today ? "Today's visitors" : 'Visitors'} <span class="small muted" style="font-weight:400">· ${rows.length} players${vt ? ' at ' + esc(vt) : ''}</span></h2><span class="small muted">Playing hours and buy-in include players still at a table · cash-out is entered at Leave</span></div>
+      ${tablesSeen.length > 1 ? `<div class="row" style="gap:8px;margin:-2px 0 12px;flex-wrap:wrap"><span class="small muted">Table</span><div class="seg" role="group" aria-label="Filter by table"><button type="button" data-vt="" aria-pressed="${!vt}">All</button>${tablesSeen.map((x) => `<button type="button" data-vt="${esc(x)}" aria-pressed="${vt === x}">${esc(x)}</button>`).join('')}</div>
+        ${vt ? `<span class="small">Buy-in <b>${peso(sum('buy_in'))}</b> · Cash-out <b>${peso(sum('cash_out'))}</b> · Players W/L <b style="color:${wl >= 0 ? 'var(--green)' : 'var(--red)'}">${anyWl ? signedPeso(wl) : '—'}</b>${live ? ` · <span class="muted">${live} still playing (${peso(liveBuy)} buy-in, no cash-out yet)</span>` : ''}</span>` : ''}</div>` : ''}
+      <div class="tbl"><table><thead><tr><th style="width:52px"><span class="sr">Photo</span></th><th>Member ID</th><th>Name</th><th>Sessions</th><th class="num">Playing hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Tables</th><th>Now</th></tr></thead><tbody>
+      ${rows.map((p) => `<tr ${p.member_no ? `class="click" data-no="${esc(p.member_no)}"` : ''}><td>${avatar({ ref: p.ref, status: p.playing_now ? p.playing_now.status : 'left', member: p.member_no ? { member_no: p.member_no, nickname: p.nickname, name: p.name, has_photo: p.has_photo } : null }, 36)}</td><td class="mono">${p.member_no ? esc(p.member_no) : '<span class="chip amber">Not matched</span>'}</td>
+        <td><b>${esc(p.nickname || p.name)}</b>${p.nickname && p.name && p.name !== p.nickname ? ` <span class="small muted">${esc(p.name)}</span>` : ''}</td>
+        <td class="small" style="white-space:nowrap"><b>${p.sessions}</b>${p.segments.map((g) => `<div class="muted">${esc(g.table)} #${g.seat} ${g.start ? time(g.start) : ''}–${g.live ? 'now' : time(g.end)} · ${hhmm(g.active_seconds)}${g.rest_seconds ? ' (rest ' + hhmm(g.rest_seconds) + ')' : ''}${g.cash_out != null ? ' · ' + signedPeso(g.cash_out - (g.buy_in || 0)) : ''}</div>`).join('')}</td>
+        <td class="num">${playTime(p.play_seconds, p.rest_seconds)}</td><td class="num">${peso(p.buy_in)}</td>
+        <td class="num">${p.with_cash_out ? peso(p.cash_out) + (p.busted ? ' <span class="chip red">Busted</span>' : '') : '—'}${p.missing_cash_out ? `<div class="small" style="color:var(--amber)">${p.missing_cash_out} missing</div>` : ''}</td>
+        <td class="num" style="font-weight:600;color:${p.win_loss == null ? 'inherit' : p.win_loss >= 0 ? 'var(--green)' : 'var(--red)'}">${p.win_loss == null ? '—' : signedPeso(p.win_loss)}</td>
+        <td>${p.tables.map(esc).join(' ')}</td>
+        <td>${p.playing_now ? `<span class="chip ${p.playing_now.status === 'rest' ? 'amber' : 'green'}">${esc(p.playing_now.table)} #${p.playing_now.seat}${p.playing_now.status === 'rest' ? ' · break' : ''}</span>` : `<span class="small muted">Left ${p.last_at ? time(p.last_at) : ''}</span>`}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">No visitors yet.</td></tr>'}
+      </tbody>${rows.length ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td colspan="3">Total · ${rows.length} players</td><td>${sum('sessions')}</td><td class="num">${playTime(sum('play_seconds'), sum('rest_seconds'))}</td><td class="num">${peso(sum('buy_in'))}</td><td class="num">${peso(sum('cash_out'))}</td><td class="num" style="color:${wl >= 0 ? 'var(--green)' : 'var(--red)'}">${anyWl ? signedPeso(wl) : '—'}</td><td></td><td></td></tr></tfoot>` : ''}</table></div>
+      <p class="small muted" style="margin:8px 0 0">W/L counts only sessions that have a cash-out. Click a member to open their profile.</p></section>`;
+}
 async function viewOperation(view) {
   clearTimeout(operationTimer);
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -789,24 +819,17 @@ async function viewOperation(view) {
       ${big('Total cash-out', peso(mo.cash_out), `${mo.sessions_with_cash_out} sessions${mo.busted ? ' · ' + mo.busted + ' busted' : ''}${mo.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${mo.missing_cash_out} missing (${peso(mo.buy_in_without_cash_out)} buy-in)</span>` : ''}`)}
       ${big('Playing hours', `<span class="mono">${hhmm(pl.finished_seconds + pl.live_seconds)}</span>`, `<span class="mono">${restLine(pl.finished_seconds + pl.live_seconds, pl.rest_seconds + (pl.live_rest_seconds || 0))}</span><br>${hhmm(pl.finished_seconds)} finished${pl.live_seconds ? ' + ' + hhmm(pl.live_seconds) + ' at a table now' : ''}`)}
     </div>
-    <section class="card"><div class="row between" style="margin-bottom:10px"><h2>${d.is_today ? "Today's visitors" : 'Visitors'} <span class="small muted" style="font-weight:400">· ${d.visitor_list.length} players</span></h2><span class="small muted">Playing hours and buy-in include players still at a table · cash-out is entered at Leave</span></div>
-      <div class="tbl"><table><thead><tr><th style="width:52px"><span class="sr">Photo</span></th><th>Member ID</th><th>Name</th><th>Sessions</th><th class="num">Playing hours</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Tables</th><th>Now</th></tr></thead><tbody>
-      ${d.visitor_list.map((p) => `<tr ${p.member_no ? `class="click" data-no="${esc(p.member_no)}"` : ''}><td>${avatar({ ref: p.ref, status: p.playing_now ? p.playing_now.status : 'left', member: p.member_no ? { member_no: p.member_no, nickname: p.nickname, name: p.name, has_photo: p.has_photo } : null }, 36)}</td><td class="mono">${p.member_no ? esc(p.member_no) : '<span class="chip amber">Not matched</span>'}</td>
-        <td><b>${esc(p.nickname || p.name)}</b>${p.nickname && p.name && p.name !== p.nickname ? ` <span class="small muted">${esc(p.name)}</span>` : ''}</td>
-        <td class="small" style="white-space:nowrap"><b>${p.sessions}</b>${p.segments.map((g) => `<div class="muted">${esc(g.table)} #${g.seat} ${g.start ? time(g.start) : ''}–${g.live ? 'now' : time(g.end)} · ${hhmm(g.active_seconds)}${g.rest_seconds ? ' (rest ' + hhmm(g.rest_seconds) + ')' : ''}${g.cash_out != null ? ' · ' + signedPeso(g.cash_out - (g.buy_in || 0)) : ''}</div>`).join('')}</td>
-        <td class="num">${playTime(p.play_seconds, p.rest_seconds)}</td><td class="num">${peso(p.buy_in)}</td>
-        <td class="num">${p.with_cash_out ? peso(p.cash_out) + (p.busted ? ' <span class="chip red">Busted</span>' : '') : '—'}${p.missing_cash_out ? `<div class="small" style="color:var(--amber)">${p.missing_cash_out} missing</div>` : ''}</td>
-        <td class="num" style="font-weight:600;color:${p.win_loss == null ? 'inherit' : p.win_loss >= 0 ? 'var(--green)' : 'var(--red)'}">${p.win_loss == null ? '—' : signedPeso(p.win_loss)}</td>
-        <td>${p.tables.map(esc).join(' ')}</td>
-        <td>${p.playing_now ? `<span class="chip ${p.playing_now.status === 'rest' ? 'amber' : 'green'}">${esc(p.playing_now.table)} #${p.playing_now.seat}${p.playing_now.status === 'rest' ? ' · break' : ''}</span>` : `<span class="small muted">Left ${p.last_at ? time(p.last_at) : ''}</span>`}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">No visitors yet.</td></tr>'}
-      </tbody>${d.visitor_list.length ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td colspan="3">Total · ${d.visitor_list.length} players</td><td>${d.visitor_list.reduce((a, p) => a + p.sessions, 0)}</td><td class="num">${playTime(d.visitor_list.reduce((a, p) => a + p.play_seconds, 0), d.visitor_list.reduce((a, p) => a + p.rest_seconds, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.buy_in, 0))}</td><td class="num">${peso(d.visitor_list.reduce((a, p) => a + p.cash_out, 0))}</td><td></td><td></td><td></td></tr></tfoot>` : ''}</table></div>
-      <p class="small muted" style="margin:8px 0 0">W/L counts only sessions that have a cash-out. Click a member to open their profile.</p></section>
+    ${visitorsHtml(d)}
     ${isMaster() ? `<section class="card" id="runsCard"><div class="row between"><h2>Table records <span class="chip dark small">Master</span></h2><span class="small muted">Fix a table opened by mistake or wrong open/close times. Changes are logged.</span></div><div id="runs" class="small muted" style="margin-top:10px">Loading…</div></section>
     <dialog id="rund"><form method="dialog" id="runf"><h2 id="runTitle"></h2><div class="form"><label class="f">Opened<input type="datetime-local" name="opened" required></label><label class="f">Closed<input type="datetime-local" name="closed"></label></div>
       <p class="small muted" style="margin:0">Leave Closed empty only while the table is still open.</p><div id="runMsg"></div><div class="row" style="justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="runSave">Save</button></div></form></dialog>` : ''}`;
   if (isMaster()) loadRuns(view, d.day);
   loadPhotos(view);
-  view.querySelectorAll('tr[data-no]').forEach((tr) => tr.onclick = () => { location.hash = '#/member/' + encodeURIComponent(tr.dataset.no); });
+  const bindVisitors = () => {
+    view.querySelectorAll('tr[data-no]').forEach((tr) => tr.onclick = () => { location.hash = '#/member/' + encodeURIComponent(tr.dataset.no); });
+    view.querySelectorAll('[data-vt]').forEach((b) => b.onclick = () => { visitorTable = b.dataset.vt; view.querySelector('#visCard').outerHTML = visitorsHtml(d); loadPhotos(view); bindVisitors(); });
+  };
+  bindVisitors();
   const be = view.querySelector('#bbjEdit');
   if (be) be.onclick = () => bbjDialog(view, d);
   const find = (key) => { const [tn, seat] = key.split('|'); const t = tables.find((x) => x.name === tn); return t && (t.players || []).find((p) => String(p.seat) === seat); };
