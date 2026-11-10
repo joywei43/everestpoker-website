@@ -1,6 +1,6 @@
 // Operation Report: one row per business day over a date range, with totals.
 // Revenue and the Bad Beat Jackpot are entered by managers per day; everything else comes from PPM.
-import { str, localDate, dayStart, liveSeats } from './members.mjs';
+import { str, localDate, dayStart, liveSeats, displayName } from './members.mjs';
 import { businessDay, dayOpenFromRuns, runsAround } from './operation.mjs';
 
 const HOUR = 3600, DAY = 86400, TZ = 8 * HOUR, MAX_DAYS = 120;
@@ -100,7 +100,7 @@ export async function handleReport(req, env, path, now, reply, user, role) {
       env.DB.prepare("INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,'report.bbj_opening',NULL,?)").bind(now, str(user, 60), `BBJ opening balance before ${b.day}: Main ${(main / 100).toFixed(2)}, 1st Reserved ${(reserve / 100).toFixed(2)}`)]);
     return reply({ ok: true });
   }
-  if (path !== '/report' || method !== 'GET') return null;
+  if ((path !== '/report' && path !== '/report/table') || method !== 'GET') return null;
 
   const url = new URL(req.url);
   const current = await businessDay(env, now);
@@ -110,6 +110,7 @@ export async function handleReport(req, env, path, now, reply, user, role) {
   if (to > today) to = today;
   if (from > to) [from, to] = [to, from];
   if ((dayStart(to) - dayStart(from)) / DAY >= MAX_DAYS) from = addDays(to, -(MAX_DAYS - 1));
+  if (path === '/report/table') return tableReport(env, url, now, reply, today, from, to);
 
   const after = addDays(to, 1);
   const opens = await dayOpenings(env, from, after);
@@ -295,4 +296,74 @@ export async function bbjLedger(env, from, to) {
     balance: { main: p(main), reserve: p(reserve), as_of: lastDay || opening.day },
     rows, totals: t
   };
+}
+
+// One table over a range of business days: who played, their group when they sat down, playing hours and share, buy-in, and the table's rake.
+// Players still at the table count with their time and buy-in so far. One row per player (sessions merged); groups by players, then hours.
+async function tableReport(env, url, now, reply, today, from, to) {
+  const table = str(url.searchParams.get('table') || '', 10);
+  if (!/^[A-Za-z0-9 _-]{1,10}$/.test(table)) return reply({ error: 'Pick a table.' }, 400);
+  const after = addDays(to, 1);
+  const opens = await dayOpenings(env, from, after);
+  const days = []; for (let d = from; d <= to; d = addDays(d, 1)) days.push({ day: d, start: opens[d], end: opens[addDays(d, 1)] });
+  const start = opens[from], end = Math.min(opens[after], now);
+  // Table time.
+  const runs = await all(env.DB.prepare('SELECT opened_at,closed_at,game_type,blinds FROM table_runs WHERE table_name=? AND opened_at<? AND (closed_at IS NULL OR closed_at>?) ORDER BY opened_at').bind(table, end, start));
+  let tableSeconds = 0, first = null, last = null, open = false; const lv = {}, secsByDay = {};
+  for (const r of runs) {
+    const s0 = Math.max(r.opened_at, start), e0 = Math.min(r.closed_at == null ? now : r.closed_at, end);
+    if (e0 <= s0) continue;
+    tableSeconds += e0 - s0; first = first == null ? s0 : Math.min(first, s0); last = Math.max(last || 0, e0);
+    if (r.closed_at == null) open = true;
+    const name = levelOf(r.blinds, r.game_type); lv[name] = (lv[name] || 0) + (e0 - s0);
+    for (const d of days) { const a = Math.max(s0, d.start), b = Math.min(e0, d.end); if (b > a) secsByDay[d.day] = (secsByDay[d.day] || 0) + (b - a); }
+  }
+  // Groups.
+  const gname = {};
+  for (const g of await all(env.DB.prepare('SELECT g.id,g.name,l.label FROM member_groups g LEFT JOIN group_labels l ON l.group_id=g.id'))) gname[g.id] = { name: g.name, label: g.label || null };
+  // Players: finished sessions, then players still seated.
+  const people = new Map();
+  const person = (key, base) => { if (!people.has(key)) people.set(key, { ...base, seconds: 0, rest_seconds: 0, buy_in: 0, sessions: 0, segments: [], groupSecs: {} }); return people.get(key); };
+  const credit = (p, group, secs) => { p.groupSecs[group || ''] = (p.groupSecs[group || ''] || 0) + secs; };
+  const rows = await all(env.DB.prepare(`SELECT ps.member_id,ps.member_ref,ps.group_id,ps.seat,ps.start_at,ps.end_at,ps.active_seconds,ps.rest_seconds,ps.buy_in,m.member_no,m.nickname,m.surname,m.middle_name,m.family_name
+    FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id WHERE ps.table_name=? AND ps.start_at>=? AND ps.start_at<? ORDER BY ps.start_at`).bind(table, start, end));
+  const sessions = [];
+  for (const r of rows) {
+    const p = person(r.member_id ? 'm' + r.member_id : 'r' + r.member_ref.toLowerCase(), { member_no: r.member_no || null, nickname: r.member_id ? r.nickname || '' : r.member_ref, name: r.member_id ? displayName(r) : '', matched: !!r.member_id });
+    p.seconds += r.active_seconds; p.rest_seconds += r.rest_seconds; p.buy_in += r.buy_in || 0; p.sessions++; credit(p, r.group_id, r.active_seconds);
+    p.segments.push({ seat: r.seat, start: r.start_at, end: r.end_at, live: false });
+    sessions.push({ group: r.group_id || '', key: p, secs: r.active_seconds, buy: r.buy_in || 0 });
+  }
+  const live = to === today ? (await liveSeats(env)).filter((x) => x.table === table && x.started != null && x.started >= start && x.started < end) : [];
+  const liveIds = [...new Set(live.filter((x) => x.member_id).map((x) => x.member_id))];
+  const cur = {};
+  for (let i = 0; i < liveIds.length; i += 45) {
+    const chunk = liveIds.slice(i, i + 45);
+    for (const m of await all(env.DB.prepare(`SELECT id,member_no,nickname,surname,middle_name,family_name,group_id FROM members WHERE id IN (${chunk.map(() => '?').join(',')})`).bind(...chunk))) cur[m.id] = m;
+  }
+  for (const x of live) {
+    const m = x.member_id ? cur[x.member_id] : null;
+    const p = person(m ? 'm' + m.id : 'r' + String(x.ref).toLowerCase(), { member_no: m ? m.member_no : null, nickname: m ? m.nickname || '' : x.ref, name: m ? displayName(m) : '', matched: !!m });
+    p.seconds += x.active_seconds; p.rest_seconds += x.rest_seconds; p.buy_in += x.buy_in || 0; p.sessions++; credit(p, m ? m.group_id : null, x.active_seconds);
+    p.segments.push({ seat: x.seat, start: x.started, end: null, live: true });
+    sessions.push({ group: (m && m.group_id) || '', key: p, secs: x.active_seconds, buy: x.buy_in || 0 });
+  }
+  const total = [...people.values()].reduce((a, p) => a + p.seconds, 0);
+  const players = [...people.values()].map((p) => {
+    const gs = Object.entries(p.groupSecs).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+    return { member_no: p.member_no, nickname: p.nickname, name: p.name, matched: p.matched, seconds: p.seconds, rest_seconds: p.rest_seconds, buy_in: p.buy_in, sessions: p.sessions,
+      share: total ? p.seconds / total : 0, groups: gs.map((g) => (g ? (gname[g] || { name: g }).name : 'No group')), playing_now: p.segments.some((g) => g.live),
+      segments: p.segments.sort((a, b) => a.start - b.start) };
+  }).sort((a, b) => b.seconds - a.seconds || a.nickname.localeCompare(b.nickname));
+  const gmap = {};
+  for (const x of sessions) { const g = (gmap[x.group] ||= { id: x.group, name: x.group ? (gname[x.group] || { name: x.group }).name : 'No group', label: x.group && gname[x.group] ? gname[x.group].label : null, who: new Set(), seconds: 0, buy_in: 0 }); g.who.add(x.key); g.seconds += x.secs; g.buy_in += x.buy; }
+  const groups = Object.values(gmap).map((g) => ({ id: g.id, name: g.name, label: g.label, players: g.who.size, seconds: g.seconds, buy_in: g.buy_in, share: total ? g.seconds / total : 0 }))
+    .sort((a, b) => b.players - a.players || b.seconds - a.seconds);
+  // Rake entered for this table; per table hour only over days that have it.
+  let rake = 0, rakeDays = 0, rakeSecs = 0;
+  for (const e of await all(env.DB.prepare('SELECT day,revenue FROM table_revenue WHERE table_name=? AND day>=? AND day<=?').bind(table, from, to))) { rake += e.revenue; rakeDays++; rakeSecs += secsByDay[e.day] || 0; }
+  return reply({ table, from, to, today, as_of: now, still_open: open, first_open: first, last_close: open ? null : last,
+    table_seconds: tableSeconds, days_open: Object.keys(secsByDay).length, levels: Object.entries(lv).sort((a, b) => b[1] - a[1]).map(([name, seconds]) => ({ name, seconds })),
+    totals: { players: players.length, sessions: sessions.length, seconds: total, buy_in: players.reduce((a, p) => a + p.buy_in, 0), playing_now: live.length },
+    groups, players, rake: rakeDays ? { amount: rake, days: rakeDays, per_hour: rakeSecs ? rake / (rakeSecs / 3600) : null } : null });
 }

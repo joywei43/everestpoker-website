@@ -281,4 +281,25 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
   assert.equal(await secs('2026-10-20'), 3600, 'after-midnight session counts on the night it started');
   assert.equal(await secs('2026-10-21'), 0, 'not on the next calendar day');
 }
+{ // Table report: one table, players merged, group at sit-down, share of playing hours, buy-in and rake; groups by players then hours.
+  const m = sql.prepare("SELECT member_id id FROM play_sessions WHERE session_key='T9|1|late|x|y'").get();
+  sql.prepare("INSERT INTO play_sessions(session_key,member_id,member_ref,group_id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,buy_in,created_at) VALUES('T9|2|late2|x|y',?,'late',?,'2026-10-20','T9',2,'NLH','50 / 100',?,?,1800,0,5000,1)")
+    .run(m.id, 'hee', at('2026-10-20 21:00:00') / 1000, at('2026-10-20 21:30:00') / 1000);
+  sql.prepare("INSERT INTO play_sessions(session_key,member_id,member_ref,group_id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,buy_in,created_at) VALUES('T9|5|Walk-in|x|y',NULL,'Walk-in',NULL,'2026-10-20','T9',5,'NLH','50 / 100',?,?,5400,0,20000,1)")
+    .run(at('2026-10-20 22:00:00') / 1000, at('2026-10-20 23:30:00') / 1000);
+  assert.equal((await call('/report/table?table=T9&from=2026-10-20&to=2026-10-20', 'GET', null, maria3)).status, 403, 'managers only');
+  assert.equal((await call('/report/table?table=&from=2026-10-20&to=2026-10-20', 'GET', null, boss)).status, 400);
+  const tr = (await call('/report/table?table=T9&from=2026-10-20&to=2026-10-20', 'GET', null, boss)).body;
+  assert.equal(tr.table_seconds, 7 * 3600, 'T9 20:00 → 03:00 on the night it opened');
+  assert.equal(tr.players.length, 2, 'two sessions of the same member merge into one row');
+  const me = tr.players.find((p) => p.matched);
+  assert.equal(me.seconds, 3600 + 1800); assert.equal(me.sessions, 2); assert.equal(me.segments.length, 2); assert.equal(me.buy_in, 5000);
+  assert.deepEqual(tr.groups.map((g) => [g.name, g.players, g.seconds]), [['Hee', 1, 5400], ['No group', 1, 5400]].sort((a, b) => b[1] - a[1] || b[2] - a[2]));
+  assert.equal(Math.round(tr.players.reduce((a, p) => a + p.share, 0) * 1000), 1000, 'shares add up to 100%');
+  assert.equal(tr.totals.seconds, 10800); assert.equal(tr.totals.buy_in, 25000); assert.equal(tr.rake, null);
+  assert.equal((await call('/report/day/2026-10-20', 'PUT', { tables: { T9: '14,000' } }, boss)).status, 200);
+  const tr2 = (await call('/report/table?table=T9&from=2026-10-20&to=2026-10-20', 'GET', null, boss)).body;
+  assert.deepEqual(tr2.rake, { amount: 14000, days: 1, per_hour: 2000 }, 'rake 14,000 over 7 table hours');
+  assert.equal((await call('/report/table?table=T9&from=2026-10-21&to=2026-10-21', 'GET', null, boss)).body.players.length, 0);
+}
 console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, table insurance, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');

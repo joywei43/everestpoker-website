@@ -161,7 +161,7 @@ function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0
 function render() {
   if (!token) return renderLogin();
   const { page } = parseHash();
-  const link = (p, label, extra = '') => `<a href="#/${p}" ${page === p || (p === 'members' && page === 'member') ? 'aria-current="page"' : ''}>${label}${extra}</a>`;
+  const link = (p, label, extra = '') => `<a href="#/${p}" ${page === p || (p === 'members' && page === 'member') || (p === 'operationreport' && page === 'tablereport') ? 'aria-current="page"' : ''}>${label}${extra}</a>`;
   root.innerHTML = `<div class="app">
     <nav class="side" aria-label="Main">
       <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Admin console</small></div></div>
@@ -186,7 +186,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { insurance: isManager() ? viewInsurance : viewMembers, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
+  const pages = { tablereport: isManager() ? viewTableReport : viewMembers, insurance: isManager() ? viewInsurance : viewMembers, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -855,6 +855,87 @@ const ACTION_LABELS = {
   'reward.add': ['Reward', 'green'], 'reward.approve': ['Approved', 'green'], 'reward.void': ['Voided', 'red'],
   'table.run': ['Table record fix', 'red'], 'report.day': ['Report entry', 'blue'], 'report.bbj_payout': ['BBJ payout', 'red'], 'report.bbj_opening': ['BBJ opening balance', 'blue'], 'promotion.create': ['Promotion added', 'green'], 'promotion.update': ['Promotion edited', 'blue'], 'telegram.copy': ['Telegram post', 'blue']
 };
+// ---------- Table report: one table's players, groups, playing hours and share, buy-in and rake ----------
+const tableRows = (r) => r.players.map((p, i) => ({ i: i + 1, name: p.nickname || p.name, full: p.name && p.name.toUpperCase() !== (p.nickname || '').toUpperCase() ? p.name : '', group: p.groups.join(' / '),
+  when: p.segments.map((g) => `#${g.seat} · ${time(g.start)}–${g.live ? 'now' : time(g.end)}`), live: p.playing_now, hours: hm(p.seconds), share: (p.share * 100).toFixed(1) + '%', buy: peso(p.buy_in) }));
+async function viewTableReport(view) {
+  const q = new URLSearchParams(location.hash.split('?')[1] || '');
+  const table = q.get('table') || 'T1', from = q.get('from') || today(), to = q.get('to') || from;
+  const go = (p) => { location.hash = '#/tablereport?' + new URLSearchParams({ table, from, to, ...p }); };
+  const r = await api('/report/table?' + new URLSearchParams({ table, from, to }));
+  const T = r.totals, tables = [...new Set(['T1', 'T2', 'T3', 'T5', table])];
+  const period = r.from === r.to ? `Business day ${r.from}` : `${r.from} → ${r.to} · ${r.days_open} day${r.days_open === 1 ? '' : 's'} open`;
+  const opened = !r.first_open ? 'did not run' : [r.from === r.to ? 'opened ' + time(r.first_open) + (!r.still_open && r.last_close ? ' → closed ' + time(r.last_close) : '') : '', r.still_open ? '<b style="color:var(--green)">still running</b>' + (T.playing_now ? ` (${T.playing_now} seated)` : '') : ''].filter(Boolean).join(' · ');
+  const rows = tableRows(r);
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><a class="small" href="#/operationreport?${new URLSearchParams({ from: r.from, to: r.to })}">‹ Operation Report</a><h1>${esc(r.table)} report</h1>
+      <p class="sub">${period} · ${r.levels.map((l) => esc(l.name)).join(' · ') || '—'} · ${opened}</p></div>
+      <span class="row" style="gap:6px"><button class="btn" id="pdf">Download PDF</button><button class="btn" id="csv">Export CSV</button></span></div>
+    <section class="card"><form id="tf" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <label class="f">Table<select name="table">${tables.map((x) => `<option ${x === table ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+      <label class="f">From<input type="date" name="from" value="${esc(r.from)}"></label><label class="f">To<input type="date" name="to" value="${esc(r.to)}"></label>
+      <button class="btn primary">Show</button><button type="button" class="btn sm" data-d="0">Today</button><button type="button" class="btn sm" data-d="6">7 days</button><button type="button" class="btn sm" data-d="29">30 days</button></form></section>
+    <div class="grid">
+      ${tile('Table hours', hm(r.table_seconds), r.first_open ? (r.from === r.to ? `${time(r.first_open)} → ${r.still_open ? 'now' : time(r.last_close)}` : `${r.days_open} day${r.days_open === 1 ? '' : 's'} open`) : '—')}
+      ${tile('Players', String(T.players), `${r.groups.length} player group${r.groups.length === 1 ? '' : 's'} · ${T.sessions} sessions`)}
+      ${tile('Playing hours', hm(T.seconds), r.table_seconds ? `avg ${(T.seconds / r.table_seconds).toFixed(1)} seated · seat use ${Math.round(100 * T.seconds / (r.table_seconds * 9))}% of 9` : '—')}
+      ${tile('Buy-in', peso(T.buy_in), r.rake ? `Rake ${peso(r.rake.amount)}${r.rake.per_hour ? ' · ' + peso(r.rake.per_hour) + ' per table hour' : ''}` : 'Rake: not entered yet')}
+    </div>
+    <section class="card"><h2>By player group</h2><div class="tbl"><table><thead><tr><th>Group</th><th class="num">Players</th><th class="num">Playing hours</th><th style="width:28%"></th><th class="num">Share</th><th class="num">Buy-in</th></tr></thead><tbody>
+      ${r.groups.map((g) => `<tr><td><b>${esc(g.name)}</b>${g.label ? ` <span class="chip dark small">${esc(g.label)}</span>` : ''}</td><td class="num">${g.players}</td><td class="num"><b>${hm(g.seconds)}</b></td><td><div style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${(100 * g.share).toFixed(1)}%"></i></div></td><td class="num">${(100 * g.share).toFixed(1)}%</td><td class="num">${peso(g.buy_in)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Nobody played at this table in this range.</td></tr>'}
+    </tbody>${r.groups.length ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${T.players}</td><td class="num">${hm(T.seconds)}</td><td></td><td class="num">100%</td><td class="num">${peso(T.buy_in)}</td></tr></tfoot>` : ''}</table></div></section>
+    <section class="card"><h2>Players</h2><div class="tbl"><table><thead><tr><th class="num">#</th><th>Player</th><th>Player group</th><th>Seat · time</th><th class="num">Playing hour</th><th class="num">Share</th><th class="num">Buy-in</th></tr></thead><tbody>
+      ${rows.map((x) => `<tr><td class="num muted">${x.i}</td><td><b>${esc(x.name)}</b>${x.full ? ` <span class="small muted">${esc(x.full)}</span>` : ''}</td><td>${esc(x.group)}</td>
+        <td class="small" style="white-space:nowrap">${x.when.map((w) => esc(w).replace('–now', '–<b style="color:var(--green)">now</b>')).join('<br>')}</td><td class="num"><b>${x.hours}</b></td><td class="num">${x.share}</td><td class="num">${x.buy}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">—</td></tr>'}
+    </tbody>${rows.length ? `<tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td></td><td colspan="3">Total · ${T.players} players · ${T.sessions} sessions</td><td class="num">${hm(T.seconds)}</td><td class="num">100%</td><td class="num">${peso(T.buy_in)}</td></tr></tfoot>` : ''}</table></div>
+    <p class="small muted" style="margin:8px 0 0">Playing hour = time in the seat minus breaks. Share = each player's (or group's) part of all playing hours at this table. Player group = the group when they sat down. Players still seated count up to now.</p></section>`;
+  const tf = view.querySelector('#tf');
+  tf.onsubmit = (e) => { e.preventDefault(); go({ table: tf.table.value, from: tf.from.value, to: tf.to.value }); };
+  tf.table.onchange = () => go({ table: tf.table.value, from: tf.from.value, to: tf.to.value });
+  tf.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => go({ table: tf.table.value, from: daysAgo(Number(b.dataset.d)), to: today() }));
+  view.querySelector('#csv').onclick = () => {
+    const lines = [['Table', 'From', 'To', 'Player', 'Name', 'Member no.', 'Player group', 'Sessions', 'Seat · time', 'Playing hours', 'Playing seconds', 'Share %', 'Buy-in PHP']]
+      .concat(r.players.map((p) => [r.table, r.from, r.to, p.nickname, p.name, p.member_no || '', p.groups.join(' / '), p.sessions, p.segments.map((g) => `#${g.seat} ${time(g.start)}-${g.live ? 'now' : time(g.end)}`).join('; '), hm(p.seconds), p.seconds, (p.share * 100).toFixed(1), p.buy_in]))
+      .concat([[], ['Group', 'Players', 'Playing hours', 'Share %', 'Buy-in PHP']]).concat(r.groups.map((g) => [g.name, g.players, hm(g.seconds), (g.share * 100).toFixed(1), g.buy_in]))
+      .concat([[], ['Table hours', hm(r.table_seconds)], ['Rake PHP', r.rake ? r.rake.amount : ''], ['Rake per table hour PHP', r.rake && r.rake.per_hour ? Math.round(r.rake.per_hour) : '']]);
+    const csv = lines.map((row) => row.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = `everest-${r.table}-report-${r.from}${r.to !== r.from ? '-to-' + r.to : ''}.csv`; a.click();
+  };
+  view.querySelector('#pdf').onclick = () => tableReportPdf(r, period, opened.replace(/<[^>]+>/g, ''));
+}
+// A one-page A4 version in a new window; the browser's Save as PDF keeps it exactly.
+function tableReportPdf(r, period, opened) {
+  const T = r.totals, rows = tableRows(r), w = window.open('', '_blank');
+  if (!w) { alert('Allow pop-ups for this site to download the PDF.'); return; }
+  const asOf = new Date(r.as_of * 1000).toLocaleString('en-GB', { timeZone: 'Asia/Manila', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Everest ${esc(r.table)} report ${esc(r.from)}${r.to !== r.from ? ' to ' + esc(r.to) : ''}</title><style>
+@page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;font-family:"Helvetica Neue",Arial,sans-serif;color:#1d1d1f;font-size:10pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:210mm;min-height:297mm;padding:16mm 16mm 18mm;position:relative}.top{height:5px;background:#b8902f;position:absolute;left:0;right:0;top:0}
+.head{display:flex;align-items:center;gap:14px;border-bottom:1px solid #d9d2c0;padding-bottom:10px}.head img{width:54px}.brand{font-family:Georgia,serif;letter-spacing:.14em;font-size:14pt;color:#8a6a1f}
+.sub{font-size:9pt;color:#6b6b6b}.doc{margin-left:auto;text-align:right;font-size:9pt;color:#6b6b6b;line-height:1.5}h1{font-family:Georgia,serif;font-weight:normal;font-size:20pt;margin:16px 0 2px}.period{color:#555;margin:0 0 12px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.tile{background:#f8f5ec;border:1px solid #e6dcc0;border-radius:6px;padding:9px 11px}.tile .k{font-size:7.5pt;text-transform:uppercase;letter-spacing:.07em;color:#8a6a1f}
+.tile .v{font-size:15pt;font-weight:700;margin-top:2px}.tile .s{font-size:8pt;color:#666;margin-top:1px}h2{font-size:10pt;text-transform:uppercase;letter-spacing:.08em;color:#8a6a1f;margin:14px 0 6px}
+table{width:100%;border-collapse:collapse}th{font-size:7.5pt;text-transform:uppercase;letter-spacing:.05em;color:#6b6b6b;text-align:left;border-bottom:1.5px solid #1d1d1f;padding:5px 6px}td{padding:6px;border-bottom:1px solid #e4e4e4;vertical-align:middle}
+tr{break-inside:avoid}.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.n{color:#888;width:18px}.small{font-size:8.5pt;color:#555;white-space:nowrap}.full{font-weight:400;color:#666;font-size:8.5pt}.live{color:#1a7f4b;font-weight:700}
+.bar{height:7px;background:#eee;border-radius:4px;width:120px}.bar span{display:block;height:100%;background:#b8902f;border-radius:4px}tfoot td{font-weight:700;border-top:1.5px solid #1d1d1f;border-bottom:none}.note{font-size:8.5pt;color:#666;line-height:1.5;margin-top:10px}
+.foot{position:absolute;left:16mm;right:16mm;bottom:9mm;font-size:7.5pt;color:#999;display:flex;justify-content:space-between}
+</style></head><body><section class="page"><div class="top"></div>
+<div class="head"><img src="${location.origin}/admin/logo.png" alt=""><div><div class="brand">EVEREST POKER ROOM</div><div class="sub">Midori Clark Hotel and Casino</div></div><div class="doc">Table Report<br>As of ${esc(asOf)}</div></div>
+<h1>${esc(r.table)}${r.levels.length ? ' · ' + r.levels.map((l) => esc(l.name)).join(' · ') : ''}</h1><p class="period">${esc(period)} · ${esc(opened)}</p>
+<div class="tiles"><div class="tile"><div class="k">Table hours</div><div class="v">${hm(r.table_seconds)}</div><div class="s">${r.first_open && r.from === r.to ? time(r.first_open) + ' → ' + (r.still_open ? 'now' : time(r.last_close)) : r.days_open + (r.days_open === 1 ? ' day open' : ' days open')}</div></div>
+<div class="tile"><div class="k">Players</div><div class="v">${T.players}</div><div class="s">${r.groups.length} player groups</div></div>
+<div class="tile"><div class="k">Playing hours</div><div class="v">${hm(T.seconds)}</div><div class="s">${r.table_seconds ? `avg ${(T.seconds / r.table_seconds).toFixed(1)} seated · seat use ${Math.round(100 * T.seconds / (r.table_seconds * 9))}% of 9` : ''}</div></div>
+<div class="tile"><div class="k">Buy-in</div><div class="v">${peso(T.buy_in)}</div><div class="s">${r.rake ? `Rake ${peso(r.rake.amount)}${r.rake.per_hour ? ' · ' + peso(r.rake.per_hour) + '/table hr' : ''}` : 'Rake: not entered yet'}</div></div></div>
+<h2>By player group</h2><table><thead><tr><th>Group</th><th class="num">Players</th><th class="num">Playing hours</th><th></th><th class="num">Share</th><th class="num">Buy-in</th></tr></thead><tbody>
+${r.groups.map((g) => `<tr><td><b>${esc(g.name)}</b></td><td class="num">${g.players}</td><td class="num"><b>${hm(g.seconds)}</b></td><td><div class="bar"><span style="width:${(100 * g.share).toFixed(1)}%"></span></div></td><td class="num">${(100 * g.share).toFixed(1)}%</td><td class="num">${peso(g.buy_in)}</td></tr>`).join('')}
+</tbody><tfoot><tr><td>Total</td><td class="num">${T.players}</td><td class="num">${hm(T.seconds)}</td><td></td><td class="num">100%</td><td class="num">${peso(T.buy_in)}</td></tr></tfoot></table>
+<h2>Players</h2><table><thead><tr><th></th><th>Player</th><th>Player group</th><th>Seat · time</th><th class="num">Playing hour</th><th class="num">Share</th><th class="num">Buy-in</th></tr></thead><tbody>
+${rows.map((x) => `<tr><td class="n">${x.i}</td><td><b>${esc(x.name)}</b>${x.full ? ` <span class="full">${esc(x.full)}</span>` : ''}</td><td>${esc(x.group)}</td><td class="small">${x.when.map((w) => esc(w).replace('–now', '–<span class="live">now</span>')).join('<br>')}</td><td class="num"><b>${x.hours}</b></td><td class="num">${x.share}</td><td class="num">${x.buy}</td></tr>`).join('')}
+</tbody><tfoot><tr><td></td><td colspan="3">Total · ${T.players} players · ${T.sessions} sessions</td><td class="num">${hm(T.seconds)}</td><td class="num">100%</td><td class="num">${peso(T.buy_in)}</td></tr></tfoot></table>
+<p class="note">Playing hour = time in the seat minus breaks. Share = each player's (or group's) part of all playing hours at this table. Player group = the group the player belonged to when they sat down.${r.still_open ? ' Players still seated are counted up to ' + esc(asOf.split(', ').pop()) + '; their buy-in is so far.' : ''}</p>
+<div class="foot"><span>Everest Poker Room · Table Report · ${esc(r.table)} · ${esc(r.from)}${r.to !== r.from ? ' to ' + esc(r.to) : ''}</span><span>${r.still_open ? 'Game in progress' : ''}</span></div>
+</section><script>window.onload = () => setTimeout(() => window.print(), 300);<\/script></body></html>`);
+  w.document.close();
+}
 // Table insurance log: what was sold, paid out and kept, by day, with the float.
 async function viewInsurance(view) {
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -1046,8 +1127,8 @@ async function viewReport(view) {
       ${tile('Playing hours', `<span class="mono">${hhmm(T.play_seconds)}</span>`, `<span class="mono">${restLine(T.play_seconds, T.rest_seconds)}</span> · ${T.sessions} sessions`)}
       ${tile('Buy-in / Cash-out', peso(T.buy_in), `cash-out ${peso(T.cash_out)}${T.missing_cash_out ? ` · <span style="color:var(--amber);font-weight:600">${T.missing_cash_out} without cash-out</span>` : ''}`)}
     </div>
-    <section class="card"><h2 style="margin-bottom:10px">By table</h2><div class="tbl"><table><thead><tr><th>Table</th><th class="num">Days open</th><th class="num">Table hours</th><th class="num">Revenue</th><th class="num">Per table hour</th><th style="width:30%">Share of revenue</th></tr></thead><tbody>
-      ${tablesSorted.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td class="num"><b>${v.revenue ? peso(v.revenue) : '—'}</b></td><td class="num">${v.revenue && v.revenue_seconds ? `<b>${peso(v.revenue / (v.revenue_seconds / 3600))}</b>${v.revenue_bb_hours ? ` <span class="muted">(${Math.round(v.revenue / v.revenue_bb_hours)} BB/hr)</span>` : ''}<div class="small muted">${Object.keys(v.levels || {}).map(esc).join(' · ')}${v.revenue_days < v.days ? ` · ${v.revenue_days} of ${v.days} days entered` : ''}</div>` : '—'}</td><td><div style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${T.revenue ? (100 * v.revenue / T.revenue).toFixed(1) : 0}%"></i></div></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No tables ran in this range.</td></tr>'}
+    <section class="card"><h2 style="margin-bottom:10px">By table <span class="small muted" style="font-weight:400">· click a table for its report: players, groups, hours and share</span></h2><div class="tbl"><table><thead><tr><th>Table</th><th class="num">Days open</th><th class="num">Table hours</th><th class="num">Revenue</th><th class="num">Per table hour</th><th style="width:30%">Share of revenue</th></tr></thead><tbody>
+      ${tablesSorted.map(([k, v]) => `<tr><td><a href="#/tablereport?${new URLSearchParams({ table: k, from: d.from, to: d.to })}"><b>${esc(k)}</b></a> <span class="small muted">report ›</span></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td class="num"><b>${v.revenue ? peso(v.revenue) : '—'}</b></td><td class="num">${v.revenue && v.revenue_seconds ? `<b>${peso(v.revenue / (v.revenue_seconds / 3600))}</b>${v.revenue_bb_hours ? ` <span class="muted">(${Math.round(v.revenue / v.revenue_bb_hours)} BB/hr)</span>` : ''}<div class="small muted">${Object.keys(v.levels || {}).map(esc).join(' · ')}${v.revenue_days < v.days ? ` · ${v.revenue_days} of ${v.days} days entered` : ''}</div>` : '—'}</td><td><div style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${T.revenue ? (100 * v.revenue / T.revenue).toFixed(1) : 0}%"></i></div></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No tables ran in this range.</td></tr>'}
     </tbody></table></div></section>
     <section class="card"><h2 style="margin-bottom:10px">By level</h2><div class="tbl"><table><thead><tr><th>Level</th><th class="num">Days</th><th class="num">Table hours</th><th style="width:30%"></th><th class="num">Player hours</th><th class="num">Sessions</th><th class="num">Players per table</th></tr></thead><tbody>
       ${levels.map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days}</td><td class="num">${hm(v.table_seconds)}</td><td><div class="bar" style="height:8px;background:var(--line2);border-radius:4px"><i style="display:block;height:8px;border-radius:4px;background:var(--gold);width:${(100 * v.table_seconds / maxLv).toFixed(1)}%"></i></div></td><td class="num">${hm(v.play_seconds)}</td><td class="num">${v.sessions}</td><td class="num">${v.table_seconds ? (v.play_seconds / v.table_seconds).toFixed(1) : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No tables ran in this range.</td></tr>'}
