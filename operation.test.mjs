@@ -261,11 +261,11 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
   assert.equal((await call('/insurance/float', 'PUT', { day: '2026-11-04', balance: 178635, capital: 100000 }, maria3)).status, 403);
   assert.equal((await call('/insurance/float', 'PUT', { day: '2026-11-04', balance: 178635, capital: 100000 }, boss)).status, 200);
   const day = (await call('/insurance', 'GET', null, maria3)).body;
-  assert.deepEqual([day.totals.tickets, day.totals.sold, day.totals.paid, day.totals.hits, day.totals.misses, day.totals.net], [2, 10550, 14000, 1, 1, 8550 + 2000 - 14000]);
+  assert.deepEqual([day.totals.tickets, day.totals.sold, day.totals.paid, day.totals.hits, day.totals.misses, day.totals.net], [2, 10550, 14000, 1, 1, 8550 - 14000]);
   assert.equal((await call('/insurance/range?from=2026-11-01&to=2026-11-30', 'GET', null, maria3)).status, 403, 'range: managers only');
   { const r = (await call('/insurance/range?from=2026-11-01&to=2026-11-30', 'GET', null, boss)).body;
-    assert.equal(r.tickets.length, 3); assert.equal(r.days.length, 1); assert.equal(r.days[0].net, 8550 + 2000 - 14000); assert.equal(r.days[0].float_end, 178635 + 8550 + 2000 - 14000); assert.equal(r.float.balance, r.days[0].float_end); }
-  assert.deepEqual(day.float, { opening_day: '2026-11-04', opening: 178635, capital: 100000, balance: 178635 + 8550 + 2000 - 14000 });
+    assert.equal(r.tickets.length, 3); assert.equal(r.days.length, 1); assert.equal(r.days[0].net, 8550 - 14000, 'hit: house pays 14,000 and takes no premium'); assert.equal(r.days[0].float_end, 178635 + 8550 - 14000); assert.equal(r.float.balance, r.days[0].float_end); }
+  assert.deepEqual(day.float, { opening_day: '2026-11-04', opening: 178635, capital: 100000, balance: 178635 + 8550 - 14000 });
 }
 { // New = first game ever on that day: over all of history every member is new exactly once.
   const all = (await call('/report?from=2026-10-01&to=2026-11-10', 'GET', null, boss)).body;

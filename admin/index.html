@@ -960,11 +960,11 @@ async function viewInsurance(view) {
       for (const x of list) { Object.assign(holes, x.detail.hands || {}); for (const [p, v] of Object.entries(x.detail.seats || {})) if (v) seat[p] = v; }
       return { day: list[0].day, at: list[0].created_at, table: list[0].table_name, blinds: list[0].blinds, list, board, holes: Object.entries(holes), seat, live: live.length,
         bought: live.reduce((n, x) => n + x.amount, 0), paid: live.filter((x) => x.result === 'hit').reduce((n, x) => n + x.payout, 0),
-        net: live.reduce((n, x) => n + (x.result === 'miss' ? x.amount : x.result === 'hit' ? x.amount - x.payout : 0), 0), by: [...new Set(list.map((x) => x.created_by))] };
+        net: live.reduce((n, x) => n + (x.result === 'miss' ? x.amount : x.result === 'hit' ? -x.payout : 0), 0), by: [...new Set(list.map((x) => x.created_by))] };
     }).sort((a, b) => b.at - a.at);
   };
   const hands = groupHands(d.tickets);
-  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Insurance</h1><p class="sub">Every insurance ticket sold at the tables, by day. Sold = premiums taken; Paid out = premium × odds when an out hit.</p></div>
+  view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Insurance</h1><p class="sub">Every insurance ticket sold at the tables, by day. Sold = premiums on every ticket. Out missed: the house takes the premium. Out hit: the house pays premium × odds and takes no premium.</p></div>
       <span class="row" style="gap:6px"><a class="btn" href="../insurance/" target="_blank" rel="noopener">Open insurance app ↗</a><button class="btn" id="csv">Export CSV</button></span></div>
     <section class="card"><form id="rf" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
       <label class="f">From<input type="date" name="from" value="${esc(d.from)}"></label><label class="f">To<input type="date" name="to" value="${esc(d.to)}"></label>
@@ -993,7 +993,7 @@ async function viewInsurance(view) {
   view.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => { const reason = prompt('Reason for voiding this ticket:'); if (!reason) return; try { await api(`/insurance/${b.dataset.void}/void`, 'POST', { reason }); viewInsurance(view); } catch (err) { alert(err.message); } });
   view.querySelector('#csv').onclick = () => {
     const lines = [['Day', 'Time', 'Hand', 'Table', 'Level', 'Pot', 'Pot amount', 'Players', 'Buyer', 'Street', 'Board', 'Next card', 'Outs', 'Odds', 'Max buy', 'Bought', 'Pays', 'Result', 'House result', 'Sold by', 'Void reason']]
-      .concat(d.tickets.slice().reverse().map((x) => [x.day, fmt(x.created_at, { hour: '2-digit', minute: '2-digit', hour12: false }), (x.detail && x.detail.hand_id) || '', x.table_name, x.blinds, x.pot, x.pot_amount, x.players, (x.detail.buyer ? `${x.detail.buyer.player || ''} ${x.detail.buyer.seat ? '#' + x.detail.buyer.seat + ' ' + x.detail.buyer.name : ''}` : '').trim(), street(x), (x.detail.board || []).join(' '), x.result_card || '', x.outs, x.odds, x.max_buy, x.amount, x.payout, RES[x.result] ? RES[x.result][0] : x.result, x.result === 'miss' ? x.amount : x.result === 'hit' ? x.amount - x.payout : '', x.created_by, x.void_reason || '']));
+      .concat(d.tickets.slice().reverse().map((x) => [x.day, fmt(x.created_at, { hour: '2-digit', minute: '2-digit', hour12: false }), (x.detail && x.detail.hand_id) || '', x.table_name, x.blinds, x.pot, x.pot_amount, x.players, (x.detail.buyer ? `${x.detail.buyer.player || ''} ${x.detail.buyer.seat ? '#' + x.detail.buyer.seat + ' ' + x.detail.buyer.name : ''}` : '').trim(), street(x), (x.detail.board || []).join(' '), x.result_card || '', x.outs, x.odds, x.max_buy, x.amount, x.payout, RES[x.result] ? RES[x.result][0] : x.result, x.result === 'miss' ? x.amount : x.result === 'hit' ? -x.payout : '', x.created_by, x.void_reason || '']));
     const csv = lines.map((r) => r.map((c) => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = `everest-insurance-${d.from}-to-${d.to}.csv`; a.click();
   };

@@ -1,6 +1,6 @@
 // All-in insurance sold at the table by the supervisor: odds table, limits, tickets and the day's result.
 // The house sells cover against the leader's opponents hitting an out on the next card.
-// Miss: the house keeps the premium. Hit: the house pays premium × odds (the premium is not returned).
+// Miss: the buyer keeps the pot and the house takes the premium. Hit: the buyer lost the pot, so no premium is taken and the house pays premium × odds.
 import { businessDay } from './operation.mjs';
 import { str } from './members.mjs';
 
@@ -30,7 +30,7 @@ function totals(rows) {
     tickets: live.length, sold, paid, hits: live.filter((r) => r.result === 'hit').length, misses: live.filter((r) => r.result === 'miss').length,
     pending: live.filter((r) => r.result === 'pending').length,
     pending_amount: live.filter((r) => r.result === 'pending').reduce((s, r) => s + r.amount, 0),
-    net: settled.reduce((s, r) => s + r.amount - (r.result === 'hit' ? r.payout : 0), 0)
+    net: settled.reduce((s, r) => s + (r.result === 'hit' ? -r.payout : r.amount), 0)
   };
 }
 
@@ -59,7 +59,7 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
     const f = await env.DB.prepare('SELECT day,balance,capital FROM insurance_float WHERE id=1').first();
     let float = null;
     if (f) {
-      const net = async (d) => (await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN result='miss' THEN amount WHEN result='hit' THEN amount-payout ELSE 0 END),0) n FROM insurance_tickets WHERE day>? AND day<=?").bind(f.day, d).first()).n;
+      const net = async (d) => (await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN result='miss' THEN amount WHEN result='hit' THEN -payout ELSE 0 END),0) n FROM insurance_tickets WHERE day>? AND day<=?").bind(f.day, d).first()).n;
       float = { opening_day: f.day, opening: f.balance, capital: f.capital, balance: f.balance + (to > f.day ? await net(to) : 0) };
       for (const d of days) d.float_end = d.day > f.day ? f.balance + await net(d.day) : null;
     }
@@ -74,7 +74,7 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
     const f = await env.DB.prepare('SELECT day,balance,capital FROM insurance_float WHERE id=1').first();
     let float = null;
     if (f) {
-      const since = await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN result='miss' THEN amount WHEN result='hit' THEN amount-payout ELSE 0 END),0) net FROM insurance_tickets WHERE day>? AND day<=?").bind(f.day, bd.day).first();
+      const since = await env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN result='miss' THEN amount WHEN result='hit' THEN -payout ELSE 0 END),0) net FROM insurance_tickets WHERE day>? AND day<=?").bind(f.day, bd.day).first();
       float = { opening_day: f.day, opening: f.balance, capital: f.capital, balance: f.balance + (bd.day > f.day ? since.net : 0) };
     }
     return reply({ day: bd.day, is_today: bd.is_today, tickets: rows, totals: totals(rows), float });
@@ -125,7 +125,7 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
       const hit = b.hit === true;
       await env.DB.batch([
         env.DB.prepare('UPDATE insurance_tickets SET result=?,result_card=?,settled_at=?,settled_by=? WHERE id=? AND result=\'pending\'').bind(hit ? 'hit' : 'miss', str(b.card || '', 4), now, str(who, 60), t.id),
-        audit(env, now, who, 'insurance.settle', `${t.table_name} ${t.pot} ticket #${t.id}: ${b.card || ''} ${hit ? `hit → house paid ${n(t.payout)}` : `missed → house keeps ${n(t.amount)}`}`)
+        audit(env, now, who, 'insurance.settle', `${t.table_name} ${t.pot} ticket #${t.id}: ${b.card || ''} ${hit ? `hit → house paid ${n(t.payout)} (no premium taken)` : `missed → house takes the premium ${n(t.amount)}`}`)
       ]);
       return reply({ ok: true, result: hit ? 'hit' : 'miss' });
     }

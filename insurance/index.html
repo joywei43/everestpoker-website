@@ -122,7 +122,7 @@ const T = {
     pickHint: 'Tap a slot, then tap the card. The next empty slot is picked for you.', needCards: 'Enter both cards of every player and the flop.', leads: 'leads', tie: 'Tied now — no insurance.',
     outs: 'Outs', odds: 'Odds', max: 'Max buy', capped: 'capped at 1000 BB', none: 'No outs — nothing to insure.', tooMany: 'More than 15 outs — not sold.', buyAmt: 'Amount', fillMax: 'MAX', even: 'EVEN', confirm: 'Confirm', seat: 'Seat', evenHint: 'EVEN = own share of the pot ÷ odds',
     float: 'Insurance float', capital: 'Starting capital', profit: 'Profit since start', dayNet: 'This day', setFloat: 'Set float', closeDay: 'Closing day', closeBal: 'Closing balance', save: 'Save', cancel: 'Cancel', asOf: 'end of',
-    pays: 'Pays', sell: 'Confirm', sold: 'Sold', settleHint: 'When the next card is dealt, tap it in the blue slot to settle.', hitMsg: 'OUT hit — pay', netLbl: 'net', premium: 'premium', newLeader: 'New leader — can buy River insurance', missMsg: 'Missed — house keeps', newHand: 'New hand', clearAll: 'Clear all', cleared: 'Cleared — ready for the next hand.', undo: 'Undo',
+    pays: 'Pays', sell: 'Confirm', sold: 'Sold', settleHint: 'When the next card is dealt, tap it in the blue slot to settle.', hitMsg: 'OUT hit — pay', noPremium: 'no premium taken', netLbl: 'net', premium: 'premium', newLeader: 'New leader — can buy River insurance', missMsg: 'Missed — premium taken', newHand: 'New hand', clearAll: 'Clear all', cleared: 'Cleared — ready for the next hand.', undo: 'Undo',
     pending: 'Pending', hit: 'Paid out', miss: 'Kept', void: 'Void', net: 'House result', soldT: 'Sold', paidT: 'Paid out', tickets: 'Tickets', time: 'Time', pot: 'Pot', amount: 'Bought', result: 'Result',
     voidBtn: 'Void', reason: 'Reason for voiding this ticket:', signin: 'Sign in', user: 'Username', pass: 'Password', signout: 'Sign out', clear: 'Clear', day: 'Business day', overMax: 'Above the max.',
     river5: 'Hand complete. Tap Clear all for the next hand.', by: 'by', cards: 'Cards', street: 'Street' },
@@ -131,7 +131,7 @@ const T = {
     pickHint: '先點空格，再點牌；會自動跳到下一個空格。', needCards: '請輸入每位玩家的兩張手牌和 Flop。', leads: '領先', tie: '目前平手，不賣保險。',
     outs: 'Outs', odds: '賠率', max: '最多可買', capped: '已達 1000 BB 上限', none: '沒有 outs，不需保險。', tooMany: '超過 15 outs，不賣。', buyAmt: '購買金額', fillMax: '最大', even: '保本', confirm: '確認', seat: '座位', evenHint: '保本 = 自己在池內的份額 ÷ 賠率',
     float: '保險庫存', capital: '起始金', profit: '累計盈虧', dayNet: '本日', setFloat: '設定庫存', closeDay: '關帳日', closeBal: '關帳金額', save: '儲存', cancel: '取消', asOf: '截至',
-    pays: '賠付', sell: '確認', sold: '已賣', settleHint: '發下一張牌時，在藍框點那張牌即自動結算。', hitMsg: '中 OUT，賠付', netLbl: '實拿', premium: '保費', newLeader: '領先者換人 — 可以買 River 保險', missMsg: '沒中，保費入帳', newHand: '新的一手', clearAll: '全部清除', cleared: '已清除，可以開始下一手。', undo: '復原',
+    pays: '賠付', sell: '確認', sold: '已賣', settleHint: '發下一張牌時，在藍框點那張牌即自動結算。', hitMsg: '中 OUT，賠付', noPremium: '不收保費', netLbl: '實拿', premium: '保費', newLeader: '領先者換人 — 可以買 River 保險', missMsg: '沒中，保費入帳', newHand: '新的一手', clearAll: '全部清除', cleared: '已清除，可以開始下一手。', undo: '復原',
     pending: '待開', hit: '已賠付', miss: '保費入帳', void: '作廢', net: '保險盈虧', soldT: '賣出總額', paidT: '賠付總額', tickets: '張數', time: '時間', pot: '池', amount: '購買', result: '結果',
     voidBtn: '作廢', reason: '作廢原因：', signin: '登入', user: '帳號', pass: '密碼', signout: '登出', clear: '清除', day: '營業日', overMax: '超過最大可買額。',
     river5: '這手已結束，按「全部清除」開始下一手。', by: '由', cards: '牌', street: '階段' }
@@ -356,11 +356,11 @@ function groupHands(tickets) {
     const board = list.reduce((b, x) => ((x.detail.board || []).length > b.length ? x.detail.board : b), []).slice();
     for (const x of list) if (x.result_card && board.length < 5 && !board.includes(x.result_card)) board.push(x.result_card);
     return { at: list[0].created_at, table: list[0].table_name, blinds: list[0].blinds, list, board, live: live.length,
-      net: live.reduce((n, x) => n + (x.result === 'miss' ? x.amount : x.result === 'hit' ? x.amount - x.payout : 0), 0) };
+      net: live.reduce((n, x) => n + (x.result === 'miss' ? x.amount : x.result === 'hit' ? -x.payout : 0), 0) };
   }).sort((a, b) => b.at - a.at);
 }
 const ticketLine = (x) => `<div class="tk"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.pot)}</b> <span>${buyerOf(x)}</span> <span>${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'}</span>
-  <span>${x.outs} outs × ${x.odds}</span><span class="num" style="margin-left:auto">${fmt(x.amount)} → ${fmt(x.payout)}${x.result === 'hit' ? ` <span class="hint">(${t('netLbl')} +${fmt(x.payout - x.amount)})</span>` : ''}</span>${x.result_card ? ' · ' + esc(x.result_card) : ''}</div>`;
+  <span>${x.outs} outs × ${x.odds}</span><span class="num" style="margin-left:auto">${fmt(x.amount)} → ${fmt(x.payout)}</span>${x.result_card ? ' · ' + esc(x.result_card) : ''}</div>`;
 
 async function sell(pi, res, main) {
   const r = res[pi], inp = main.querySelector(`[data-buy="${pi}"]`), v = num(inp.value);
@@ -394,7 +394,7 @@ async function pick(c, main) {
     for (const x of due) {
       const hit = x.outSet.has(c);
       try { await api(`/insurance/${x.id}/settle`, 'POST', { card: RANKS[c >> 2] + SUITS[c & 3], hit }); x.result = hit ? 'hit' : 'miss'; x.result_card = RANKS[c >> 2] + SUITS[c & 3];
-        msgs.push(`${x.pot}: ${hit ? `<span class="bad">${t('hitMsg')} ${fmt(x.payout)}</span> <span style="font-weight:400">(${t('premium')} ${fmt(x.amount)} · ${t('netLbl')} +${fmt(x.payout - x.amount)})</span>` : `<span class="good">${t('missMsg')} ${fmt(x.amount)}</span>`}`); }
+        msgs.push(`${x.pot}: ${hit ? `<span class="bad">${t('hitMsg')} ${fmt(x.payout)}</span> <span style="font-weight:400">(${t('noPremium')})</span>` : `<span class="good">${t('missMsg')} ${fmt(x.amount)}</span>`}`); }
       catch (err) { msgs.push(`<span class="bad">${esc(err.message)}</span>`); }
     }
     if (msgs.length) toast(msgs.join('<br>'), msgs.some((m) => m.includes('bad')) ? 'bad' : 'good');
