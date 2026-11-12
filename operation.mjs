@@ -119,14 +119,6 @@ export async function handleOperation(req, env, now, reply, role) {
       COUNT(sr.session_id) with_cash_out, COALESCE(SUM(sr.cash_out),0) cash_out, COALESCE(SUM(CASE WHEN sr.session_id IS NULL AND ps.buy_in IS NOT NULL THEN 1 ELSE 0 END),0) missing_cash_out,
       COALESCE(SUM(CASE WHEN sr.session_id IS NULL THEN ps.buy_in ELSE 0 END),0) buy_in_without_cash_out, COALESCE(SUM(sr.busted),0) busted
     FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.start_at>=? AND ps.start_at<?`).bind(bd.start, bd.end).first();
-  // Visitors: distinct members, plus distinct unmatched PPM names, plus people at a table now who have not left yet.
-  const vis = await all(env.DB.prepare(`SELECT DISTINCT COALESCE('m' || m.member_no, 'r' || lower(ps.member_ref)) who, m.member_no, lower(ps.member_ref) ref
-    FROM play_sessions ps LEFT JOIN members m ON m.id=ps.member_id WHERE ps.start_at>=? AND ps.start_at<?`).bind(bd.start, bd.end));
-  const visitors = new Set(vis.map((v) => v.who));
-  const finishedRefs = new Set(vis.flatMap((v) => [v.ref, v.member_no ? v.member_no.toLowerCase() : null]).filter(Boolean));
-  let liveNew = 0;
-  if (bd.is_today) for (const r of liveRefs) if (!finishedRefs.has(r)) liveNew++;
-  const matched = vis.filter((v) => v.member_no).length;
   const newMembers = await env.DB.prepare('SELECT COUNT(*) n FROM (SELECT member_id FROM play_sessions WHERE member_id IS NOT NULL GROUP BY member_id HAVING MIN(start_at)>=? AND MIN(start_at)<?)').bind(bd.start, bd.end).first(); // first game ever today
   if (bd.is_today) { // first game ever still in progress
     const liveIds = [...new Set((await liveSeats(env)).filter((x) => x.member_id && x.started != null && x.started >= bd.start).map((x) => x.member_id))];
@@ -172,7 +164,8 @@ export async function handleOperation(req, env, now, reply, role) {
     open_tables: tables.filter((t) => t.running).length, tables: bd.is_today ? tables : [],
     operating: { since: firstOpen, until: lastClose, seconds: firstOpen ? Math.max(0, (lastClose || until) - firstOpen) : 0, table_seconds: tableSeconds, per_table: perTable },
     play: { finished_seconds: fin.secs, live_seconds: bd.is_today ? Math.round(liveSeconds) : 0, rest_seconds: fin.rest_secs, live_rest_seconds: bd.is_today ? Math.round(liveRest) : 0, sessions: fin.sessions },
-    visitors: { total: visitors.size + liveNew, members: matched, unmatched: visitors.size - matched, at_table_now: bd.is_today ? livePlayers : 0, new_members: newMembers.n },
+    // One person per member (whatever name PPM used for them), one per unmatched PPM name; the same people as the visitor list.
+    visitors: { total: visitorList.length, members: visitorList.filter((p) => p.member_no).length, unmatched: visitorList.filter((p) => !p.member_no).length, at_table_now: bd.is_today ? livePlayers : 0, new_members: newMembers.n },
     money: { buy_in_finished: fin.buy_in, buy_in_live: liveBuyIn, buy_in_total: fin.buy_in + liveBuyIn, cash_out: fin.cash_out, sessions_with_cash_out: fin.with_cash_out,
       missing_cash_out: fin.missing_cash_out, buy_in_without_cash_out: fin.buy_in_without_cash_out, busted: fin.busted },
     history: [],
