@@ -121,7 +121,7 @@ td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 <div id="app"></div>
 <script src="/config.js"></script>
 <script type="module">
-import { potOuts, quote, best, categoryName, RANKS, SUITS, SUIT_SYMBOL } from './core.js';
+import { potOuts, quote, best, categoryName, parseCard, RANKS, SUITS, SUIT_SYMBOL } from './core.js';
 
 const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
 const T = {
@@ -361,7 +361,10 @@ function groupHands(tickets) {
     const live = list.filter((x) => x.result !== 'void');
     const board = list.reduce((b, x) => ((x.detail.board || []).length > b.length ? x.detail.board : b), []).slice();
     for (const x of list) if (x.result_card && board.length < 5 && !board.includes(x.result_card)) board.push(x.result_card);
-    return { at: list[0].created_at, table: list[0].table_name, blinds: list[0].blinds, list, board, live: live.length,
+    const hands = {}, seats = {};
+    for (const x of list) { Object.assign(hands, x.detail.hands || {}); for (const [k, v] of Object.entries(x.detail.seats || {})) if (v) seats[k] = v; }
+    const players = Object.keys(hands).sort().map((p) => ({ p, cards: (hands[p] || []).map(parseCard).filter((c) => c != null), seat: seats[p] || null }));
+    return { at: list[0].created_at, table: list[0].table_name, blinds: list[0].blinds, list, board, players, live: live.length,
       net: live.reduce((n, x) => n + (x.result === 'miss' ? x.amount : x.result === 'hit' ? -x.payout : 0), 0) };
   }).sort((a, b) => b.at - a.at);
 }
@@ -399,26 +402,32 @@ function clearHand(main) {
 function showSummary(main) {
   const live = H.tickets.filter((x) => x.result !== 'void');
   if (!live.length) return clearHand(main);
+  openSummary({ tickets: live, table, blinds, board: H.board.filter((c) => c != null),
+    players: PNAMES.slice(0, H.n).map((p, i) => ({ p, cards: H.hands[i], seat: seatOf(i) || null })) }, () => clearHand(main));
+}
+// The summary card. onClose set: Close clears the hand (live); none: it only closes (looking back from History).
+function openSummary(S, onClose) {
+  const live = S.tickets;
   const first = Math.min(...live.map((x) => x.created_at));
   const when = new Date(first * 1000);
   const tm = when.toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
   const dt = when.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric' });
   const big = (c) => c == null ? '' : `<span class="sc ${isRed(c) ? 'red' : ''}">${face(c)}<i>${SUIT_SYMBOL[SUITS[c & 3]]}</i></span>`;
-  const players = PNAMES.slice(0, H.n).map((p, i) => { const st = seatOf(i); return `<div class="sp"><div class="spn">${p}${st ? ` · #${st.seat} ${esc(short(st.name))}` : ''}</div><div>${H.hands[i].map(big).join('')}</div></div>`; }).join('');
-  const board = H.board.filter((c) => c != null);
+  const players = S.players.map((x) => `<div class="sp"><div class="spn">${x.p}${x.seat ? ` · #${x.seat.seat} ${esc(short(x.seat.name))}` : ''}</div><div>${x.cards.map(big).join('')}</div></div>`).join('');
+  const board = S.board;
   const res = (x) => x.result === 'hit' ? `<b class="bad">Paid out ${fmt(x.payout)}</b>` : x.result === 'miss' ? `<b class="good">Kept ${fmt(x.amount)}</b>` : `<b class="warn">Pending</b>`;
   const who = (x) => x.detail && x.detail.buyer ? `${esc(x.detail.buyer.player || '')}${x.detail.buyer.seat ? ' · #' + x.detail.buyer.seat + ' ' + esc(short(x.detail.buyer.name)) : ''}` : '';
   const line = (label, x) => x ? `${who(x) ? `<div class="sl muted" style="font-size:15px">Bought by ${who(x)}</div>` : ''}<div class="sl"><span>${label} Outs:</span> <b>${x.outs}</b> (${x.players} players)</div><div class="sl"><span>${label} Bet:</span> <b>${fmt(x.amount)}</b></div><div class="sl"><span>${label} Odds:</span> <b>${x.odds}</b></div><div class="sl">${res(x)}${x.result_card ? ` · ${esc(x.result_card)}` : ''}</div>`
     : `<div class="sl muted"><span>${label} Outs:</span></div><div class="sl muted"><span>${label} Bet:</span></div><div class="sl muted"><span>${label} Odds:</span></div>`;
-  const pots = [...new Set(live.map((x) => x.potIndex))].sort();
+  const pots = [...new Set(live.map((x) => x.pot))].sort((a, b) => (a === 'Main' ? -1 : b === 'Main' ? 1 : a.localeCompare(b)));
   const win = live.filter((x) => x.result === 'miss').reduce((a, x) => a + x.amount, 0), loss = live.filter((x) => x.result === 'hit').reduce((a, x) => a + x.payout, 0);
-  const potBlocks = pots.map((pi) => { const tk = live.filter((x) => x.potIndex === pi), any = tk[0];
+  const potBlocks = pots.map((pn) => { const tk = live.filter((x) => x.pot === pn), any = tk[0];
     return `<div class="sblock"><div class="sl"><span>Pot${pots.length > 1 ? ` (${esc(any.pot)})` : ''}:</span> <b>${fmt(any.pot_amount)}</b></div>
       <div class="sdash">–</div>${line('Turn', tk.find((x) => x.street === 'flop'))}<div class="sdash">–</div>${line('River', tk.find((x) => x.street === 'turn'))}</div>`; }).join('<div class="sdash">–</div>');
   const ov = document.createElement('div');
   ov.className = 'sum-ov';
   ov.innerHTML = `<div class="sum" role="dialog" aria-modal="true" aria-label="Insurance summary">
-    <div class="shead"><img src="/admin/logo.png" alt=""><div><div class="sbrand">EVEREST POKER · INSURANCE</div><div class="muted">${esc(table)} · ${esc(blinds)}</div></div></div>
+    <div class="shead"><img src="/admin/logo.png" alt=""><div><div class="sbrand">EVEREST POKER · INSURANCE</div><div class="muted">${esc(S.table)} · ${esc(S.blinds)}</div></div></div>
     <div class="sl"><span>Time:</span> <b>${tm}</b></div><div class="sl"><span>Date:</span> <b>${dt}</b></div>
     <div class="scards">${players}</div>
     <div class="sboard"><div class="spn">Board</div>${board.map(big).join('')}</div>
@@ -427,11 +436,12 @@ function showSummary(main) {
     <div class="sdash">–</div>
     <div class="sl stot"><span>Total Win:</span> <b class="good">${win ? fmt(win) : ''}</b></div>
     <div class="sl stot"><span>Total Loss:</span> <b class="bad">${loss ? fmt(loss) : ''}</b></div>
-    <div class="sbtns"><button class="btn ghost" id="sumBack">${lang === 'zh' ? '返回' : 'Back'}</button><button class="btn gold" id="sumClose">${lang === 'zh' ? '關閉並清除' : 'Close'}</button></div>
+    <div class="sbtns" ${onClose ? '' : 'style="grid-template-columns:1fr"'}>${onClose ? `<button class="btn ghost" id="sumBack">${lang === 'zh' ? '返回' : 'Back'}</button>` : ''}<button class="btn gold" id="sumClose">${onClose && lang === 'zh' ? '關閉並清除' : lang === 'zh' ? '關閉' : 'Close'}</button></div>
   </div>`;
   document.body.appendChild(ov);
-  ov.querySelector('#sumBack').onclick = () => ov.remove();
-  ov.querySelector('#sumClose').onclick = () => { ov.remove(); clearHand(main); };
+  const back = ov.querySelector('#sumBack'); if (back) back.onclick = () => ov.remove();
+  ov.querySelector('#sumClose').onclick = () => { ov.remove(); if (onClose) onClose(); };
+  ov.onclick = (e) => { if (e.target === ov && !onClose) ov.remove(); };
 }
 
 async function pick(c, main) {
@@ -483,12 +493,18 @@ async function renderToday(main, day) {
     <section class="panel">${groupHands(d.tickets).map((h) => `<div class="tcard">
       <div class="row"><b>${esc(h.table)}</b><span class="hint" style="margin:0">${new Date(h.at * 1000).toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })} · ${esc(h.blinds)} · ${esc(h.board.join(' '))}</span>
         ${h.live ? `<span style="margin-left:auto;font-weight:800" class="${h.net >= 0 ? 'good' : 'bad'}">${h.net >= 0 ? '+' : '−'}${fmt(Math.abs(h.net))}</span>` : ''}</div>
+      <div class="row" style="gap:10px;margin-top:8px;flex-wrap:wrap;align-items:center">${h.players.map((x) => `<span style="display:inline-flex;gap:3px;align-items:center"><span class="hint" style="margin:0 2px 0 0">${x.p}${x.seat ? ' #' + x.seat.seat + ' ' + esc(short(x.seat.name)) : ''}</span>${x.cards.map(mini).join('')}</span>`).join('')}
+        ${h.board.length ? `<span style="display:inline-flex;gap:3px;align-items:center"><span class="hint" style="margin:0 2px 0 6px">Board</span>${h.board.map(parseCard).filter((c) => c != null).map(mini).join('')}</span>` : ''}
+        ${h.live ? `<button class="btn ghost sm" data-sum="${h.list[0].id}" style="margin-left:auto">${lang === 'zh' ? '結算卡' : 'Summary'}</button>` : ''}</div>
       ${h.list.map((x) => `<div class="row" style="gap:6px;margin-top:6px;font-size:14px"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.pot)}</b>
         <span>${x.detail.buyer ? esc(x.detail.buyer.player || '') + (x.detail.buyer.seat ? ' · #' + x.detail.buyer.seat + ' ' + esc(short(x.detail.buyer.name)) : '') : ''}</span>
         <span class="hint" style="margin:0">${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'} · ${x.outs} × ${x.odds}</span>
         <span class="num" style="margin-left:auto">${fmt(x.amount)} → ${fmt(x.payout)}${x.result_card ? ' · ' + esc(x.result_card) : ''}</span>
         ${role !== 'staff' && x.result !== 'void' ? `<button class="btn ghost sm" data-void="${x.id}">${t('voidBtn')}</button>` : ''}${x.void_reason ? `<span class="hint" style="margin:0">${esc(x.void_reason)}</span>` : ''}</div>`).join('')}</div>`).join('') || `<div class="hint">—</div>`}</section>`;
   main.querySelector('#day').onchange = (e) => renderToday(main, e.target.value);
+  const hands = groupHands(d.tickets);
+  main.querySelectorAll('[data-sum]').forEach((b) => b.onclick = () => { const h = hands.find((x) => String(x.list[0].id) === b.dataset.sum); if (!h) return;
+    openSummary({ tickets: h.list.filter((x) => x.result !== 'void'), table: h.table, blinds: h.blinds, players: h.players, board: h.board.map(parseCard).filter((c) => c != null) }, null); });
   const sf = main.querySelector('#setFloat'), ff = main.querySelector('#floatForm');
   if (sf) sf.onclick = () => { ff.hidden = !ff.hidden; };
   ff.onsubmit = async (e) => { e.preventDefault(); try { await api('/insurance/float', 'PUT', { day: ff.day.value, balance: num(ff.balance.value), capital: num(ff.capital.value) }); renderToday(main, d.day); } catch (err) { toast(esc(err.message), 'bad'); } };
