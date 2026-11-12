@@ -101,6 +101,14 @@ td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 .tgrid .k{display:block;font-size:11px;color:var(--muted);font-weight:400;text-transform:uppercase;letter-spacing:.05em}
 .btn.sm{min-height:34px;padding:6px 10px;font-size:13px}
 @media (max-width:520px){.tgrid{grid-template-columns:repeat(2,1fr)}}
+.sum-ov{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.72);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:16px}
+.sum{background:#14161c;border:1px solid #3a3f4d;border-radius:18px;padding:18px 20px;width:100%;max-width:440px;font-size:19px;line-height:1.35;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.shead{display:flex;gap:10px;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}.shead img{width:36px;height:36px}.sbrand{font-weight:800;letter-spacing:.06em;color:var(--gold2);font-size:15px}
+.shead .muted{font-size:14px}.sl span{color:var(--text)}.sl b{font-weight:800}.sl.muted span{color:var(--muted)}.sdash{color:var(--muted);margin:2px 0}
+.scards{display:flex;flex-wrap:wrap;gap:10px 14px;margin:10px 0 6px}.sp{display:flex;flex-direction:column;gap:3px}.spn{font-size:12px;color:var(--muted);font-weight:600}
+.sboard{margin:4px 0 8px}.sc{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:38px;height:52px;margin-right:4px;border-radius:6px;background:#f7f7f4;color:#111;font-weight:800;font-size:18px;line-height:1}
+.sc.red{color:#d21f32}.sc i{font-style:normal;font-size:16px;margin-top:2px}.stot{font-size:21px}
+.sbtns{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:16px}.sbtns .btn{min-height:50px;font-size:17px}
 .login{max-width:360px;margin:12vh auto 0;padding:0 16px}
 .login h2{color:var(--gold2);margin:0 0 4px}
 .login input{width:100%;margin-top:10px}
@@ -277,12 +285,10 @@ function renderCalc(main) {
   main.querySelectorAll('#np button').forEach((b) => b.onclick = () => { H.n = Number(b.dataset.n); H.active = nextEmpty(null); renderCalc(main); });
   // One tap clears every card, pot and amount for the next hand (player count kept); Undo brings it back for 10 seconds.
   main.querySelector('#newHand').onclick = () => {
-    if (H.tickets.some((x) => x.result === 'pending') && !confirm(lang === 'zh' ? '還有待開的保險，確定全部清除？' : 'Some tickets are still pending. Clear everything anyway?')) return;
-    const prev = H;
-    H = fresh(); H.n = prev.n;
-    renderCalc(main); window.scrollTo({ top: 0, behavior: 'smooth' });
-    const el = toast(`${t('cleared')} <button class="btn sm" id="undo" style="margin-left:10px">${t('undo')}</button>`, '', 10000);
-    el.querySelector('#undo').onclick = () => { H = prev; el.remove(); renderCalc(main); };
+    const pending = H.tickets.some((x) => x.result === 'pending');
+    if (pending && !confirm(lang === 'zh' ? '還有待開的保險，確定全部清除？' : 'Some tickets are still pending. Clear everything anyway?')) return;
+    if (!pending && H.tickets.some((x) => x.result === 'hit' || x.result === 'miss')) return showSummary(main); // the hand's summary first; Close clears
+    clearHand(main);
   };
   main.querySelectorAll('[data-seat]').forEach((sel) => sel.onchange = () => { H.seats[Number(sel.dataset.seat)] = sel.value ? Number(sel.value) : null; renderCalc(main); });
   main.querySelectorAll('.slot[data-k]').forEach((b) => b.onclick = () => { H.active = { k: b.dataset.k, i: Number(b.dataset.i), j: Number(b.dataset.j || 0) }; renderCalc(main); });
@@ -380,6 +386,54 @@ async function sell(pi, res, main) {
   } catch (err) { toast(esc(err.message), 'bad'); }
 }
 
+// Clear the hand for the next one; Undo brings it back for 10 seconds.
+function clearHand(main) {
+  const prev = H;
+  H = fresh(); H.n = prev.n;
+  renderCalc(main); window.scrollTo({ top: 0, behavior: 'smooth' });
+  const el = toast(`${t('cleared')} <button class="btn sm" id="undo" style="margin-left:10px">${t('undo')}</button>`, '', 10000);
+  el.querySelector('#undo').onclick = () => { H = prev; el.remove(); renderCalc(main); };
+}
+
+// End of a hand: one card with the cards, each insurance and the result, in the group's report format, ready to screenshot. Close clears the hand.
+function showSummary(main) {
+  const live = H.tickets.filter((x) => x.result !== 'void');
+  if (!live.length) return clearHand(main);
+  const first = Math.min(...live.map((x) => x.created_at));
+  const when = new Date(first * 1000);
+  const tm = when.toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
+  const dt = when.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric' });
+  const big = (c) => c == null ? '' : `<span class="sc ${isRed(c) ? 'red' : ''}">${face(c)}<i>${SUIT_SYMBOL[SUITS[c & 3]]}</i></span>`;
+  const players = PNAMES.slice(0, H.n).map((p, i) => { const st = seatOf(i); return `<div class="sp"><div class="spn">${p}${st ? ` · #${st.seat} ${esc(short(st.name))}` : ''}</div><div>${H.hands[i].map(big).join('')}</div></div>`; }).join('');
+  const board = H.board.filter((c) => c != null);
+  const res = (x) => x.result === 'hit' ? `<b class="bad">Paid out ${fmt(x.payout)}</b>` : x.result === 'miss' ? `<b class="good">Kept ${fmt(x.amount)}</b>` : `<b class="warn">Pending</b>`;
+  const who = (x) => x.detail && x.detail.buyer ? `${esc(x.detail.buyer.player || '')}${x.detail.buyer.seat ? ' · #' + x.detail.buyer.seat + ' ' + esc(short(x.detail.buyer.name)) : ''}` : '';
+  const line = (label, x) => x ? `${who(x) ? `<div class="sl muted" style="font-size:15px">Bought by ${who(x)}</div>` : ''}<div class="sl"><span>${label} Outs:</span> <b>${x.outs}</b> (${x.players} players)</div><div class="sl"><span>${label} Bet:</span> <b>${fmt(x.amount)}</b></div><div class="sl"><span>${label} Odds:</span> <b>${x.odds}</b></div><div class="sl">${res(x)}${x.result_card ? ` · ${esc(x.result_card)}` : ''}</div>`
+    : `<div class="sl muted"><span>${label} Outs:</span></div><div class="sl muted"><span>${label} Bet:</span></div><div class="sl muted"><span>${label} Odds:</span></div>`;
+  const pots = [...new Set(live.map((x) => x.potIndex))].sort();
+  const win = live.filter((x) => x.result === 'miss').reduce((a, x) => a + x.amount, 0), loss = live.filter((x) => x.result === 'hit').reduce((a, x) => a + x.payout, 0);
+  const potBlocks = pots.map((pi) => { const tk = live.filter((x) => x.potIndex === pi), any = tk[0];
+    return `<div class="sblock"><div class="sl"><span>Pot${pots.length > 1 ? ` (${esc(any.pot)})` : ''}:</span> <b>${fmt(any.pot_amount)}</b></div>
+      <div class="sdash">–</div>${line('Turn', tk.find((x) => x.street === 'flop'))}<div class="sdash">–</div>${line('River', tk.find((x) => x.street === 'turn'))}</div>`; }).join('<div class="sdash">–</div>');
+  const ov = document.createElement('div');
+  ov.className = 'sum-ov';
+  ov.innerHTML = `<div class="sum" role="dialog" aria-modal="true" aria-label="Insurance summary">
+    <div class="shead"><img src="/admin/logo.png" alt=""><div><div class="sbrand">EVEREST POKER · INSURANCE</div><div class="muted">${esc(table)} · ${esc(blinds)}</div></div></div>
+    <div class="sl"><span>Time:</span> <b>${tm}</b></div><div class="sl"><span>Date:</span> <b>${dt}</b></div>
+    <div class="scards">${players}</div>
+    <div class="sboard"><div class="spn">Board</div>${board.map(big).join('')}</div>
+    <div class="sl" style="margin-top:6px"><span>Insurance:</span></div>
+    ${potBlocks}
+    <div class="sdash">–</div>
+    <div class="sl stot"><span>Total Win:</span> <b class="good">${win ? fmt(win) : ''}</b></div>
+    <div class="sl stot"><span>Total Loss:</span> <b class="bad">${loss ? fmt(loss) : ''}</b></div>
+    <div class="sbtns"><button class="btn ghost" id="sumBack">${lang === 'zh' ? '返回' : 'Back'}</button><button class="btn gold" id="sumClose">${lang === 'zh' ? '關閉並清除' : 'Close'}</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#sumBack').onclick = () => ov.remove();
+  ov.querySelector('#sumClose').onclick = () => { ov.remove(); clearHand(main); };
+}
+
 async function pick(c, main) {
   if (!H.active) H.active = nextEmpty(null);
   if (!H.active) return;
@@ -401,6 +455,8 @@ async function pick(c, main) {
   }
   H.active = nextEmpty(s);
   renderCalc(main);
+  // River dealt and nothing left pending: the hand is done, show its summary.
+  if (settling && boardCount() === 5 && H.tickets.length && !H.tickets.some((x) => x.result === 'pending')) setTimeout(() => showSummary(main), 600);
 }
 
 async function renderToday(main, day) {
