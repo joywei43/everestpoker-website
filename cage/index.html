@@ -266,11 +266,11 @@ function ledgerTable(list,withVoid=true){
 
 /* players */
 function vPlayers(){
- const b=balances();const all=S.players.slice().sort((a,c)=>(isAcct(c)-isAcct(a))||a.name.localeCompare(c.name));const sel=S.playerSel&&S.players.find(p=>p.id===S.playerSel);
- return `<h2>Player accounts</h2><div class="grid g2"><div class="card"><table><tr><th>Player</th><th>Account</th><th class="r">Balance</th><th></th></tr>
- ${all.map(p=>{const v=pBal(p.id,b);return `<tr><td>${esc(pLabel(p))}${p.note?`<div class="sub">${esc(p.note)}</div>`:''}</td><td>${isAcct(p)?'<span class="pill info">Account</span>':'<span class="sub">Buy-ins only</span>'}</td><td class="r num ${v<0?'neg':''}">${peso(v)}${v<0?'<div class="sub">Owes us</div>':''}</td><td><button class="link" data-psel="${p.id}">Details</button></td></tr>`}).join('')||'<tr><td colspan="4" class="sub">No players yet</td></tr>'}</table>
+ const b=balances();const all=S.players.filter(isAcct).sort((a,c)=>a.name.localeCompare(c.name));const others=S.players.filter(p=>!isAcct(p)).sort((a,c)=>a.name.localeCompare(c.name));const sel=S.playerSel&&S.players.find(p=>p.id===S.playerSel);
+ return `<h2>Player accounts <span class="sub">credit allowed · account card holders only</span></h2><div class="grid g2"><div class="card"><table><tr><th>Player</th><th>Account</th><th class="r">Balance</th><th></th></tr>
+ ${all.map(p=>{const v=pBal(p.id,b);return `<tr><td>${esc(pLabel(p))}${p.note?`<div class="sub">${esc(p.note)}</div>`:''}</td><td>${isAcct(p)?'<span class="pill info">Account</span>':'<span class="sub">Buy-ins only</span>'}</td><td class="r num ${v<0?'neg':''}">${peso(v)}${v<0?'<div class="sub">Owes us</div>':''}</td><td><button class="link" data-psel="${p.id}">Details</button></td></tr>`}).join('')||'<tr><td colspan="4" class="sub">No account holders yet</td></tr>'}</table>${others.length?`<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Other players seen at the cage (${others.length}, no account)</summary>${others.map(p=>`<div class="row"><span>${esc(pLabel(p))}</span><button class="link" data-psel="${p.id}">Details</button></div>`).join('')}</details>`:''}
  <div class="sub" style="margin-top:6px">Plus = we owe the player (deposit). Minus = the player owes us (credit) and cannot withdraw.</div></div>
- <div class="card"><b>Open or update an account</b><label>Name</label><input id="np-name" placeholder="Hee"><label>Member #</label><input id="np-no" placeholder="888888"><label>Note</label><input id="np-note" placeholder="Contact">
+ <div class="card"><b>Open or update an account</b><label>Name</label><input id="np-name" placeholder="Type a name or member number" autocomplete="off"><div class="sugg" id="np-msugg"></div><label>Member #</label><input id="np-no" placeholder="888888"><label>Note</label><input id="np-note" placeholder="Contact">
  <label>Starting balance (minus = owes us)</label><input id="np-dep" inputmode="decimal" placeholder="0">
  <div class="sub" style="margin-top:6px">Only account holders can deposit, withdraw and buy in on credit. Typing an existing name changes its starting balance.</div><div class="err" id="np-err"></div><button class="primary" id="np-save" style="margin-top:10px">Save account</button></div></div>
  ${sel?`<h2>${esc(sel.name)}</h2><div class="card"><div class="flex" style="margin-bottom:8px"><span>Balance <b class="num">${peso(pBal(sel.id,b))}</b></span>
@@ -651,8 +651,9 @@ function bindCounts(){const q=$;
 
 /* ---------- quick actions: buy-in / cash-out, player account, operation, float swaps, insurance ---------- */
 const lname=s=>String(s||'').trim().toLowerCase();
+const normNo=x=>String(x||'').trim().replace(/^#/,'').replace(/^EV-/i,'').replace(/^0+(?=\d)/,'');
 const pLabel=p=>p.name+(p.no?' #'+p.no:'');
-function findPlayer(name){const n=lname(name).replace(/\s*#\s*/,' #');const m=n.match(/#(\S+)$/);return S.players.find(p=>lname(p.name)===n||lname(pLabel(p))===n)||(m?S.players.find(p=>String(p.no||'')===m[1]):null)}
+function findPlayer(name){const n=lname(name).replace(/\s*#\s*/,' #');const m=n.match(/#(\S+)$/);return S.players.find(p=>lname(p.name)===n||lname(pLabel(p))===n)||(m?S.players.find(p=>p.no&&normNo(p.no)===normNo(m[1])):null)}
 const isAcct=p=>!!(p&&p.account);
 function pBal(pid,b=balances()){return (b.dep[pid]||0)-(b.loan[pid]||0)}
 function ppmFor(day,name){const d=S.ppm[day];if(!d)return null;return (d.rows||[]).filter(r=>lname(r.n)===lname(name)).reduce((o,r)=>({buyin:o.buyin+Number(r.buyin||0),cashout:o.cashout+Number(r.cashout||0)}),{buyin:0,cashout:0})}
@@ -674,7 +675,12 @@ function vQuickGrid(keys){const list=keys?QA.filter(a=>keys.includes(a.k)):QA;re
 function vQuickBar(){return `<div class="types" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">${QA.map(a=>`<button class="${S.qa&&S.qa.k===a.k?'on':''}" data-qa="${a.k}">${a.l}<small>Shortcut ${a.key}</small></button>`).join('')}</div>${S.qa?vQuickForm():''}`}
 function apprField(q){return `<label>Approved by</label>${seg('qaappr',approvers().map(n=>[n,n]),q.approver)}`}
 function playerField(q,acctOnly){const p=findPlayer(q.player);
- return `<label>Player${acctOnly?' (account holders only)':''}</label><input id="qa-player" autocomplete="off" value="${esc(q.player)}" placeholder="Type a name or #number" data-acct="${acctOnly?1:''}"><div class="sugg" id="qa-sugg">${p?'':suggHTML(q.player,acctOnly)}</div>${q.player.trim()?playerCard2(q.player):''}`}
+ return `<label>Player${acctOnly?' (account holders only)':''}</label><input id="qa-player" autocomplete="off" value="${esc(q.player)}" placeholder="Type a name or #number" data-acct="${acctOnly?1:''}"><div class="sugg" id="qa-sugg">${p||q.member?'':suggHTML(q.player,acctOnly)}</div><div class="sugg" id="qa-msugg"></div>${memberNote(q,p)}${q.player.trim()&&!(q.member&&!p)?playerCard2(q.player):''}`}
+function memberNote(q,p){const m=q.member;if(!m)return p&&p.no?'':'';const mn=m.nickname||m.name||'';const diff=p&&((p.no&&normNo(p.no)!==normNo(m.member_no))||(lname(p.name)!==lname(mn)&&lname(p.name)!==lname(m.name||'')));
+ return `<div class="sub" style="margin-top:4px">Member <b>${esc(mn)}</b> #${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</div>${diff?`<div class="note warn" style="margin-top:6px">Different from Operation System: there it is <b>${esc(mn)} #${esc(m.member_no)}</b>, here <b>${esc(pLabel(p))}</b>. Saved as it is here; check with Marketing.</div>`:''}`}
+let memberTimer=null,memberSeq=0;
+function memberSearch(text,cb){clearTimeout(memberTimer);const t=text.trim().replace(/^#/,'');if(t.length<2||typeof api!=='function'){cb([]);return}
+ const seq=++memberSeq;memberTimer=setTimeout(async()=>{try{const r=await api('/members?limit=8&q='+encodeURIComponent(t));if(seq===memberSeq)cb(r.members||[])}catch(e){if(seq===memberSeq)cb([])}},250)}
 function suggList(text,acctOnly){const t=lname(text).replace(/^#/,''),day=bizDay();let list=S.players.filter(p=>!acctOnly||isAcct(p));
  if(!t){const today=new Set(liveEntries().filter(e=>e.date===day&&e.player).map(e=>e.player));list=list.filter(p=>isAcct(p)||today.has(p.id)).sort((a,b)=>(today.has(b.id)-today.has(a.id))||(isAcct(b)-isAcct(a))||a.name.localeCompare(b.name))}
  else list=list.filter(p=>lname(p.name).includes(t)||String(p.no||'').startsWith(t)).sort((a,b)=>(lname(b.name).startsWith(t)-lname(a.name).startsWith(t))||a.name.localeCompare(b.name));
@@ -763,7 +769,9 @@ function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],su
 async function qaSave(){const q=S.qa,E=qaBuild(),now=new Date(),day=bizDay();let p=findPlayer(q.player);
  if(['buyin','cashout'].includes(q.k)&&!q.ack){const nm=p?p.name:q.player.trim(),pp=ppmFor(day,nm),cd=p?cageDay(day,p.id):{buyin:0,cashout:0},after=cd[q.k]+num(q.amount);
   if(((S.ppm[day]||{}).rows||[]).length&&(!pp||Math.abs((pp[q.k]||0)-after)>0.001)){S.qaMsg={kind:'warn',text:pp?`Doesn't match PPM: PPM shows ${q.k==='buyin'?'buy-in':'cash-out'} ${pesoE(pp[q.k])} for ${nm} this business day, the cage would have ${pesoE(after)}. Please check with Marketing.`:`${nm} has no PPM record this business day. Please check with Marketing.`,ack:'Save anyway, I\'ll check with Marketing'};q.ppmFlag=true;render();return false}}
- if(['buyin','cashout'].includes(q.k)&&!p){const id=await savePlayer({name:q.player.trim(),note:'',openDep:0,openLoan:0,account:false,createdAt:now.toISOString()});p={id,name:q.player.trim()}}
+ const mm=q.member&&(lname(q.member.nickname||q.member.name)===lname(q.player)||lname(q.member.name||'')===lname(q.player))?q.member:null;
+ if(['buyin','cashout'].includes(q.k)&&!p){const id=await savePlayer({name:q.player.trim(),...(mm?{no:mm.member_no,group:mm.group_name||''}:{}),note:'',openDep:0,openLoan:0,account:false,createdAt:now.toISOString()});p={id,name:q.player.trim()}}
+ else if(p&&mm&&!p.no&&!MEM){try{await DB.doc('players/'+p.id).update({no:mm.member_no,group:mm.group_name||''})}catch(e){}}
  const typeMap={deposit:'p_deposit',withdraw:'p_withdraw',ins_close:'ins_settle'};
  await saveEntry({who:E.who||null,type:E.typeOverride||typeMap[q.k]||q.k,date:day,time:now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:now.toISOString(),voided:false,
   player:p?p.id:null,medium:E.method==='cash'?'cash':E.method?'chips':null,method:E.method||null,amount:E.amountOverride||num(q.amount),legs:E.legs,pl:E.pl,summary:E.summary,note:q.note||'',
@@ -789,9 +797,12 @@ function bindQA(){const q=$;
  document.querySelectorAll('[data-qa]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.qa);render();const f=q('qa-player')||q('qa-amt');f&&f.focus()});
  if(!S.qa){if(q('rec-day'))q('rec-day').onchange=()=>{S.recDay=q('rec-day').value;render()};bindPPM();return}
  const Q=S.qa;const reset=()=>{S.qaMsg=null;Q.ack=false;Q.ppmFlag=false};
+ const pickMember=m=>{const ex=S.players.find(x=>x.no&&normNo(x.no)===normNo(m.member_no));Q.member=m;pick(ex?ex.name:(m.nickname||m.name))};
  const pick=n=>{Q.player=n;const pe=q('qa-player');if(pe)pe.value=n;reset();render();const nf=q('qa-fv')&&!q('qa-fv').value?q('qa-fv'):q('qa-amt');nf&&nf.focus()};
  const bindPick=()=>document.querySelectorAll('[data-pick]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pick(b.dataset.pick)});bindPick();
- if(q('qa-player')&&q('qa-sugg')){const el=q('qa-player');el.addEventListener('input',()=>{q('qa-sugg').innerHTML=suggHTML(el.value,!!el.dataset.acct);bindPick()});
+ if(q('qa-player')&&q('qa-sugg')){const el=q('qa-player');el.addEventListener('input',()=>{q('qa-sugg').innerHTML=suggHTML(el.value,!!el.dataset.acct);bindPick();Q.member=null;
+  if(!el.dataset.acct)memberSearch(el.value,list=>{const box=q('qa-msugg');if(!box)return;box.innerHTML=list.length?'<span class="sub">Everest members:</span>'+list.map((m,i)=>`<button type="button" data-mpick="${i}">${esc(m.nickname||m.name)} <span class="sub">#${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</span></button>`).join(''):'';
+   box.querySelectorAll('[data-mpick]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pickMember(list[Number(b.dataset.mpick)])})})});
   el.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();const l=suggList(el.value,!!el.dataset.acct),ex=findPlayer(el.value);pick(ex?ex.name:(l.length===1&&el.value.trim()?l[0].name:el.value.trim()))})}
  if(q('qa-player')){q('qa-player').oninput=()=>{Q.player=q('qa-player').value};q('qa-player').onchange=()=>{Q.player=q('qa-player').value;reset();render();const nf=q('qa-fv')&&!q('qa-fv').value?q('qa-fv'):q('qa-amt');nf&&nf.focus()}}
  if(q('qa-amt')){q('qa-amt').oninput=()=>{Q.amount=q('qa-amt').value;if(S.qaMsg){reset();const n=document.querySelector('#qa-ack');if(n){render();q('qa-amt').focus()}}};q('qa-amt').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();(q('qa-save')||q('qa-ack')).click()}}}
@@ -868,6 +879,8 @@ function bind(){
  document.querySelectorAll('[data-void]').forEach(b=>b.onclick=()=>{const tr=b.closest('td');tr.innerHTML=`<input placeholder="Reason" style="min-width:140px"><div class="flex" style="margin-top:4px"><button class="link" data-ok>Void</button><button class="link" data-no>Cancel</button></div><div class="err"></div>`;
   tr.querySelector('[data-no]').onclick=()=>render();tr.querySelector('[data-ok]').onclick=async()=>{const r=tr.querySelector('input').value.trim();if(!r){tr.querySelector('.err').textContent='Write a reason.';return}
   try{await voidEntry(b.dataset.void,r)}catch(err){tr.querySelector('.err').textContent=errMsg(err)}}});
+ if(q('np-name'))q('np-name').addEventListener('input',()=>{const el=q('np-name');memberSearch(el.value,list=>{const box=q('np-msugg');if(!box)return;box.innerHTML=list.length?'<span class="sub">Everest members:</span>'+list.map((m,i)=>`<button type="button" data-npm="${i}">${esc(m.nickname||m.name)} <span class="sub">#${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</span></button>`).join(''):'';
+  box.querySelectorAll('[data-npm]').forEach(b=>b.onclick=()=>{const m=list[Number(b.dataset.npm)];q('np-name').value=m.nickname||m.name;q('np-no').value=m.member_no;if(m.group_name&&!q('np-note').value)q('np-note').value='Group: '+m.group_name;box.innerHTML=''})})});
  if(q('np-save'))q('np-save').onclick=async()=>{const name=q('np-name').value.trim(),dep=num(q('np-dep').value||0),loan=0;
   if(!name){q('np-err').textContent='Enter a name.';return}const ex=findPlayer(name);
   if(ex){if(!Number.isFinite(dep)){q('np-err').textContent='The balance must be a number.';return}try{if(MEM){ex.account=true;ex.openDep=dep;if(q('np-no').value.trim())ex.no=q('np-no').value.trim().replace(/^#/,'');render()}else await DB.doc('players/'+ex.id).update({account:true,openDep:dep,...(q('np-no').value.trim()?{no:q('np-no').value.trim().replace(/^#/,'')}:{})});S.playerSel=ex.id;flash(isAcct(ex)?'Starting balance updated':'Account opened')}catch(err){q('np-err').textContent=errMsg(err)}return}
