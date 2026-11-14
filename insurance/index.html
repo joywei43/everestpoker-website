@@ -371,12 +371,17 @@ function groupHands(tickets) {
 const ticketLine = (x) => `<div class="tk"><span class="chip ${x.result}">${t(x.result)}</span><b>${esc(x.pot)}</b> <span>${buyerOf(x)}</span> <span>${x.street === 'flop' ? 'Flop→Turn' : 'Turn→River'}</span>
   <span>${x.outs} outs × ${x.odds}</span><span class="num" style="margin-left:auto">${fmt(x.amount)} → ${fmt(x.payout)}</span>${x.result_card ? ' · ' + esc(x.result_card) : ''}</div>`;
 
+let selling = false;
 async function sell(pi, res, main) {
   const r = res[pi], inp = main.querySelector(`[data-buy="${pi}"]`), v = num(inp.value);
   if (!(v > 0)) { toast(t('buyAmt') + '?', 'bad'); return; }
   if (v > r.q.max) { toast(t('overMax') + ' ' + t('max') + ' ' + fmt(r.q.max), 'bad'); return; }
   const st = street(), p = H.pots[pi];
   const name = (c) => RANKS[c >> 2] + SUITS[c & 3];
+  // One ticket per pot per street: a double tap on Confirm must not sell twice.
+  if (selling || H.tickets.some((x) => x.result !== 'void' && x.pot === p.name && x.street === st)) return;
+  selling = true;
+  main.querySelectorAll('[data-sell]').forEach((b) => { b.disabled = true; });
   try {
     const d = await api('/insurance', 'POST', { table, blinds, street: st, pot: p.name, players: r.ids.length, outs: r.r.outs.length, pot_amount: r.pot, amount: v, leader: r.r.leader, buyer: { player: r.r.leader, seat: seatOf(PNAMES.indexOf(r.r.leader))?.seat || null, name: seatOf(PNAMES.indexOf(r.r.leader))?.name || '' }, hand_id: H.id,
       seats: Object.fromEntries(r.ids.map((id) => [id, seatOf(PNAMES.indexOf(id)) || null])),
@@ -386,7 +391,8 @@ async function sell(pi, res, main) {
     toast(`${t('sold')} ${fmt(v)} · ${t('pays')} ${fmt(d.ticket.payout)}`, 'good');
     H.active = { k: 'b', i: boardCount() };
     renderCalc(main);
-  } catch (err) { toast(esc(err.message), 'bad'); }
+  } catch (err) { toast(esc(err.message), 'bad'); main.querySelectorAll('[data-sell]').forEach((b) => { b.disabled = false; }); }
+  finally { selling = false; }
 }
 
 // Clear the hand for the next one; Undo brings it back for 10 seconds.

@@ -95,6 +95,12 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
     const potName = POTS.includes(b.pot) ? b.pot : 'Main';
     const payout = Math.round(amount * odds);
     const bd = await businessDay(env, now);
+    // One ticket per pot per street in a hand: a second tap on Confirm returns the ticket already sold.
+    if (b.hand_id) {
+      const dup = await env.DB.prepare("SELECT * FROM insurance_tickets WHERE day=? AND table_name=? AND pot=? AND street=? AND result<>'void' AND json_extract(detail,'$.hand_id')=? ORDER BY id LIMIT 1")
+        .bind(bd.day, str(b.table || '', 10), potName, b.street, String(b.hand_id)).first();
+      if (dup) { dup.detail = JSON.parse(dup.detail || '{}'); return reply({ ticket: dup, duplicate: true }); }
+    }
     const detail = JSON.stringify({ hands: b.hands, board: b.board, out_cards: b.out_cards, leader: b.leader, hand_id: b.hand_id, buyer: b.buyer, seats: b.seats }).slice(0, 4000);
     const row = await env.DB.prepare(`INSERT INTO insurance_tickets(day,created_at,created_by,table_name,blinds,street,pot,players,outs,odds,pot_amount,max_buy,amount,payout,result,detail)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?) RETURNING *`)
