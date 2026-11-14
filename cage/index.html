@@ -675,18 +675,23 @@ function vQuickGrid(keys){const list=keys?QA.filter(a=>keys.includes(a.k)):QA;re
 function vQuickBar(){return `<div class="types" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">${QA.map(a=>`<button class="${S.qa&&S.qa.k===a.k?'on':''}" data-qa="${a.k}">${a.l}<small>Shortcut ${a.key}</small></button>`).join('')}</div>${S.qa?vQuickForm():''}`}
 function apprField(q){return `<label>Approved by</label>${seg('qaappr',approvers().map(n=>[n,n]),q.approver)}`}
 function playerField(q,acctOnly){const p=findPlayer(q.player);
- return `<label>Player${acctOnly?' (account holders only)':''}</label><input id="qa-player" autocomplete="off" value="${esc(q.player)}" placeholder="Type a name or #number" data-acct="${acctOnly?1:''}"><div class="sugg" id="qa-sugg">${p||q.member?'':suggHTML(q.player,acctOnly)}</div><div class="sugg" id="qa-msugg"></div>${memberNote(q,p)}${q.player.trim()&&!(q.member&&!p)?playerCard2(q.player):''}`}
+ return `<label>Player${acctOnly?' (account holders only)':''}</label><input id="qa-player" autocomplete="off" value="${esc(q.player)}" placeholder="Member number or name" data-acct="${acctOnly?1:''}"><div class="sugg" id="qa-sugg">${p||q.member?'':suggHTML(q.player,acctOnly)}</div><div class="sugg" id="qa-msugg"></div>${memberNote(q,p)}${q.player.trim()&&!(q.member&&!p)?playerCard2(q.player):''}`}
 function memberNote(q,p){const m=q.member;if(!m)return p&&p.no?'':'';const mn=m.nickname||m.name||'';const diff=p&&((p.no&&normNo(p.no)!==normNo(m.member_no))||(lname(p.name)!==lname(mn)&&lname(p.name)!==lname(m.name||'')));
  return `<div class="sub" style="margin-top:4px">Member <b>${esc(mn)}</b> #${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</div>${diff?`<div class="note warn" style="margin-top:6px">Different from Operation System: there it is <b>${esc(mn)} #${esc(m.member_no)}</b>, here <b>${esc(pLabel(p))}</b>. Saved as it is here; check with Marketing.</div>`:''}`}
 let memberTimer=null,memberSeq=0;
 function memberSearch(text,cb){clearTimeout(memberTimer);const t=text.trim().replace(/^#/,'');if(t.length<2||typeof api!=='function'){cb([]);return}
- const seq=++memberSeq;memberTimer=setTimeout(async()=>{try{const r=await api('/members?limit=8&q='+encodeURIComponent(t));if(seq===memberSeq)cb(r.members||[])}catch(e){if(seq===memberSeq)cb([])}},250)}
+ const seq=++memberSeq;memberTimer=setTimeout(async()=>{try{const qs=[t];if(/^\d{1,5}$/.test(t))qs.push(t.padStart(6,'0'));
+  const rs=await Promise.all(qs.map(x=>api('/members?limit=8&q='+encodeURIComponent(x)).catch(()=>({members:[]}))));const seen=new Set(),out=[];
+  for(const r of rs)for(const m of r.members||[])if(!seen.has(m.member_no)){seen.add(m.member_no);out.push(m)}
+  const isNum=/^\d+$/.test(t);out.sort((a,b)=>(isNum?(normNo(b.member_no)===normNo(t))-(normNo(a.member_no)===normNo(t)):0));
+  if(seq===memberSeq){LAST_MEMBERS=out;cb(out)}}catch(e){if(seq===memberSeq)cb([])}},250)}
+let LAST_MEMBERS=[];
 function suggList(text,acctOnly){const t=lname(text).replace(/^#/,''),day=bizDay();let list=S.players.filter(p=>!acctOnly||isAcct(p));
  if(!t){const today=new Set(liveEntries().filter(e=>e.date===day&&e.player).map(e=>e.player));list=list.filter(p=>isAcct(p)||today.has(p.id)).sort((a,b)=>(today.has(b.id)-today.has(a.id))||(isAcct(b)-isAcct(a))||a.name.localeCompare(b.name))}
  else list=list.filter(p=>lname(p.name).includes(t)||String(p.no||'').startsWith(t)).sort((a,b)=>(lname(b.name).startsWith(t)-lname(a.name).startsWith(t))||a.name.localeCompare(b.name));
  return list.slice(0,8)}
 function suggHTML(text,acctOnly){const l=suggList(text,acctOnly);if(!l.length)return text.trim()?`<span class="sub">New name: ${esc(text.trim())}</span>`:'';
- return `${text.trim()?'':'<span class="sub">Today and accounts:</span>'}${l.map(p=>`<button type="button" data-pick="${esc(p.name)}">${esc(pLabel(p))}${isAcct(p)?` <span class="num ${pBal(p.id)<0?'neg':''}" style="font-size:12px">${pesoE(pBal(p.id))}</span>`:''}</button>`).join('')}`}
+ return `${text.trim()?'':'<span class="sub">Today and accounts:</span>'}${l.map(p=>`<button type="button" data-pick="${esc(p.no?pLabel(p):p.name)}">${esc(pLabel(p))}${isAcct(p)?` <span class="num ${pBal(p.id)<0?'neg':''}" style="font-size:12px">${pesoE(pBal(p.id))}</span>`:''}</button>`).join('')}`}
 function playerCard2(name){const p=findPlayer(name),day=bizDay(),pp=ppmFor(day,name);
  if(!p)return `<div class="note info">New name: <b>${esc(name)}</b> (no player account).${pp?` PPM today: buy-in ${pesoE(pp.buyin)} · cash-out ${pesoE(pp.cashout)}`:''}</div>`;
  const bal=pBal(p.id),cd=cageDay(day,p.id);
@@ -769,8 +774,8 @@ function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],su
 async function qaSave(){const q=S.qa,E=qaBuild(),now=new Date(),day=bizDay();let p=findPlayer(q.player);
  if(['buyin','cashout'].includes(q.k)&&!q.ack){const nm=p?p.name:q.player.trim(),pp=ppmFor(day,nm),cd=p?cageDay(day,p.id):{buyin:0,cashout:0},after=cd[q.k]+num(q.amount);
   if(((S.ppm[day]||{}).rows||[]).length&&(!pp||Math.abs((pp[q.k]||0)-after)>0.001)){S.qaMsg={kind:'warn',text:pp?`Doesn't match PPM: PPM shows ${q.k==='buyin'?'buy-in':'cash-out'} ${pesoE(pp[q.k])} for ${nm} this business day, the cage would have ${pesoE(after)}. Please check with Marketing.`:`${nm} has no PPM record this business day. Please check with Marketing.`,ack:'Save anyway, I\'ll check with Marketing'};q.ppmFlag=true;render();return false}}
- const mm=q.member&&(lname(q.member.nickname||q.member.name)===lname(q.player)||lname(q.member.name||'')===lname(q.player))?q.member:null;
- if(['buyin','cashout'].includes(q.k)&&!p){const id=await savePlayer({name:q.player.trim(),...(mm?{no:mm.member_no,group:mm.group_name||''}:{}),note:'',openDep:0,openLoan:0,account:false,createdAt:now.toISOString()});p={id,name:q.player.trim()}}
+ const mnick=q.member?(q.member.nickname||q.member.name):'';const mm=q.member&&[mnick,q.member.name||'',`${mnick} #${q.member.member_no}`].map(lname).includes(lname(q.player))?q.member:null;
+ if(['buyin','cashout'].includes(q.k)&&!p){const id=await savePlayer({name:mm?mnick:q.player.trim(),...(mm?{no:mm.member_no,group:mm.group_name||''}:{}),note:'',openDep:0,openLoan:0,account:false,createdAt:now.toISOString()});p={id,name:mm?mnick:q.player.trim()}}
  else if(p&&mm&&!p.no&&!MEM){try{await DB.doc('players/'+p.id).update({no:mm.member_no,group:mm.group_name||''})}catch(e){}}
  const typeMap={deposit:'p_deposit',withdraw:'p_withdraw',ins_close:'ins_settle'};
  await saveEntry({who:E.who||null,type:E.typeOverride||typeMap[q.k]||q.k,date:day,time:now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:now.toISOString(),voided:false,
@@ -797,13 +802,13 @@ function bindQA(){const q=$;
  document.querySelectorAll('[data-qa]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.qa);render();const f=q('qa-player')||q('qa-amt');f&&f.focus()});
  if(!S.qa){if(q('rec-day'))q('rec-day').onchange=()=>{S.recDay=q('rec-day').value;render()};bindPPM();return}
  const Q=S.qa;const reset=()=>{S.qaMsg=null;Q.ack=false;Q.ppmFlag=false};
- const pickMember=m=>{const ex=S.players.find(x=>x.no&&normNo(x.no)===normNo(m.member_no));Q.member=m;pick(ex?ex.name:(m.nickname||m.name))};
+ const pickMember=m=>{const ex=S.players.find(x=>x.no&&normNo(x.no)===normNo(m.member_no));Q.member=m;pick(ex?pLabel(ex):`${m.nickname||m.name} #${m.member_no}`)};
  const pick=n=>{Q.player=n;const pe=q('qa-player');if(pe)pe.value=n;reset();render();const nf=q('qa-fv')&&!q('qa-fv').value?q('qa-fv'):q('qa-amt');nf&&nf.focus()};
  const bindPick=()=>document.querySelectorAll('[data-pick]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pick(b.dataset.pick)});bindPick();
  if(q('qa-player')&&q('qa-sugg')){const el=q('qa-player');el.addEventListener('input',()=>{q('qa-sugg').innerHTML=suggHTML(el.value,!!el.dataset.acct);bindPick();Q.member=null;
-  if(!el.dataset.acct)memberSearch(el.value,list=>{const box=q('qa-msugg');if(!box)return;box.innerHTML=list.length?'<span class="sub">Everest members:</span>'+list.map((m,i)=>`<button type="button" data-mpick="${i}">${esc(m.nickname||m.name)} <span class="sub">#${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</span></button>`).join(''):'';
+  if(!el.dataset.acct)memberSearch(el.value,list=>{const box=q('qa-msugg');if(!box)return;box.innerHTML=list.length?'<span class="sub">Everest members:</span>'+list.map((m,i)=>`<button type="button" data-mpick="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}${m.group_name?' <span class="sub">· '+esc(m.group_name)+'</span>':''}</button>`).join(''):'';
    box.querySelectorAll('[data-mpick]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pickMember(list[Number(b.dataset.mpick)])})})});
-  el.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();const l=suggList(el.value,!!el.dataset.acct),ex=findPlayer(el.value);pick(ex?ex.name:(l.length===1&&el.value.trim()?l[0].name:el.value.trim()))})}
+  el.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();const tv=el.value.trim().replace(/^#/,'');if(/^\d+$/.test(tv)){let hit=LAST_MEMBERS.find(m=>normNo(m.member_no)===normNo(tv));if(!hit){memberSearch(tv,list=>{const h=list.find(m=>normNo(m.member_no)===normNo(tv));if(h)pickMember(h);else{const box=q('qa-msugg');if(box)box.innerHTML='<span class="sub">No member with number '+esc(tv)+'</span>'}});return}pickMember(hit);return}const l=suggList(el.value,!!el.dataset.acct),ex=findPlayer(el.value);pick(ex?ex.name:(l.length===1&&el.value.trim()?l[0].name:el.value.trim()))})}
  if(q('qa-player')){q('qa-player').oninput=()=>{Q.player=q('qa-player').value};q('qa-player').onchange=()=>{Q.player=q('qa-player').value;reset();render();const nf=q('qa-fv')&&!q('qa-fv').value?q('qa-fv'):q('qa-amt');nf&&nf.focus()}}
  if(q('qa-amt')){q('qa-amt').oninput=()=>{Q.amount=q('qa-amt').value;if(S.qaMsg){reset();const n=document.querySelector('#qa-ack');if(n){render();q('qa-amt').focus()}}};q('qa-amt').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();(q('qa-save')||q('qa-ack')).click()}}}
  if(q('qa-cat'))q('qa-cat').onchange=()=>{Q.cat=q('qa-cat').value;reset()};
