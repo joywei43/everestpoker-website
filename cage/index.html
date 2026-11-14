@@ -125,6 +125,7 @@ function balances(upTo){
  const st=settings(),o=st.open;
  const b={mass_chips:Number(o.mass_chips||0),cf_cash:o.cf_cash,ins_cash:o.ins_cash,ins_chips:o.ins_chips,day_cash:Number(o.day_cash||0),bb_cash:Number(o.bb_cash||0),chip_chips:o.chip_chips,ar:{},ap:{},pbBy:{},fx:Object.fromEntries(FX_CUR.map(c=>{const n=Number(o['fx_'+c]||0);return [c,{amt:n,php:round2(n*fxRate(c,st))}]})),dep:{},loan:{},owner:{},behind:0,box:Number(o.box||0)};
  for(const p of S.players){b.dep[p.id]=Number(p.openDep||0);b.loan[p.id]=Number(p.openLoan||0)}
+ for(const p of S.players)if(!p.account&&p.under&&S.players.some(h=>h.id===p.under&&h.account)){b.dep[p.under]=(b.dep[p.under]||0)+(b.dep[p.id]||0)-(b.loan[p.id]||0);b.dep[p.id]=0;b.loan[p.id]=0}
  for(const x of (st.arap||[])){const v=Number(x.amt||0);if(x.kind==='ar')b.ar[x.name]=(b.ar[x.name]||0)+v;else if(x.kind==='ap')b.ap[x.name]=(b.ap[x.name]||0)+v;else if(x.kind==='pb'){b.behind-=v;b.pbBy[x.name]=(b.pbBy[x.name]||0)+v}}
  for(const e of liveEntries()){
   if(upTo&&e.date>upTo)continue;if(e.date<st.openDate)continue;
@@ -266,17 +267,18 @@ function ledgerTable(list,withVoid=true){
 
 /* players */
 function vPlayers(){
- const b=balances();const all=S.players.filter(isAcct).sort((a,c)=>a.name.localeCompare(c.name));const others=S.players.filter(p=>!isAcct(p)).sort((a,c)=>a.name.localeCompare(c.name));const sel=S.playerSel&&S.players.find(p=>p.id===S.playerSel);
+ const b=balances();const all=S.players.filter(isAcct).sort((a,c)=>a.name.localeCompare(c.name));const others=S.players.filter(p=>!isAcct(p)&&!acctOf(p)).sort((a,c)=>a.name.localeCompare(c.name));const sel=S.playerSel&&S.players.find(p=>p.id===S.playerSel);
  return `<h2>Player accounts <span class="sub">credit allowed · account card holders only</span></h2><div class="grid g2"><div class="card"><table><tr><th>Player</th><th>Account</th><th class="r">Balance</th><th></th></tr>
- ${all.map(p=>{const v=pBal(p.id,b);return `<tr><td>${esc(pLabel(p))}${p.note?`<div class="sub">${esc(p.note)}</div>`:''}</td><td>${isAcct(p)?'<span class="pill info">Account</span>':'<span class="sub">Buy-ins only</span>'}</td><td class="r num ${v<0?'neg':''}">${peso(v)}${v<0?'<div class="sub">Owes us</div>':''}</td><td><button class="link" data-psel="${p.id}">Details</button></td></tr>`}).join('')||'<tr><td colspan="4" class="sub">No account holders yet</td></tr>'}</table>${others.length?`<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Other players seen at the cage (${others.length}, no account)</summary>${others.map(p=>`<div class="row"><span>${esc(pLabel(p))}</span><button class="link" data-psel="${p.id}">Details</button></div>`).join('')}</details>`:''}
+ ${all.map(p=>{const v=pBal(p.id,b);return `<tr><td>${esc(pLabel(p))}${p.note?`<div class="sub">${esc(p.note)}</div>`:''}${subsOf(p).length?`<div class="sub">Under this account: ${subsOf(p).map(x=>esc(pLabel(x))).join(', ')}</div>`:''}</td><td>${isAcct(p)?'<span class="pill info">Account</span>':'<span class="sub">Buy-ins only</span>'}</td><td class="r num ${v<0?'neg':''}">${peso(v)}${v<0?'<div class="sub">Owes us</div>':''}</td><td><button class="link" data-psel="${p.id}">Details</button></td></tr>`}).join('')||'<tr><td colspan="4" class="sub">No account holders yet</td></tr>'}</table>${others.length?`<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Other players seen at the cage (${others.length}, no account)</summary>${others.map(p=>`<div class="row"><span>${esc(pLabel(p))}</span><button class="link" data-psel="${p.id}">Details</button></div>`).join('')}</details>`:''}
  <div class="sub" style="margin-top:6px">Plus = we owe the player (deposit). Minus = the player owes us (credit) and cannot withdraw.</div></div>
  <div class="card"><b>Open or update an account</b><label>Name</label><input id="np-name" placeholder="Type a name or member number" autocomplete="off"><div class="sugg" id="np-msugg"></div><label>Member #</label><input id="np-no" placeholder="888888"><label>Note</label><input id="np-note" placeholder="Contact">
- <label>Starting balance (minus = owes us)</label><input id="np-dep" inputmode="decimal" placeholder="0">
+ <label>Type</label><select id="np-under"><option value="">Own account (credit allowed)</option>${S.players.filter(isAcct).map(h=>`<option value="${h.id}">Player under ${esc(pLabel(h))}'s account</option>`).join('')}</select>
+ <label>Starting balance (minus = owes us) <span class="sub">own account only</span></label><input id="np-dep" inputmode="decimal" placeholder="0">
  <div class="sub" style="margin-top:6px">Only account holders can deposit, withdraw and buy in on credit. Typing an existing name changes its starting balance.</div><div class="err" id="np-err"></div><button class="primary" id="np-save" style="margin-top:10px">Save account</button></div></div>
  ${sel?`<h2>${esc(sel.name)}</h2><div class="card"><div class="flex" style="margin-bottom:8px"><span>Balance <b class="num">${peso(pBal(sel.id,b))}</b></span>
  <span class="sub">Starting balance ${peso((sel.openDep||0)-(sel.openLoan||0))}</span></div>
  <table><tr><th>Business day</th><th>Action</th><th>Method</th><th class="r">Account change</th><th class="r">Amount</th><th>Note</th></tr>
- ${S.entries.filter(e=>e.player===sel.id).sort(byNewest).map(e=>{const d=(e.legs||[]).filter(g=>g.a==='dep').reduce((x,g)=>x+g.v,0)-(e.legs||[]).filter(g=>g.a==='loan').reduce((x,g)=>x+g.v,0);
+ ${S.entries.filter(e=>e.player===sel.id||e.acct===sel.id).sort(byNewest).map(e=>{const d=(e.legs||[]).filter(g=>g.a==='dep').reduce((x,g)=>x+g.v,0)-(e.legs||[]).filter(g=>g.a==='loan').reduce((x,g)=>x+g.v,0);
  return `<tr class="${e.voided?'muted':''}"><td class="num">${esc(e.date)} ${esc(e.time||'')}</td><td>${esc(typeLabel(e.type))}</td><td>${esc(e.method||MED[e.medium]||'')}${e.approver?`<div class="sub">Approved by ${esc(e.approver)}</div>`:''}</td><td class="r num ${d<0?'neg':''}">${d?sgn(d):''}</td><td class="r num">${(e.amount||0).toLocaleString('en-US')}</td><td>${esc(e.note)}${e.voided?' (voided)':''}</td></tr>`}).join('')||'<tr><td colspan="6" class="sub">No records</td></tr>'}</table></div>`:''}`}
 
 /* MIDORI */
@@ -655,6 +657,8 @@ const normNo=x=>String(x||'').trim().replace(/^#/,'').replace(/^EV-/i,'').replac
 const pLabel=p=>p.name+(p.no?' #'+p.no:'');
 function findPlayer(name){const n=lname(name).replace(/\s*#\s*/,' #');const m=n.match(/#(\S+)$/);return S.players.find(p=>lname(p.name)===n||lname(pLabel(p))===n)||(m?S.players.find(p=>p.no&&normNo(p.no)===normNo(m[1])):null)}
 const isAcct=p=>!!(p&&p.account);
+const acctOf=p=>!p?null:isAcct(p)?p:(p.under?S.players.find(x=>x.id===p.under&&isAcct(x))||null:null);
+const subsOf=h=>S.players.filter(x=>x.under===h.id&&!isAcct(x));
 function pBal(pid,b=balances()){return (b.dep[pid]||0)-(b.loan[pid]||0)}
 function ppmFor(day,name){const d=S.ppm[day];if(!d)return null;return (d.rows||[]).filter(r=>lname(r.n)===lname(name)).reduce((o,r)=>({buyin:o.buyin+Number(r.buyin||0),cashout:o.cashout+Number(r.cashout||0)}),{buyin:0,cashout:0})}
 function cageDay(day,pid){const o={buyin:0,cashout:0,credit:false};for(const e of liveEntries())if(e.date===day&&e.player===pid&&(e.type==='buyin'||e.type==='cashout')){o[e.type]+=e.amount;if(e.type==='buyin'&&e.method==='credit')o.credit=true}return o}
@@ -694,9 +698,9 @@ function suggHTML(text,acctOnly){const l=suggList(text,acctOnly);if(!l.length)re
  return `${text.trim()?'':'<span class="sub">Today and accounts:</span>'}${l.map(p=>`<button type="button" data-pick="${esc(p.no?pLabel(p):p.name)}">${esc(pLabel(p))}${isAcct(p)?` <span class="num ${pBal(p.id)<0?'neg':''}" style="font-size:12px">${pesoE(pBal(p.id))}</span>`:''}</button>`).join('')}`}
 function playerCard2(name){const p=findPlayer(name),day=bizDay(),pp=ppmFor(day,name);
  if(!p)return `<div class="note info">New name: <b>${esc(name)}</b> (no player account).${pp?` PPM today: buy-in ${pesoE(pp.buyin)} · cash-out ${pesoE(pp.cashout)}`:''}</div>`;
- const bal=pBal(p.id),cd=cageDay(day,p.id);
- return `<div class="card" style="margin-top:10px;border:2px solid var(--accent)"><div class="row" style="padding-top:0"><b>Player card · ${esc(pLabel(p))}</b>${isAcct(p)?'<span class="pill info">Player account</span>':'<span class="pill warn">No account</span>'}</div>
- ${isAcct(p)?`<div class="row"><span>Account balance</span><b class="num ${bal<0?'neg':''}">${pesoE(bal)}${bal<0?' (owes)':''}</b></div>`:''}
+ const bal=isAcct(p)?pBal(p.id):0,cd=cageDay(day,p.id);
+ return `<div class="card" style="margin-top:10px;border:2px solid var(--accent)"><div class="row" style="padding-top:0"><b>Player card · ${esc(pLabel(p))}</b>${isAcct(p)?'<span class="pill info">Player account</span>':acctOf(p)?`<span class="pill info">Under ${esc(acctOf(p).name)}</span>`:'<span class="pill warn">No account</span>'}</div>
+ ${isAcct(p)?`<div class="row"><span>Account balance</span><b class="num ${bal<0?'neg':''}">${pesoE(bal)}${bal<0?' (owes)':''}</b></div>${subsOf(p).length?`<div class="sub">Players under this account: ${subsOf(p).map(x=>esc(pLabel(x))).join(', ')}</div>`:''}`:acctOf(p)?(()=>{const h=acctOf(p),hb=pBal(h.id);return `<div class="row"><span>Credit goes on <b>${esc(pLabel(h))}</b>'s account</span><b class="num ${hb<0?'neg':''}">${pesoE(hb)}${hb<0?' (owes)':''}</b></div>`})():''}
  <div class="row"><span class="sub">This business day at cage: buy-in / cash-out</span><span class="num">${pesoE(cd.buyin)} / ${pesoE(cd.cashout)}${cd.credit?' <span class="pill bad">Credit buy-in today</span>':''}</span></div>
  <div class="row"><span class="sub">This business day in PPM: buy-in / cash-out</span><span class="num">${pp?`${pesoE(pp.buyin)} / ${pesoE(pp.cashout)}`:'No record'}</span></div></div>`}
 function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (₱)</label><input id="qa-amt" inputmode="decimal" value="${esc(q.amount)}" placeholder="0">`;let f='';
@@ -704,8 +708,8 @@ function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (�
  if(q.k==='buyin'){f=`${playerField(q)}${amt}<label>Buy-in method</label>${seg('qamethod',[['cash','Cash'],['mass','Mass chip'],['credit','Credit']],q.method)}
   ${q.method==='mass'?'<div class="sub" style="margin-top:4px">Player pays with casino mass chips. Keep them apart and redeem them at the casino.</div>':''}
   ${q.method==='credit'?`${apprField(q)}${q.approver?`<div class="note warn" style="margin-top:6px">Credit approved by <b>${esc(q.approver)}</b>. Chips are issued only after you confirm.</div>`:''}`:''}`}
- if(q.k==='cashout'){const cd=p?cageDay(bizDay(),p.id):{credit:false},neg=p&&isAcct(p)&&pBal(p.id)<0,lock=cd.credit||neg;if(lock)q.method='account';
-  f=`${playerField(q)}${amt}<label>Paid as</label>${lock?`<div class="note bad">${cd.credit?'This player bought in on credit this business day.':'This player\'s account is negative.'} Chips go back to ${esc(p.name)}'s account. No cash-out is allowed.</div>`:(p&&isAcct(p)?seg('qamethod',[['cash','Cash'],['account','Back to player account']],q.method):((q.method='cash'),'<div class="sub">Cash. Back to player account is only for account holders ('+esc(S.players.filter(isAcct).map(x=>x.name).join(', ')||'none')+').</div>'))}`}
+ if(q.k==='cashout'){const cd=p?cageDay(bizDay(),p.id):{credit:false},ac=acctOf(p),neg=ac&&pBal(ac.id)<0,lock=cd.credit||neg;if(lock)q.method='account';
+  f=`${playerField(q)}${amt}<label>Paid as</label>${lock?`<div class="note bad">${cd.credit?'This player bought in on credit this business day.':(ac&&ac.id!==p.id?esc(ac.name)+'\'s account is negative.':'This player\'s account is negative.')} Chips go back to ${esc(ac?ac.name:p.name)}'s account. No cash-out is allowed.</div>`:(ac?seg('qamethod',[['cash','Cash'],['account',ac.id!==p.id?`Back to ${ac.name}'s account`:'Back to player account']],q.method):((q.method='cash'),'<div class="sub">Cash. Back to player account is only for account holders ('+esc(S.players.filter(isAcct).map(x=>x.name).join(', ')||'none')+').</div>'))}`}
  if(q.k==='deposit')f=`${playerField(q,true)}${amt}<label>Deposited as</label>${seg('qamethod',[['cash','Cash'],['chips','Chips']],q.method)}<div class="sub" style="margin-top:4px">Cash goes into the cash float, chips into the chip float.</div>`;
  if(q.k==='withdraw'){f=`${playerField(q,true)}${amt}<label>Paid as</label>${seg('qamethod',[['cash','Cash'],['chips','Chips']],q.method)}`}
  if(q.k==='op_out'){const food=q.cat===FOOD_CHIPS;f=`<label>Purpose</label>${seg('qacat',OP_OUT.map(c=>[c,c]),q.cat)}<label>Details${food?' (optional)':''}</label><input id="qa-note" value="${esc(q.note)}" placeholder="${food?'Table 2 · 3 noodles':'5 cases bottled water'}">${amt}${food?'<div class="sub" style="margin-top:4px">The guest\'s chips go back to the chip float and the cash comes out of on-day cash. No approval needed.</div>':`${apprField(q)}<div class="sub" style="margin-top:4px">Paid from the cash float.</div>`}`}
@@ -741,11 +745,11 @@ function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],su
   case 'buyin':{if(!q.player.trim())fail('Enter the player.');needAmt();
    if(q.method==='cash'){E.legs=[{a:'day',m:'cash',v:a},{a:'chip',m:'chips',v:-a}];E.summary=`${q.player.trim()} buy-in ${pesoE(a)} · cash`}
    else if(q.method==='mass'){E.legs=[{a:'mass',m:'chips',v:a},{a:'chip',m:'chips',v:-a}];E.summary=`${q.player.trim()} buy-in ${pesoE(a)} · casino mass chips (to redeem)`}
-   else{if(!isAcct(p))fail(`${q.player.trim()} has no player account. Credit is only for account holders: ${S.players.filter(isAcct).map(x=>x.name).join(', ')||'none'}.`);needAppr();
-    E.legs=[{a:'chip',m:'chips',v:-a},{a:'dep',p:p.id,v:-a}];E.summary=`${p.name} buy-in ${pesoE(a)} · credit · approved by ${q.approver}`}
+   else{const ac=acctOf(p);if(!ac)fail(`${q.player.trim()} has no player account and is not under one. Credit is only for account holders and their players: ${S.players.filter(isAcct).map(x=>x.name).join(', ')||'none'}.`);needAppr();
+    E.legs=[{a:'chip',m:'chips',v:-a},{a:'dep',p:ac.id,v:-a}];E.acct=ac.id;E.summary=`${p.name} buy-in ${pesoE(a)} · credit${ac.id!==p.id?` on ${ac.name}'s account`:''} · approved by ${q.approver}`}
    E.method=q.method;break}
-  case 'cashout':{if(!q.player.trim())fail('Enter the player.');needAmt();const cd=p?cageDay(day,p.id):{credit:false};const lock=cd.credit||(p&&isAcct(p)&&pBal(p.id)<0);
-   if(lock||q.method==='account'){if(!isAcct(p))fail(`${q.player.trim()} has no player account. Pay cash or open an account first.`);E.legs=[{a:'chip',m:'chips',v:a},{a:'dep',p:p.id,v:a}];E.summary=`${p.name} cash-out ${pesoE(a)} · back to player account${lock?' (no cash-out allowed)':''}`;E.method='account'}
+  case 'cashout':{if(!q.player.trim())fail('Enter the player.');needAmt();const cd=p?cageDay(day,p.id):{credit:false};const ac=acctOf(p);const lock=cd.credit||(ac&&pBal(ac.id)<0);
+   if(lock||q.method==='account'){if(!ac)fail(`${q.player.trim()} has no player account. Pay cash or open an account first.`);E.legs=[{a:'chip',m:'chips',v:a},{a:'dep',p:ac.id,v:a}];E.acct=ac.id;E.summary=`${p.name} cash-out ${pesoE(a)} · back to ${ac.id!==p.id?ac.name+'\'s':'player'} account${lock?' (no cash-out allowed)':''}`;E.method='account'}
    else{E.legs=[{a:'day',m:'cash',v:-a},{a:'chip',m:'chips',v:a}];E.summary=`${q.player.trim()} cash-out ${pesoE(a)} · cash`;E.method='cash'}break}
   case 'deposit':{if(!isAcct(p))fail('Choose a player with an account.');needAmt();E.legs=[q.method==='cash'?{a:'cf',m:'cash',v:a}:{a:'chip',m:'chips',v:a},{a:'dep',p:p.id,v:a}];E.summary=`${p.name} deposit ${pesoE(a)} · ${q.method}`;E.method=q.method;break}
   case 'withdraw':{if(!isAcct(p))fail('Choose a player with an account.');needAmt();const bal=pBal(p.id);
@@ -893,9 +897,11 @@ function bind(){
   try{await voidEntry(b.dataset.void,r)}catch(err){tr.querySelector('.err').textContent=errMsg(err)}}});
  if(q('np-name'))q('np-name').addEventListener('input',()=>{const el=q('np-name');memberSearch(el.value,list=>{const box=q('np-msugg');if(!box)return;box.innerHTML=list.length?'<span class="sub">Everest members:</span>'+list.map((m,i)=>`<button type="button" data-npm="${i}">${esc(m.nickname||m.name)} <span class="sub">#${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</span></button>`).join(''):'';
   box.querySelectorAll('[data-npm]').forEach(b=>b.onclick=()=>{const m=list[Number(b.dataset.npm)];q('np-name').value=m.nickname||m.name;q('np-no').value=m.member_no;if(m.group_name&&!q('np-note').value)q('np-note').value='Group: '+m.group_name;box.innerHTML=''})})});
- if(q('np-save'))q('np-save').onclick=async()=>{const name=q('np-name').value.trim(),dep=num(q('np-dep').value||0),loan=0;
-  if(!name){q('np-err').textContent='Enter a name.';return}const ex=findPlayer(name);
-  if(ex){if(!Number.isFinite(dep)){q('np-err').textContent='The balance must be a number.';return}try{if(MEM){ex.account=true;ex.openDep=dep;if(q('np-no').value.trim())ex.no=q('np-no').value.trim().replace(/^#/,'');render()}else await DB.doc('players/'+ex.id).update({account:true,openDep:dep,...(q('np-no').value.trim()?{no:q('np-no').value.trim().replace(/^#/,'')}:{})});S.playerSel=ex.id;flash(isAcct(ex)?'Starting balance updated':'Account opened')}catch(err){q('np-err').textContent=errMsg(err)}return}
+ if(q('np-save'))q('np-save').onclick=async()=>{const name=q('np-name').value.trim(),dep=num(q('np-dep').value||0),loan=0,under=q('np-under').value,no=q('np-no').value.trim().replace(/^#/,'');
+  if(!name){q('np-err').textContent='Enter a name.';return}const ex=findPlayer(no?name+' #'+no:name)||findPlayer(name);
+  if(under){if(ex&&ex.id===under){q('np-err').textContent='A player cannot be under their own account.';return}
+   const data={under,account:false,...(no?{no}:{})};try{if(ex)await DB.doc('players/'+ex.id).update(data);else await savePlayer({name,note:q('np-note').value.trim(),openDep:0,openLoan:0,createdAt:new Date().toISOString(),...data});flash(`${name} is now under ${S.players.find(x=>x.id===under).name}`)}catch(err){q('np-err').textContent=errMsg(err)}return}
+  if(ex){if(!Number.isFinite(dep)){q('np-err').textContent='The balance must be a number.';return}try{if(MEM){ex.account=true;ex.openDep=dep;if(q('np-no').value.trim())ex.no=q('np-no').value.trim().replace(/^#/,'');render()}else await DB.doc('players/'+ex.id).update({account:true,under:null,openDep:dep,...(q('np-no').value.trim()?{no:q('np-no').value.trim().replace(/^#/,'')}:{})});S.playerSel=ex.id;flash(isAcct(ex)?'Starting balance updated':'Account opened')}catch(err){q('np-err').textContent=errMsg(err)}return}
   if(!Number.isFinite(dep)){q('np-err').textContent='The balance must be a number.';return}
   try{const id=await savePlayer({name,no:q('np-no').value.trim().replace(/^#/,''),note:q('np-note').value.trim(),openDep:dep,openLoan:0,account:true,createdAt:new Date().toISOString()});S.playerSel=id;if(S.type&&['dep_in','dep_out','loan_out','loan_back'].includes(S.type))S.form.player=id;flash('Player added')}catch(err){q('np-err').textContent=errMsg(err)}};
  document.querySelectorAll('[data-psel]').forEach(b=>b.onclick=()=>{S.playerSel=b.dataset.psel;render()});
@@ -914,7 +920,10 @@ function bind(){
   const csv=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
   try{await navigator.clipboard.writeText(csv);q('lf-msg').textContent='Copied. Paste into Excel.'}catch(e){q('lf-msg').textContent='The browser blocked copying.'}};
  if(q('st-import'))q('st-import').onchange=async()=>{const f=q('st-import').files[0];if(!f)return;const m=q('st-impmsg');try{const j=JSON.parse(await f.text());const docs=j.docs||[];let n=0,skip=0;
-  for(const d of docs){const have=d.coll==='config'?(d.id==='settings'&&S.settings):d.coll==='players'?S.players.find(x=>x.id===d.id):d.coll==='midori'?S.midori[d.id]:d.coll==='manpower'?S.manpower[d.id]:null;
+  for(const d of docs){if(d.coll==='players'&&d.mode==='merge'){const ex=S.players.find(x=>x.id===d.id)||S.players.find(x=>lname(x.name)===lname(d.data.name));const data={...d.data};
+    if(data.underName){const h=S.players.find(x=>isAcct(x)&&lname(x.name)===lname(data.underName));delete data.underName;if(!h){skip++;continue}data.under=h.id}
+    if(ex){if(ex.no&&data.no)delete data.no;delete data.name;if(ex.account&&data.account===undefined)data.under=data.under||null;await DB.doc('players/'+ex.id).update(data)}else await DB.doc('players/'+d.id).set({openDep:0,openLoan:0,note:'',createdAt:new Date().toISOString(),...data});n++;continue}
+   const have=d.coll==='config'?(d.id==='settings'&&S.settings):d.coll==='players'?S.players.find(x=>x.id===d.id):d.coll==='midori'?S.midori[d.id]:d.coll==='manpower'?S.manpower[d.id]:null;
    if(have&&d.coll!=='config'){skip++;continue}const data=d.coll==='config'&&have?{...d.data,...have,arap:have.arap&&have.arap.length?have.arap:d.data.arap}:d.data;
    m.textContent=`Importing ${n+1} of ${docs.length}…`;await DB.doc(d.coll+'/'+d.id).set(data);n++}
   flash(`Imported ${n}, kept ${skip} that were already here.`)}catch(e){m.textContent='Import failed: '+errMsg(e)}};
