@@ -81,7 +81,7 @@ button.link{border:none;background:none;color:var(--accent);padding:2px 4px}
 <main class="wrap" id="app"></main>
 <script>
 /* ---------- constants ---------- */
-const POUCHES=[{k:'cf',l:'Cash float',media:['cash']},{k:'ins',l:'Insurance',zh:'保險輸贏',media:['cash','chips']},{k:'chip',l:'Chip float',media:['chips']},{k:'day',l:'On-day cash',media:['cash']}];
+const POUCHES=[{k:'cf',l:'Cash float',media:['cash']},{k:'ins',l:'Insurance',media:['cash','chips']},{k:'chip',l:'Chip float',media:['chips']},{k:'day',l:'On-day cash',media:['cash']},{k:'pd',l:'Player deposits (held)',media:['cash'],held:true}];
 const MED={cash:'Cash',chips:'Chips'};
 const TABLES=['PO1','PO2','PO3','PO5'];
 const EXP_CATS=['Player hospitality','Promo prizes','Staff housing','Staff allowance','Supplies and transport','F&B purchases','Renovation and equipment','Junket share','Other expenses'];
@@ -99,7 +99,7 @@ const typeLabel=k=>(TYPES.find(x=>x.k===k)||{}).l||SYS_TYPES[k]||k;
 const CASH_D=[1000,500,100,50,20,10,5,1];const CHIP_D=[10000,1000,100,25];const HOUSE_D=25;const chipVal=d=>Number(d)===HOUSE_D?0:Number(d);
 const houseQty=c=>Object.values((c&&c.chips)||{}).reduce((s,x)=>s+(Number((x||{})[HOUSE_D])||0),0);
 const DEFAULT_SETTINGS={openDate:'2026-11-01',rent:0,pagcorMin:0,pagcorRate:.25,cdcRate:.05,everestRakeRate:.70,bbjEverestRate:.21,
- fxRates:{TWD:1.8,USD:60},open:{cf_cash:0,ins_cash:0,ins_chips:0,day_cash:0,bb_cash:0,chip_chips:0,chipsOut:0,mass_chips:0,box:0,fx_TWD:0,fx_USD:0},owners:[],supervisors:['Joy','Geraldine','Cey','Phoebe']};
+ fxRates:{TWD:1.8,USD:60},open:{cf_cash:0,pd_cash:0,ins_cash:0,ins_chips:0,day_cash:0,bb_cash:0,chip_chips:0,chipsOut:0,mass_chips:0,box:0,fx_TWD:0,fx_USD:0},owners:[],supervisors:['Joy','Geraldine','Cey','Phoebe']};
 
 /* ---------- state ---------- */
 let DB=null,MEM=false;
@@ -123,7 +123,7 @@ const playerName=id=>(S.players.find(p=>p.id===id)||{}).name||'(deleted player)'
 function liveEntries(){return S.entries.filter(e=>!e.voided)}
 function balances(upTo){
  const st=settings(),o=st.open;
- const b={mass_chips:Number(o.mass_chips||0),cf_cash:o.cf_cash,ins_cash:o.ins_cash,ins_chips:o.ins_chips,day_cash:Number(o.day_cash||0),bb_cash:Number(o.bb_cash||0),chip_chips:o.chip_chips,ar:{},ap:{},pbBy:{},fx:Object.fromEntries(FX_CUR.map(c=>{const n=Number(o['fx_'+c]||0);return [c,{amt:n,php:round2(n*fxRate(c,st))}]})),dep:{},loan:{},owner:{},behind:0,box:Number(o.box||0)};
+ const b={mass_chips:Number(o.mass_chips||0),cf_cash:o.cf_cash,ins_cash:o.ins_cash,ins_chips:o.ins_chips,day_cash:Number(o.day_cash||0),pd_cash:Number(o.pd_cash||0),bb_cash:Number(o.bb_cash||0),chip_chips:o.chip_chips,ar:{},ap:{},pbBy:{},fx:Object.fromEntries(FX_CUR.map(c=>{const n=Number(o['fx_'+c]||0);return [c,{amt:n,php:round2(n*fxRate(c,st))}]})),dep:{},loan:{},owner:{},behind:0,box:Number(o.box||0)};
  for(const p of S.players){b.dep[p.id]=Number(p.openDep||0);b.loan[p.id]=Number(p.openLoan||0)}
  for(const p of S.players)if(!p.account&&p.under&&S.players.some(h=>h.id===p.under&&h.account)){b.dep[p.under]=(b.dep[p.under]||0)+(b.dep[p.id]||0)-(b.loan[p.id]||0);b.dep[p.id]=0;b.loan[p.id]=0}
  for(const x of (st.arap||[])){const v=Number(x.amt||0);if(x.kind==='ar')b.ar[x.name]=(b.ar[x.name]||0)+v;else if(x.kind==='ap')b.ap[x.name]=(b.ap[x.name]||0)+v;else if(x.kind==='pb'){b.behind-=v;b.pbBy[x.name]=(b.pbBy[x.name]||0)+v}}
@@ -193,7 +193,7 @@ function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${S.ta
 function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
  const dc=$('day-clear');if(dc)dc.onclick=()=>{S.dayOverride=null;try{sessionStorage.removeItem('cage-day')}catch(e){}render()}}
 
-function pouchCard(b,p){const parts=p.media.map(m=>[m,b[p.k+'_'+m]||0]);const tot=parts.reduce((s,x)=>s+x[1],0);
+function pouchCard(b,p){if(p.held){const v=b.pd_cash||0;return `<div class="card"><div class="row" style="padding-top:0"><b>${p.l}</b><span class="big num ${v<0?'neg':''}">${pesoE(v)}</span></div><div class="sub">Players' money · not usable cash</div></div>`}const parts=p.media.map(m=>[m,b[p.k+'_'+m]||0]);const tot=parts.reduce((s,x)=>s+x[1],0);
  return `<div class="card"><div class="row" style="padding-top:0"><b>${p.l}</b><span class="big num ${tot<0?'neg':''}">${peso(tot)}</span></div>
  ${parts.length<2?'':parts.map(([m,v])=>`<div class="row"><span><span class="pill ${m}">${MED[m]}</span></span><span class="num ${v<0?'neg':''}">${peso(v)}</span></div>`).join('')}</div>`}
 function vOverview(){
@@ -268,8 +268,12 @@ function ledgerTable(list,withVoid=true){
 /* players */
 function vPlayers(){
  const b=balances();const all=S.players.filter(isAcct).sort((a,c)=>a.name.localeCompare(c.name));const others=S.players.filter(p=>!isAcct(p)&&!acctOf(p)).sort((a,c)=>a.name.localeCompare(c.name));const sel=S.playerSel&&S.players.find(p=>p.id===S.playerSel);
- return `<h2>Player accounts <span class="sub">credit allowed · account card holders only</span></h2><div class="grid g2"><div class="card"><table><tr><th>Player</th><th>Account</th><th class="r">Balance</th><th></th></tr>
- ${all.map(p=>{const v=pBal(p.id,b);return `<tr><td>${esc(pLabel(p))}${p.note?`<div class="sub">${esc(p.note)}</div>`:''}${subsOf(p).length?`<div class="sub">Under this account: ${subsOf(p).map(x=>esc(pLabel(x))).join(', ')}</div>`:''}</td><td>${isAcct(p)?'<span class="pill info">Account</span>':'<span class="sub">Buy-ins only</span>'}</td><td class="r num ${v<0?'neg':''}">${peso(v)}${v<0?'<div class="sub">Owes us</div>':''}</td><td><button class="link" data-psel="${p.id}">Details</button></td></tr>`}).join('')||'<tr><td colspan="4" class="sub">No account holders yet</td></tr>'}</table>${others.length?`<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Other players seen at the cage (${others.length}, no account)</summary>${others.map(p=>`<div class="row"><span>${esc(pLabel(p))}</span><button class="link" data-psel="${p.id}">Details</button></div>`).join('')}</details>`:''}
+ const held=b.pd_cash||0,owed=all.reduce((x,p)=>x+Math.max(0,pBal(p.id,b)),0);
+ return `<h2>Player accounts <span class="sub">credit allowed · account card holders only</span></h2>
+ <div class="flex" style="gap:18px;flex-wrap:wrap;margin-bottom:8px"><span>Deposits held (envelope) 存款現金 <b class="num">${pesoE(held)}</b></span><span>Owed to players 應付玩家存款 <b class="num">${pesoE(owed)}</b></span>${Math.abs(held-owed)>0.001?`<span class="neg">Difference ${sgnE(held-owed)}</span>`:''}</div>
+ ${S.qa&&['deposit','withdraw'].includes(S.qa.k)?`<div id="form-here" style="max-width:680px">${vQuickForm()}</div>`:''}
+ <div class="grid g2"><div class="card"><table><tr><th>Player</th><th>Account</th><th class="r">Balance</th><th></th></tr>
+ ${all.map(p=>{const v=pBal(p.id,b);return `<tr><td>${esc(pLabel(p))}${p.note?`<div class="sub">${esc(p.note)}</div>`:''}${subsOf(p).length?`<div class="sub">Under this account: ${subsOf(p).map(x=>esc(pLabel(x))).join(', ')}</div>`:''}</td><td>${isAcct(p)?'<span class="pill info">Account</span>':'<span class="sub">Buy-ins only</span>'}</td><td class="r num ${v<0?'neg':''}">${peso(v)}${v<0?'<div class="sub">Owes us</div>':''}</td><td style="white-space:nowrap"><button class="o-buy" style="padding:4px 10px" data-pdep="${esc(pLabel(p))}">Deposit 存入</button> ${v>0?`<button class="o-out" style="padding:4px 10px" data-pwd="${esc(pLabel(p))}">Withdraw 提領</button>`:''} <button class="link" data-psel="${p.id}">Details</button></td></tr>`}).join('')||'<tr><td colspan="4" class="sub">No account holders yet</td></tr>'}</table>${others.length?`<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Other players seen at the cage (${others.length}, no account)</summary>${others.map(p=>`<div class="row"><span>${esc(pLabel(p))}</span><button class="link" data-psel="${p.id}">Details</button></div>`).join('')}</details>`:''}
  <div class="sub" style="margin-top:6px">Plus = we owe the player (deposit). Minus = the player owes us (credit) and cannot withdraw.</div></div>
  <div class="card"><b>Open or update an account</b><label>Name</label><input id="np-name" placeholder="Type a name or member number" autocomplete="off"><div class="sugg" id="np-msugg"></div><label>Member #</label><input id="np-no" placeholder="888888"><label>Note</label><input id="np-note" placeholder="Contact">
  <label>Type</label><select id="np-under"><option value="">Own account (credit allowed)</option>${S.players.filter(isAcct).map(h=>`<option value="${h.id}">Player under ${esc(pLabel(h))}'s account</option>`).join('')}</select>
@@ -323,7 +327,7 @@ function vSettings(){const st=settings(),o=st.open;
  <div class="form2">${inp('cf_cash','Cash float')}${inp('chip_chips','Chip float (chips in the tray now)')}
  ${inp('ins_cash','Insurance cash')}${inp('ins_chips','Insurance chips not yet changed to cash')}
  ${inp('day_cash','On-day buy-in cash in the drawer','0 if you start at an opening')}${inp('chipsOut','Chips given to players today and not returned','Chip float at today’s opening − chips in the tray now. 0 if you start at an opening.')}
- ${inp('mass_chips','Mass chips on hand')}
+ ${inp('mass_chips','Mass chips on hand')}${inp('pd_cash','Player deposit cash held (envelope)','Cash kept for players with money in their account')}
  ${inp('box','BBJ / Rake chips not yet paid to MIDORI')}${inp('fx_TWD','Foreign cash held · TWD (amount in TWD)')}${inp('fx_USD','Foreign cash held · USD (amount in USD)')}</div></div>
  <h2>Open balances at the start</h2><div class="card" style="max-width:760px"><div class="sub">One per line: name, amount, note. Amounts are positive.</div>
  <label>Others owe us (receivables)</label><textarea id="st-ar" rows="3" placeholder="Andrew, 15000, Not collected">${esc((st.arap||[]).filter(x=>x.kind==='ar').map(x=>`${x.name}, ${x.amt}${x.note?', '+x.note:''}`).join('\n'))}</textarea>
@@ -348,9 +352,9 @@ function vSettings(){const st=settings(),o=st.open;
  <div class="err" id="st-err"></div><button class="primary" id="st-save" style="margin-top:12px">Save settings</button><span class="sub" id="st-msg" style="margin-left:10px"></span>`}
 
 /* ---------- open / close counts ---------- */
-const CNT_CASH=[['cf','Cash float'],['ins','Insurance'],['day','On-day cash']];
+const CNT_CASH=[['cf','Cash float'],['ins','Insurance'],['day','On-day cash'],['pd','Player deposits (held)']];
 const CNT_CHIPS=[['chip','Chip float'],['ins','Insurance'],['mass','Mass chips']];
-const LINE_LBL={cf_cash:'Cash float',ins_cash:'Insurance cash',day_cash:'On-day buy-in cash',ins_chips:'Insurance chips',mass_chips:'Mass chips (casino)',chip_chips:'Chip float chips'};
+const LINE_LBL={cf_cash:'Cash float',pd_cash:'Player deposit cash (held)',ins_cash:'Insurance cash',day_cash:'On-day buy-in cash',ins_chips:'Insurance chips',mass_chips:'Mass chips (casino)',chip_chips:'Chip float chips'};
 const pesoE=n=>(n<0?'-':'')+'P'+Math.abs(round2(n)).toLocaleString('en-US',{maximumFractionDigits:2});
 const sgnE=n=>(n>0?'+':n<0?'-':'')+Math.abs(round2(n)).toLocaleString('en-US',{maximumFractionDigits:2});
 function cntTotals(c){const t={};for(const [k] of CNT_CASH)t[k+'_cash']=CASH_D.reduce((s,d)=>s+d*(Number((c.cash[k]||{})[d])||0),0);
@@ -376,7 +380,7 @@ function vSignIn(){const st=staffList(),f=S.flow;
 /* flows */
 function startFlow(kind){S.flow={kind,step:S.user?(kind==='open'?'count':'players'):'signin',d:{players:false,insCount:'',insReason:'',tipPool:'',dealers:(tipPeople()[dealerRole()]||[]).map(n=>({n,a:''})),personal:[],mass:'',pb:{},supervisor:''}};S.cnt=null;S.qa=null;
  if(S.user&&kind==='open')toCount('open')}
-function toCount(kind){S.cnt={kind,step:'count',cashier:S.user?S.user.name:'',supervisor:S.flow?S.flow.d.supervisor:'',cash:{cf:{},ins:{},day:{},bb:{}},chips:{chip:{},ins:{},mass:{}},reasons:{},midori:{rake:{},bbj:{}},midoriSkip:false,fx:{same:true,TWD:'',USD:''}};if(S.flow)S.flow.step='count'}
+function toCount(kind){S.cnt={kind,step:'count',cashier:S.user?S.user.name:'',supervisor:S.flow?S.flow.d.supervisor:'',cash:{cf:{},ins:{},day:{},bb:{},pd:{}},chips:{chip:{},ins:{},mass:{}},reasons:{},midori:{rake:{},bbj:{}},midoriSkip:false,fx:{same:true,TWD:'',USD:''}};if(S.flow)S.flow.step='count'}
 function fxMovedToday(){const l=lastCount(),since=l?String(l.at):'';return liveEntries().filter(e=>(e.type==='fx_in'||e.type==='fx_out')&&String(e.createdAt)>since)}
 function fxBook(){const f=balances().fx||{};return Object.fromEntries(FX_CUR.map(c=>[c,f[c]||{amt:0,php:0}]))}
 function vCounts(){if(S.cnt&&S.cnt.step==='report'){const doc=S.counts.find(c=>c.id===S.cnt.id)||S.cnt.saved;return vCountReport(doc)}
@@ -439,7 +443,7 @@ async function postClose(){const f=S.flow,d=f.d,X=closeNumbers(),day=bizDay(),no
  const info={insurance:X.insCnt,insBook:X.insBook,insReason:d.insReason,pbSettled:X.settled,pbUnsettled:X.uns.map(p=>({who:p.who,amt:-p.net,reason:(d.pb[p.who]||{}).r||''})),pbResult:X.pbRes,tips:X.alloc,tipTotal:X.tipT,dealerTips:(d.dealers||[]).filter(r=>num(r.a)>0).map(r=>({n:r.n.trim(),a:num(r.a)})),mass:X.mass,net:X.net};
  await saveEntry({...base,type:'close_day',amount:X.net,legs:[],pl:null,closeInfo:info,summary:`Close: on-day net income ${sgn(X.net)} to Cash float (insurance ${sgn(X.insCnt)}, playing behind ${sgn(X.pbRes)})`});
  f.info=info}
-function cntBlock(kind,key,label,denoms,unit){const v=S.cnt[kind][key];const val=d=>kind==='chips'?chipVal(d):d;const tot=denoms.reduce((s,d)=>s+val(d)*(Number(v[d])||0),0);
+function cntBlock(kind,key,label,denoms,unit){const v=S.cnt[kind][key]=S.cnt[kind][key]||{};const val=d=>kind==='chips'?chipVal(d):d;const tot=denoms.reduce((s,d)=>s+val(d)*(Number(v[d])||0),0);
  return `<div class="card"><b>${label}</b><div class="sub">${unit}</div>${denoms.map(d=>`<div class="crow"><span class="num">${d.toLocaleString('en-US')}${kind==='chips'&&d===HOUSE_D?' <span class="sub">house · no value</span>':''}</span><input class="num" data-cq="${kind}|${key}|${d}" inputmode="numeric" value="${v[d]??''}" placeholder="0"><span class="num sub" style="text-align:right" id="cl-${kind}-${key}-${d}">${v[d]?(kind==='chips'&&d===HOUSE_D?v[d]+' pcs':pesoE(d*v[d])):'-'}</span></div>`).join('')}
  <div class="row" style="border-top:1px solid var(--line);margin-top:4px"><b>Total</b><b class="num" id="ct-${kind}-${key}">${pesoE(tot)}</b></div></div>`}
 function vCountForm(){const c=S.cnt;
@@ -711,8 +715,8 @@ function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (�
   ${q.method==='credit'?`${apprField(q)}${q.approver?`<div class="note warn" style="margin-top:6px">Credit approved by <b>${esc(q.approver)}</b>. Chips are issued only after you confirm.</div>`:''}`:''}`}
  if(q.k==='cashout'){const cd=p?cageDay(bizDay(),p.id):{credit:false},ac=acctOf(p),neg=ac&&pBal(ac.id)<0,lock=cd.credit||neg;if(lock)q.method='account';
   f=`${playerField(q)}${amt}<label>Paid as</label>${lock?`<div class="note bad">${cd.credit?'This player bought in on credit this business day.':(ac&&ac.id!==p.id?esc(ac.name)+'\'s account is negative.':'This player\'s account is negative.')} Chips go back to ${esc(ac?ac.name:p.name)}'s account. No cash-out is allowed.</div>`:(ac?seg('qamethod',[['cash','Cash'],['account',ac.id!==p.id?`Back to ${ac.name}'s account`:'Back to player account']],q.method):((q.method='cash'),'<div class="sub">Cash. Back to player account is only for account holders ('+esc(S.players.filter(isAcct).map(x=>x.name).join(', ')||'none')+').</div>'))}`}
- if(q.k==='deposit')f=`${playerField(q,true)}${amt}<label>Deposited as</label>${seg('qamethod',[['cash','Cash'],['chips','Chips']],q.method)}<div class="sub" style="margin-top:4px">Cash goes into the cash float, chips into the chip float.</div>`;
- if(q.k==='withdraw'){f=`${playerField(q,true)}${amt}<label>Paid as</label>${seg('qamethod',[['cash','Cash'],['chips','Chips']],q.method)}`}
+ if(q.k==='deposit')f=`${playerField(q,true)}${amt}<label>Deposited as</label>${seg('qamethod',[['cash','Cash'],['chips','Chips']],q.method)}${(()=>{const pp=findPlayer(q.player),bal=pp&&isAcct(pp)?pBal(pp.id):0,a=num(q.amount||0)||0,repay=Math.min(a,Math.max(0,-bal)),held=a-repay;return `<div class="note info" style="margin-top:8px">${pp&&bal<0?`${esc(pp.name)} owes ${pesoE(-bal)}. The first ${pesoE(Math.min(a||-bal,-bal))} pays back the credit (usable cash, into the cash float).<br>`:''}Money above zero is <b>held for the player</b>: kept in the <b>Player deposits (held)</b> envelope and not used by the cage.${q.method==='chips'&&held>0?' Chips go to the chip float; move the same cash from the cash float into the deposit envelope.':''}</div>`})()}`;
+ if(q.k==='withdraw'){f=`${playerField(q,true)}${amt}<label>Paid as</label>${seg('qamethod',[['cash','Cash'],['chips','Chips']],q.method)}<div class="sub" style="margin-top:4px">Paid from the Player deposits (held) envelope. Paid in chips: the same cash moves from the envelope to the cash float.</div>`}
  if(q.k==='op_out'){const food=q.cat===FOOD_CHIPS;f=`<label>Purpose</label>${seg('qacat',OP_OUT.map(c=>[c,`${c}${PURPOSE_ZH[c]?' '+PURPOSE_ZH[c]:''}`]),q.cat)}<label>Details${food?' (optional)':''}</label><input id="qa-note" value="${esc(q.note)}" placeholder="${food?'Table 2 · 3 noodles':'5 cases bottled water'}">${amt}${food?'<div class="sub" style="margin-top:4px">The guest\'s chips go back to the chip float and the cash comes out of on-day cash. No approval needed.</div>':`${apprField(q)}<div class="sub" style="margin-top:4px">Paid from the cash float.</div>`}`}
  if(q.k==='op_in')f=`<label>Purpose</label>${seg('qacat',OP_IN.map(c=>[c,`${c}${PURPOSE_ZH[c]?' '+PURPOSE_ZH[c]:''}`]),q.cat)}<label>Details</label><input id="qa-note" value="${esc(q.note)}" placeholder="Bar sales">${amt}<div class="sub" style="margin-top:4px">Goes into the cash float.</div>`;
  if(q.k==='swap_c2ch')f=`<label>Cash taken from</label>${seg('qapouch',[['cf','Cash float'],['ins','Insurance']],q.pouch)}${amt}<div class="sub" style="margin-top:4px">Chips go into the chip float.</div><label>Details</label><input id="qa-note" value="${esc(q.note)}" placeholder="1000s x 100 pcs from MIDORI">${apprField(q)}`;
@@ -752,10 +756,12 @@ function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],su
   case 'cashout':{if(!q.player.trim())fail('Enter the player.');needAmt();const cd=p?cageDay(day,p.id):{credit:false};const ac=acctOf(p);const lock=cd.credit||(ac&&pBal(ac.id)<0);
    if(lock||q.method==='account'){if(!ac)fail(`${q.player.trim()} has no player account. Pay cash or open an account first.`);E.legs=[{a:'chip',m:'chips',v:a},{a:'dep',p:ac.id,v:a}];E.acct=ac.id;E.summary=`${p.name} cash-out ${pesoE(a)} · back to ${ac.id!==p.id?ac.name+'\'s':'player'} account${lock?' (no cash-out allowed)':''}`;E.method='account'}
    else{E.legs=[{a:'day',m:'cash',v:-a},{a:'chip',m:'chips',v:a}];E.summary=`${q.player.trim()} cash-out ${pesoE(a)} · cash`;E.method='cash'}break}
-  case 'deposit':{if(!isAcct(p))fail('Choose a player with an account.');needAmt();E.legs=[q.method==='cash'?{a:'cf',m:'cash',v:a}:{a:'chip',m:'chips',v:a},{a:'dep',p:p.id,v:a}];E.summary=`${p.name} deposit ${pesoE(a)} · ${q.method}`;E.method=q.method;break}
+  case 'deposit':{if(!isAcct(p))fail('Choose a player with an account.');needAmt();const bal=pBal(p.id),repay=round2(Math.min(a,Math.max(0,-bal))),held=round2(a-repay);
+   E.legs=q.method==='cash'?[...(repay?[{a:'cf',m:'cash',v:repay}]:[]),...(held?[{a:'pd',m:'cash',v:held}]:[]),{a:'dep',p:p.id,v:a}]:[{a:'chip',m:'chips',v:a},...(held?[{a:'cf',m:'cash',v:-held},{a:'pd',m:'cash',v:held}]:[]),{a:'dep',p:p.id,v:a}];
+   E.summary=`${p.name} deposit ${pesoE(a)} · ${q.method}${repay?` · ${pesoE(repay)} pays back credit`:''}${held?` · ${pesoE(held)} held for the player`:''}`;E.method=q.method;break}
   case 'withdraw':{if(!isAcct(p))fail('Choose a player with an account.');needAmt();const bal=pBal(p.id);
    if(bal<=0)fail(`${p.name}'s account is ${pesoE(bal)}. No withdrawal is allowed.`);if(a>bal+0.001)fail(`${p.name} has only ${pesoE(bal)} in the account.`);
-   E.legs=[q.method==='cash'?{a:'cf',m:'cash',v:-a}:{a:'chip',m:'chips',v:-a},{a:'dep',p:p.id,v:-a}];E.summary=`${p.name} withdrawal ${pesoE(a)} · ${q.method}`;E.method=q.method;break}
+   E.legs=q.method==='cash'?[{a:'pd',m:'cash',v:-a},{a:'dep',p:p.id,v:-a}]:[{a:'chip',m:'chips',v:-a},{a:'pd',m:'cash',v:-a},{a:'cf',m:'cash',v:a},{a:'dep',p:p.id,v:-a}];E.summary=`${p.name} withdrawal ${pesoE(a)} · ${q.method} · from held deposits`;E.method=q.method;break}
   case 'op_out':{if(!q.cat)fail('Choose the purpose.');needAmt();if(q.cat===FOOD_CHIPS){E.legs=[{a:'day',m:'cash',v:-a},{a:'chip',m:'chips',v:a}];E.summary=`Cash out · ${FOOD_CHIPS}${q.note?' · '+q.note:''}`;break}needAppr();E.legs=[{a:'cf',m:'cash',v:-a}];E.pl={cat:q.cat,v:-a};E.summary=`Cash out · ${q.cat}${q.note?' · '+q.note:''} · approved by ${q.approver}`;break}
   case 'op_in':{if(!q.cat)fail('Choose what it was.');needAmt();E.legs=[{a:'cf',m:'cash',v:a}];E.pl={cat:q.cat,v:a};E.summary=`Cash in · ${q.cat}${q.note?' · '+q.note:''}`;break}
   case 'swap_c2ch':{needAmt();needAppr();E.legs=[{a:q.pouch,m:'cash',v:-a},{a:'chip',m:'chips',v:a}];E.summary=`Cash → chips ${pesoE(a)} · ${POUCH_EN[q.pouch]} cash to chip float chips · approved by ${q.approver}`;break}
@@ -896,6 +902,7 @@ function bind(){
  document.querySelectorAll('[data-void]').forEach(b=>b.onclick=()=>{const tr=b.closest('td');tr.innerHTML=`<input placeholder="Reason" style="min-width:140px"><div class="flex" style="margin-top:4px"><button class="link" data-ok>Void</button><button class="link" data-no>Cancel</button></div><div class="err"></div>`;
   tr.querySelector('[data-no]').onclick=()=>render();tr.querySelector('[data-ok]').onclick=async()=>{const r=tr.querySelector('input').value.trim();if(!r){tr.querySelector('.err').textContent='Write a reason.';return}
   try{await voidEntry(b.dataset.void,r)}catch(err){tr.querySelector('.err').textContent=errMsg(err)}}});
+ document.querySelectorAll('[data-pdep],[data-pwd]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.pdep?'deposit':'withdraw');S.qa.player=x.dataset.pdep||x.dataset.pwd;render();const fh=q('form-here');if(fh)fh.scrollIntoView({block:'nearest',behavior:'smooth'});const f=q('qa-amt');f&&f.focus({preventScroll:true})});
  if(q('np-name'))q('np-name').addEventListener('input',()=>{const el=q('np-name');memberSearch(el.value,list=>{const box=q('np-msugg');if(!box)return;box.innerHTML=list.length?'<span class="sub">Everest members:</span>'+list.map((m,i)=>`<button type="button" data-npm="${i}">${esc(m.nickname||m.name)} <span class="sub">#${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</span></button>`).join(''):'';
   box.querySelectorAll('[data-npm]').forEach(b=>b.onclick=()=>{const m=list[Number(b.dataset.npm)];q('np-name').value=m.nickname||m.name;q('np-no').value=m.member_no;if(m.group_name&&!q('np-note').value)q('np-note').value='Group: '+m.group_name;box.innerHTML=''})})});
  if(q('np-save'))q('np-save').onclick=async()=>{const name=q('np-name').value.trim(),dep=num(q('np-dep').value||0),loan=0,under=q('np-under').value,no=q('np-no').value.trim().replace(/^#/,'');
