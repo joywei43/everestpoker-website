@@ -459,7 +459,7 @@ function vCountForm(){const c=S.cnt;
  <div class="note warn">Count each pouch on its own. Don't move money between pouches while counting. Press Enter to jump to the next line.</div>
  <div class="err" id="cn-err"></div><div class="flex" style="margin-top:8px"><button class="primary" id="cn-submit">Submit count</button>${c.kind==='close'?'<button data-cs="net">Back</button>':''}<button class="link" id="flow-cancel">Cancel</button></div>`}
 function chipsOutToday(day){const st=settings();let v=day===st.openDate?Number(st.open.chipsOut||0):0;for(const e of liveEntries()){if(e.date!==day||!['buyin','cashout','p_deposit','p_withdraw','ins_settle','tips_out','other_out','op_out'].includes(e.type))continue;for(const g of e.legs||[])if(g.a==='chip'&&g.m==='chips')v-=g.v}return round2(v)}
-function creditToday(day){return liveEntries().filter(e=>e.date===day&&e.type==='buyin'&&e.method==='credit').reduce((s,e)=>s+e.amount,0)}
+function creditToday(day){return liveEntries().filter(e=>e.date===day&&e.type==='buyin').reduce((s,e)=>s+(e.method==='credit'?e.amount:e.method==='account'?(e.credit||0):0),0)}
 function fxResult(c){const bk=fxBook(),o={};for(const k of FX_CUR){const b=bk[k],cnt=c.fx.same?b.amt:(c.fx[k]===''?0:num(c.fx[k])),d=round2(cnt-b.amt),rate=b.amt?b.php/b.amt:fxRate(k);o[k]={book:b.amt,counted:cnt,diff:d,php:round2(d*rate)}}return o}
 function computeResult(){const c=S.cnt,t=cntTotals(c),bk=bookNow(),diffs={};let short=0,out=0;
  for(const k of Object.keys(LINE_LBL))diffs[k]=round2(t[k]-bk[k]);
@@ -481,7 +481,7 @@ function vCountResult(){const c=S.cnt,r=computeResult(),lines=Object.keys(LINE_L
  <div class="err" id="cr-err"></div><div class="flex" style="margin-top:12px;max-width:900px"><button class="primary" id="cr-save">Confirm, save and print the PDF</button><button id="cr-recount">Count again</button></div>
  <div class="sub" style="margin-top:6px">Saving updates the books to match your count. Differences are recorded with your reason.</div>`}
 function playersSummary(day){const o={buyinCash:0,buyinMass:0,buyinCredit:0,cashoutCash:0,cashoutAcct:0,n:0,flags:0};for(const e of liveEntries()){if(e.date!==day||(e.type!=='buyin'&&e.type!=='cashout'))continue;o.n++;if(e.ppmFlag)o.flags++;
- if(e.type==='buyin'){if(e.method==='credit')o.buyinCredit+=e.amount;else if(e.method==='mass')o.buyinMass+=e.amount;else o.buyinCash+=e.amount}else{if(e.method==='account')o.cashoutAcct+=e.amount;else o.cashoutCash+=e.amount}}return o}
+ if(e.type==='buyin'){if(e.method==='account'){o.buyinCredit+=e.credit||0;o.buyinCash+=e.fromDeposit||0}else if(e.method==='credit')o.buyinCredit+=e.amount;else if(e.method==='mass')o.buyinMass+=e.amount;else o.buyinCash+=e.amount}else{if(e.method==='account')o.cashoutAcct+=e.amount;else o.cashoutCash+=e.amount}}return o}
 async function saveCount(){const c=S.cnt,r=computeResult(),day=bizDay(),now=new Date();
  if(!c.supervisor.trim())throw new Error('Enter the supervisor\'s name.');
  for(const [k,v] of Object.entries(r.diffs))if(Math.abs(v)>0.001&&!(c.reasons[k]||'').trim())throw new Error('Write a reason for every line that doesn\'t match.');
@@ -545,7 +545,7 @@ function setupChecks(){const st=settings(),o=st.open,day=bizDay();const staff=st
  return [[!!S.settings&&st.openDate===day,`Settings → Start from business day is <b>${esc(day)}</b>${S.settings&&st.openDate!==day?` (now ${esc(st.openDate)})`:''}`],
   [!!S.settings&&(Number(o.cf_cash)>0||Number(o.chip_chips)>0),'Settings → Starting point numbers are entered and saved'],
   [staff.length>=2,'Settings → Staff: the cashier and the supervisor each have a name and PIN'],
-  [S.players.filter(isAcct).every(p=>Number(p.openDep||0)!==0)||!S.players.filter(isAcct).length,`Players → account balances entered (${S.players.filter(isAcct).map(p=>esc(pLabel(p))+' '+pesoE(pBal(p.id))).join(', ')||'none'})`]]}
+  [true,`Players → check account balances (${S.players.filter(isAcct).map(p=>esc(pLabel(p))+' '+pesoE(pBal(p.id))).join(', ')||'none'})`]]}
 function vFirstChecklist(){const ch=setupChecks();return `<div class="hl"><b class="t">⚠ First close in the system — check before pressing Close the cage</b><ul style="list-style:none;margin-left:0">${ch.map(([ok,t])=>`<li><b class="${ok?'ok-t':'bad-t'}">${ok?'✓':'✗'}</b> ${t}</li>`).join('')}</ul>${ch.every(c=>c[0])?'':'<div style="margin-top:6px"><b>Fix the ✗ lines first.</b> Numbers entered wrong at the start make every later count wrong.</div>'}</div>`}
 function vDesk(op){const b=balances(),l=lastCount();if(!S.qa){qaNew(S.deskKind||'buyin');S.qa.isDefault=true}const q=S.qa,pk=['buyin','cashout'].includes(q.k);
  const big=(k,l,c)=>`<button data-desk="${k}" class="${q.k===k?'c-'+c:'o-'+c}" style="flex:1;padding:14px;font-size:17px">${l}</button>`;
@@ -665,7 +665,15 @@ const acctOf=p=>!p?null:isAcct(p)?p:(p.under?S.players.find(x=>x.id===p.under&&i
 const subsOf=h=>S.players.filter(x=>x.under===h.id&&!isAcct(x));
 function pBal(pid,b=balances()){return (b.dep[pid]||0)-(b.loan[pid]||0)}
 function ppmFor(day,name){const d=S.ppm[day];if(!d)return null;return (d.rows||[]).filter(r=>lname(r.n)===lname(name)).reduce((o,r)=>({buyin:o.buyin+Number(r.buyin||0),cashout:o.cashout+Number(r.cashout||0)}),{buyin:0,cashout:0})}
-function cageDay(day,pid){const o={buyin:0,cashout:0,credit:false};for(const e of liveEntries())if(e.date===day&&e.player===pid&&(e.type==='buyin'||e.type==='cashout')){o[e.type]+=e.amount;if(e.type==='buyin'&&e.method==='credit')o.credit=true}return o}
+function acctSplit(q){const p=findPlayer(q.player),ac=acctOf(p),a=num(q.amount||0)||0;if(!ac)return{p,ac:null,a};const bal=pBal(ac.id),fromDep=round2(Math.min(a,Math.max(0,bal)));return{p,ac,a,bal,fromDep,credit:round2(a-fromDep)}}
+function acctPanel(q){const x=acctSplit(q);if(!q.player.trim())return '<div class="note info" style="margin-top:8px">Choose the player first.</div>';
+ if(!x.ac)return `<div class="note bad" style="margin-top:8px"><b>${esc(q.player.trim())}</b> has no player account and is not under one. Use Cash or Mass chip.</div>`;
+ const own=x.ac.id===x.p.id;
+ return `<div class="hl" style="margin-top:10px"><b class="t">Player account 帳卡 · ${esc(pLabel(x.ac))}</b>${own?'':`<div><b>${esc(pLabel(x.p))}</b> is under <b>${esc(pLabel(x.ac))}</b>'s account.</div>`}
+ <div class="row" style="padding:4px 0"><span>Balance now 目前餘額</span><b class="num ${x.bal<0?'neg':'pos'}" style="font-size:18px">${pesoE(x.bal)}</b></div>
+ ${x.a>0?`<div class="row" style="padding:2px 0"><span>From deposit 用存款（Cash）</span><b class="num">${pesoE(x.fromDep)}</b></div><div class="row" style="padding:2px 0"><span>On credit 信用（Credit）</span><b class="num ${x.credit>0?'neg':''}">${pesoE(x.credit)}</b></div><div class="row" style="padding:2px 0"><span>Balance after 買入後餘額</span><b class="num ${x.bal-x.a<0?'neg':''}">${pesoE(x.bal-x.a)}</b></div>`:`<div class="sub">${x.bal>0?'Has money: the buy-in is paid from the deposit (cash).':'No money: the buy-in is on credit and needs approval.'}</div>`}
+ ${x.credit>0||(!x.a&&x.bal<=0)?`<div style="margin-top:6px">${apprField(q)}</div>${q.approver?`<div class="sub">Credit approved by <b>${esc(q.approver)}</b>. After a credit buy-in this player cannot cash out today.</div>`:''}`:''}</div>`}
+function cageDay(day,pid){const o={buyin:0,cashout:0,credit:false};for(const e of liveEntries())if(e.date===day&&e.player===pid&&(e.type==='buyin'||e.type==='cashout')){o[e.type]+=e.amount;if(e.type==='buyin'&&(e.method==='credit'||(e.method==='account'&&e.credit>0)))o.credit=true}return o}
 const approvers=()=>settings().supervisors&&settings().supervisors.length?settings().supervisors:['Joy','Geraldine','Cey','Phoebe'];
 const FOOD_CHIPS='Guest food (paid with chips)';
 const PURPOSE_ZH={'Guest food (paid with chips)':'客人籌碼點餐','Staff allowance and salary':'員工津貼/薪水','Player hospitality (rooms, meals)':'招待玩家（住宿、餐）','Promo payout':'Promo 獎金','F&B stock':'餐飲進貨','Supplies and transport':'雜支與交通','Staff house and utilities':'員工宿舍與水電','Repairs and equipment':'修繕與設備','Junket share':'Junket 分潤','Other':'其他','F&B sales':'餐飲銷售','Money returned':'退回款項','Other income':'其他收入'};
@@ -705,14 +713,14 @@ function playerCard2(name){const p=findPlayer(name),day=bizDay(),pp=ppmFor(day,n
  if(!p)return `<div class="note info">New name: <b>${esc(name)}</b> (no player account).${pp?` PPM today: buy-in ${pesoE(pp.buyin)} · cash-out ${pesoE(pp.cashout)}`:''}</div>`;
  const bal=isAcct(p)?pBal(p.id):0,cd=cageDay(day,p.id);
  return `<div class="card" style="margin-top:10px;border:2px solid var(--accent)"><div class="row" style="padding-top:0"><b>Player card · ${esc(pLabel(p))}</b>${isAcct(p)?'<span class="pill info">Player account</span>':acctOf(p)?`<span class="pill info">Under ${esc(acctOf(p).name)}</span>`:'<span class="pill warn">No account</span>'}</div>
- ${isAcct(p)?`<div class="row"><span>Account balance</span><b class="num ${bal<0?'neg':''}">${pesoE(bal)}${bal<0?' (owes)':''}</b></div>${subsOf(p).length?`<div class="sub">Players under this account: ${subsOf(p).map(x=>esc(pLabel(x))).join(', ')}</div>`:''}`:acctOf(p)?(()=>{const h=acctOf(p),hb=pBal(h.id);return `<div class="row"><span>Credit goes on <b>${esc(pLabel(h))}</b>'s account</span><b class="num ${hb<0?'neg':''}">${pesoE(hb)}${hb<0?' (owes)':''}</b></div>`})():''}
+ ${isAcct(p)?`<div class="row"><span>Account balance</span><b class="num ${bal<0?'neg':''}">${pesoE(bal)}${bal<0?' (owes)':''}</b></div>${subsOf(p).length?`<div class="sub">Players under this account: ${subsOf(p).map(x=>esc(pLabel(x))).join(', ')}</div>`:''}`:acctOf(p)?(()=>{const h=acctOf(p),hb=pBal(h.id);return `<div class="row"><span>Uses <b>${esc(pLabel(h))}</b>'s account 帳卡</span><b class="num ${hb<0?'neg':''}">${pesoE(hb)}${hb<0?' (owes)':''}</b></div>`})():''}
  <div class="row"><span class="sub">This business day at cage: buy-in / cash-out</span><span class="num">${pesoE(cd.buyin)} / ${pesoE(cd.cashout)}${cd.credit?' <span class="pill bad">Credit buy-in today</span>':''}</span></div>
  <div class="row"><span class="sub">This business day in PPM: buy-in / cash-out</span><span class="num">${pp?`${pesoE(pp.buyin)} / ${pesoE(pp.cashout)}`:'No record'}</span></div></div>`}
 function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (₱)</label><input id="qa-amt" inputmode="decimal" value="${esc(q.amount)}" placeholder="0">`;let f='';
  const p=findPlayer(q.player);
- if(q.k==='buyin'){f=`${playerField(q)}${amt}<label>Buy-in method</label>${seg('qamethod',[['cash','Cash'],['mass','Mass chip'],['credit','Credit']],q.method)}
+ if(q.k==='buyin'){f=`${playerField(q)}${amt}<label>Buy-in method</label>${seg('qamethod',[['cash','Cash 現金'],['mass','Mass chip'],['account','Player account 帳卡']],q.method==='credit'?'account':q.method)}
   ${q.method==='mass'?'<div class="sub" style="margin-top:4px">Player pays with casino mass chips. Keep them apart and redeem them at the casino.</div>':''}
-  ${q.method==='credit'?`${apprField(q)}${q.approver?`<div class="note warn" style="margin-top:6px">Credit approved by <b>${esc(q.approver)}</b>. Chips are issued only after you confirm.</div>`:''}`:''}`}
+  ${q.method==='account'||q.method==='credit'?`<div id="acct-panel">${acctPanel(q)}</div>`:''}`}
  if(q.k==='cashout'){const cd=p?cageDay(bizDay(),p.id):{credit:false},ac=acctOf(p),neg=ac&&pBal(ac.id)<0,lock=cd.credit||neg;if(lock)q.method='account';
   f=`${playerField(q)}${amt}<label>Paid as</label>${lock?`<div class="note bad">${cd.credit?'This player bought in on credit this business day.':(ac&&ac.id!==p.id?esc(ac.name)+'\'s account is negative.':'This player\'s account is negative.')} Chips go back to ${esc(ac?ac.name:p.name)}'s account. No cash-out is allowed.</div>`:(ac?seg('qamethod',[['cash','Cash'],['account',ac.id!==p.id?`Back to ${ac.name}'s account`:'Back to player account']],q.method):((q.method='cash'),'<div class="sub">Cash. Back to player account is only for account holders ('+esc(S.players.filter(isAcct).map(x=>x.name).join(', ')||'none')+').</div>'))}`}
  if(q.k==='deposit')f=`${playerField(q,true)}${amt}<label>Deposited as</label>${seg('qamethod',[['cash','Cash'],['chips','Chips']],q.method)}${(()=>{const pp=findPlayer(q.player),bal=pp&&isAcct(pp)?pBal(pp.id):0,a=num(q.amount||0)||0,repay=Math.min(a,Math.max(0,-bal)),held=a-repay;return `<div class="note info" style="margin-top:8px">${pp&&bal<0?`${esc(pp.name)} owes ${pesoE(-bal)}. The first ${pesoE(Math.min(a||-bal,-bal))} pays back the credit (usable cash, into the cash float).<br>`:''}Money above zero is <b>held for the player</b>: kept in the <b>Player deposits (held)</b> envelope and not used by the cage.${q.method==='chips'&&held>0?' Chips go to the chip float; move the same cash from the cash float into the deposit envelope.':''}</div>`})()}`;
@@ -742,7 +750,7 @@ function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (�
  const m=S.qaMsg;
  return `<div class="card" style="margin-top:12px;max-width:680px"><b style="font-size:16px">${a.l}</b>${f}
  ${m?`<div class="note ${m.kind||'bad'}">${esc(m.text)}</div>`:''}
- <div class="flex" style="margin-top:12px">${m&&m.ack?`<button class="primary" id="qa-ack">${esc(m.ack)}</button>`:`<button class="${{buyin:'c-buy',cashout:'c-out',ins:'c-ins',op_out:'c-out',op_in:'c-buy'}[q.k]||'primary'}" id="qa-save">${q.k==='buyin'&&q.method==='credit'?'Confirm credit and issue chips':q.k==='ins_close'?'Change to cash':'Save'}</button>`}<button class="link" id="qa-cancel">${q.isDefault?'Clear':'Cancel'}</button></div></div>`}
+ <div class="flex" style="margin-top:12px">${m&&m.ack?`<button class="primary" id="qa-ack">${esc(m.ack)}</button>`:`<button class="${{buyin:'c-buy',cashout:'c-out',ins:'c-ins',op_out:'c-out',op_in:'c-buy'}[q.k]||'primary'}" id="qa-save">${q.k==='buyin'&&(q.method==='credit'||q.method==='account')?'Confirm and issue chips':q.k==='ins_close'?'Change to cash':'Save'}</button>`}<button class="link" id="qa-cancel">${q.isDefault?'Clear':'Cancel'}</button></div></div>`}
 function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],summary:'',pl:null};const fail=t=>{throw new Error(t)};
  const needAmt=()=>{if(!(a>0))fail('Enter an amount above 0.')};const needAppr=()=>{if(!q.approver)fail('Choose who approved this.')};
  const p=findPlayer(q.player);
@@ -750,9 +758,11 @@ function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],su
   case 'buyin':{if(!q.player.trim())fail('Enter the player.');needAmt();
    if(q.method==='cash'){E.legs=[{a:'day',m:'cash',v:a},{a:'chip',m:'chips',v:-a}];E.summary=`${q.player.trim()} buy-in ${pesoE(a)} · cash`}
    else if(q.method==='mass'){E.legs=[{a:'mass',m:'chips',v:a},{a:'chip',m:'chips',v:-a}];E.summary=`${q.player.trim()} buy-in ${pesoE(a)} · casino mass chips (to redeem)`}
-   else{const ac=acctOf(p);if(!ac)fail(`${q.player.trim()} has no player account and is not under one. Credit is only for account holders and their players: ${S.players.filter(isAcct).map(x=>x.name).join(', ')||'none'}.`);needAppr();
-    E.legs=[{a:'chip',m:'chips',v:-a},{a:'dep',p:ac.id,v:-a}];E.acct=ac.id;E.summary=`${p.name} buy-in ${pesoE(a)} · credit${ac.id!==p.id?` on ${ac.name}'s account`:''} · approved by ${q.approver}`}
-   E.method=q.method;break}
+   else{const ac=acctOf(p);if(!ac)fail(`${q.player.trim()} has no player account and is not under one. Player account is only for account holders and their players: ${S.players.filter(isAcct).map(x=>x.name).join(', ')||'none'}.`);
+    const bal=pBal(ac.id),fromDep=round2(Math.min(a,Math.max(0,bal))),cr=round2(a-fromDep);if(cr>0)needAppr();
+    E.legs=[{a:'chip',m:'chips',v:-a},{a:'dep',p:ac.id,v:-a},...(fromDep?[{a:'pd',m:'cash',v:-fromDep},{a:'day',m:'cash',v:fromDep}]:[])];E.acct=ac.id;E.method='account';E.fromDeposit=fromDep;E.credit=cr;
+    E.summary=`${p.name} buy-in ${pesoE(a)} · player account${ac.id!==p.id?` (${ac.name})`:''}${fromDep?` · ${pesoE(fromDep)} from deposit`:''}${cr?` · ${pesoE(cr)} credit · approved by ${q.approver}`:''}`}
+   E.method=E.method||q.method;break}
   case 'cashout':{if(!q.player.trim())fail('Enter the player.');needAmt();const cd=p?cageDay(day,p.id):{credit:false};const ac=acctOf(p);const lock=cd.credit||(ac&&pBal(ac.id)<0);
    if(lock||q.method==='account'){if(!ac)fail(`${q.player.trim()} has no player account. Pay cash or open an account first.`);E.legs=[{a:'chip',m:'chips',v:a},{a:'dep',p:ac.id,v:a}];E.acct=ac.id;E.summary=`${p.name} cash-out ${pesoE(a)} · back to ${ac.id!==p.id?ac.name+'\'s':'player'} account${lock?' (no cash-out allowed)':''}`;E.method='account'}
    else{E.legs=[{a:'day',m:'cash',v:-a},{a:'chip',m:'chips',v:a}];E.summary=`${q.player.trim()} cash-out ${pesoE(a)} · cash`;E.method='cash'}break}
@@ -791,7 +801,7 @@ async function qaSave(){const q=S.qa,E=qaBuild(),now=new Date(),day=bizDay();let
  const typeMap={deposit:'p_deposit',withdraw:'p_withdraw',ins_close:'ins_settle'};
  await saveEntry({who:E.who||null,type:E.typeOverride||typeMap[q.k]||q.k,date:day,time:now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:now.toISOString(),voided:false,
   player:p?p.id:null,medium:E.method==='cash'?'cash':E.method?'chips':null,method:E.method||null,amount:E.amountOverride||num(q.amount),legs:E.legs,pl:E.pl,summary:E.summary,note:q.note||'',
-  approver:q.approver||null,ppmFlag:!!q.ppmFlag,cat:q.cat||null,fx:E.fx||null});
+  approver:q.approver||null,ppmFlag:!!q.ppmFlag,cat:q.cat||null,fx:E.fx||null,acct:E.acct||null,...(E.method==='account'&&q.k==='buyin'?{fromDeposit:E.fromDeposit||0,credit:E.credit||0}:{})});
  return true}
 function vRecords(){const day=S.recDay||bizDay();const [y,m,d]=day.split('-').map(Number);const nx=new Date(y,m-1,d+1);const label=`${m}/${d} 12:00 – ${nx.getMonth()+1}/${nx.getDate()} 11:59`;
  const all=liveEntries().filter(e=>e.date===day&&['buyin','cashout','op_in','op_out'].includes(e.type)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -828,7 +838,8 @@ function bindQA(){const q=$;
    box.querySelectorAll('[data-mpick]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pickMember(list[Number(b.dataset.mpick)])})})});
   el.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();const tv=el.value.trim().replace(/^#/,'');if(/^\d+$/.test(tv)){let hit=LAST_MEMBERS.find(m=>normNo(m.member_no)===normNo(tv));if(!hit){memberSearch(tv,list=>{const h=list.find(m=>normNo(m.member_no)===normNo(tv));if(h)pickMember(h);else{const box=q('qa-msugg');if(box)box.innerHTML='<span class="sub">No member with number '+esc(tv)+'</span>'}});return}pickMember(hit);return}const l=suggList(el.value,!!el.dataset.acct),ex=findPlayer(el.value);pick(ex?ex.name:(l.length===1&&el.value.trim()?l[0].name:el.value.trim()))})}
  if(q('qa-player')){q('qa-player').oninput=()=>{Q.player=q('qa-player').value};q('qa-player').onchange=()=>{Q.player=q('qa-player').value;reset();render();const nf=q('qa-fv')&&!q('qa-fv').value?q('qa-fv'):q('qa-amt');nf&&nf.focus()}}
- if(q('qa-amt')){q('qa-amt').oninput=()=>{Q.amount=q('qa-amt').value;if(S.qaMsg){reset();const n=document.querySelector('#qa-ack');if(n){render();q('qa-amt').focus()}}};q('qa-amt').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();(q('qa-save')||q('qa-ack')).click()}}}
+ const refreshAcct=()=>{const ap=q('acct-panel');if(!ap)return;ap.innerHTML=acctPanel(Q);ap.querySelectorAll('[data-field=qaappr] button').forEach(b=>b.onclick=()=>{Q.approver=b.dataset.v;reset();render();const f=q('qa-amt');f&&f.focus()})};refreshAcct();
+ if(q('qa-amt')){q('qa-amt').oninput=()=>{Q.amount=q('qa-amt').value;refreshAcct();if(S.qaMsg){reset();const n=document.querySelector('#qa-ack');if(n){render();q('qa-amt').focus()}}};q('qa-amt').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();(q('qa-save')||q('qa-ack')).click()}}}
  if(q('qa-cat'))q('qa-cat').onchange=()=>{Q.cat=q('qa-cat').value;reset()};
  if(q('qa-note'))q('qa-note').oninput=()=>{Q.note=q('qa-note').value};
  const fxCalc=()=>{if(Q.k==='fx_in'&&q('qa-php')){const r=Q.rate===''?fxRate(Q.cur):num(Q.rate),v=num(Q.fv)*r;q('qa-php').textContent=pesoE(Number.isFinite(v)?round2(v):0)}
