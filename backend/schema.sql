@@ -234,3 +234,9 @@ CREATE TABLE IF NOT EXISTS insurance_tickets(id INTEGER PRIMARY KEY AUTOINCREMEN
   result_card TEXT, settled_at INTEGER, settled_by TEXT, void_reason TEXT, detail TEXT);
 CREATE INDEX IF NOT EXISTS insurance_day ON insurance_tickets(day,id);
 CREATE TABLE IF NOT EXISTS insurance_float(id INTEGER PRIMARY KEY CHECK(id=1), day TEXT NOT NULL, balance INTEGER NOT NULL, capital INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
+
+-- Cage (finance): the cage page's records as JSON documents (entries, counts, players, settings…). rev orders every change so the page can fetch only what changed.
+CREATE TABLE IF NOT EXISTS cage_docs(coll TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL, rev INTEGER NOT NULL, updated INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', PRIMARY KEY(coll,id));
+CREATE INDEX IF NOT EXISTS cage_docs_rev ON cage_docs(rev);
+CREATE TABLE IF NOT EXISTS cage_meta(id INTEGER PRIMARY KEY CHECK(id=1), rev INTEGER NOT NULL);
+INSERT OR IGNORE INTO cage_meta(id,rev) VALUES(1,0);
