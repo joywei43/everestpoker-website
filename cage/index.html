@@ -659,7 +659,7 @@ function bindCounts(){const q=$;
 const lname=s=>String(s||'').trim().toLowerCase();
 const normNo=x=>String(x||'').trim().replace(/^#/,'').replace(/^EV-/i,'').replace(/^0+(?=\d)/,'');
 const pLabel=p=>p.name+(p.no?' #'+p.no:'');
-function findPlayer(name){const n=lname(name).replace(/\s*#\s*/,' #');const m=n.match(/#(\S+)$/);return S.players.find(p=>lname(p.name)===n||lname(pLabel(p))===n)||(m?S.players.find(p=>p.no&&normNo(p.no)===normNo(m[1])):null)}
+function findPlayer(name){const n=lname(name).replace(/\s*#\s*/,' #');const m=n.match(/#(\S+)$/);return S.players.find(p=>lname(p.name)===n||lname(pLabel(p))===n)||(m?(S.players.find(p=>p.no&&normNo(p.no)===normNo(m[1]))||S.players.find(p=>!p.no&&lname(p.name)===n.replace(/\s*#\S+$/,''))):null)}
 const isAcct=p=>!!(p&&p.account);
 const acctOf=p=>!p?null:isAcct(p)?p:(p.under?S.players.find(x=>x.id===p.under&&isAcct(x))||null:null);
 const subsOf=h=>S.players.filter(x=>x.under===h.id&&!isAcct(x));
@@ -830,7 +830,7 @@ function bindQA(){const q=$;
  document.querySelectorAll('[data-qa]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.qa);render();const fh=q('form-here');if(fh)fh.scrollIntoView({block:'nearest',behavior:'smooth'});const f=q('qa-player')||q('qa-amt');f&&f.focus({preventScroll:!!fh})});
  if(!S.qa){if(q('rec-day'))q('rec-day').onchange=()=>{S.recDay=q('rec-day').value;render()};document.querySelectorAll('[data-rf]').forEach(b=>b.onclick=()=>{S.recFilter=b.dataset.rf;render()});bindPPM();return}
  const Q=S.qa;const reset=()=>{S.qaMsg=null;Q.ack=false;Q.ppmFlag=false};
- const pickMember=m=>{const ex=S.players.find(x=>x.no&&normNo(x.no)===normNo(m.member_no));Q.member=m;pick(ex?pLabel(ex):`${m.nickname||m.name} #${m.member_no}`)};
+ const pickMember=m=>{const nick=lname(m.nickname||m.name);const ex=S.players.find(x=>x.no&&normNo(x.no)===normNo(m.member_no))||S.players.filter(x=>!x.no&&(lname(x.name)===nick||lname(x.name)===lname(m.name||''))).sort((a,b)=>(isAcct(b)-isAcct(a))||(!!acctOf(b)-!!acctOf(a)))[0];Q.member=m;pick(ex?pLabel(ex):`${m.nickname||m.name} #${m.member_no}`)};
  const pick=n=>{Q.player=n;const pe=q('qa-player');if(pe)pe.value=n;reset();render();const nf=q('qa-fv')&&!q('qa-fv').value?q('qa-fv'):q('qa-amt');nf&&nf.focus()};
  const bindPick=()=>document.querySelectorAll('[data-pick]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pick(b.dataset.pick)});bindPick();
  if(q('qa-player')&&q('qa-sugg')){const el=q('qa-player');el.addEventListener('input',()=>{q('qa-sugg').innerHTML=suggHTML(el.value,!!el.dataset.acct);bindPick();Q.member=null;
