@@ -96,7 +96,8 @@ const TYPES=[
  {k:'ap_out',l:'Payable paid',d:'Money we owe is paid'}];
 const SYS_TYPES={count_adj:'Count difference',other_out:'Cash out · other',fx_in:'Foreign cash in',fx_out:'Foreign cash out',chip_short:'BBJ / Rake',transfer:'Transfer',ins:'Insurance win/loss',behind:'Playing behind',buyin:'Player buy-in',cashout:'Player cash-out',ins_settle:'Insurance chips → cash',p_deposit:'Player deposit',p_withdraw:'Player withdrawal',op_out:'Cash out (operation)',op_in:'Cash in (operation)',swap_c2ch:'Cash → chips',swap_ch2c:'Chips → cash',ins_move:'Insurance → chips/cash',mass_redeem:'Redeem mass chips',mass_close:'Close: mass chips → on-day cash',tips_out:'Close: tips → tip reserves',tip_pay:'Tips paid',day_close:'Cash in · On-day buy-in',close_day:'Close: on-day net income',behind:'Playing behind'};
 const typeLabel=k=>(TYPES.find(x=>x.k===k)||{}).l||SYS_TYPES[k]||k;
-const CASH_D=[1000,500,200,100,50,20,10,5,1];const CHIP_D=[10000,1000,100,25];
+const CASH_D=[1000,500,200,100,50,20,10,5,1];const CHIP_D=[10000,1000,100,25];const HOUSE_D=25;const chipVal=d=>Number(d)===HOUSE_D?0:Number(d);
+const houseQty=c=>Object.values((c&&c.chips)||{}).reduce((s,x)=>s+(Number((x||{})[HOUSE_D])||0),0);
 const DEFAULT_SETTINGS={openDate:'2026-11-01',rent:0,pagcorMin:0,pagcorRate:.25,cdcRate:.05,everestRakeRate:.70,bbjEverestRate:.21,
  fxRates:{TWD:1.8,USD:60},open:{cf_cash:0,ins_cash:0,ins_chips:0,day_cash:0,bb_cash:0,chip_chips:0,chipsOut:0,mass_chips:0,box:0,fx_TWD:0,fx_USD:0},owners:[],supervisors:['Joy','Geraldine','Cey','Phoebe']};
 
@@ -351,7 +352,7 @@ const LINE_LBL={cf_cash:'Cash float',ins_cash:'Insurance cash',day_cash:'On-day 
 const pesoE=n=>(n<0?'-':'')+'P'+Math.abs(round2(n)).toLocaleString('en-US',{maximumFractionDigits:2});
 const sgnE=n=>(n>0?'+':n<0?'-':'')+Math.abs(round2(n)).toLocaleString('en-US',{maximumFractionDigits:2});
 function cntTotals(c){const t={};for(const [k] of CNT_CASH)t[k+'_cash']=CASH_D.reduce((s,d)=>s+d*(Number((c.cash[k]||{})[d])||0),0);
- for(const [k] of CNT_CHIPS)t[k+'_chips']=CHIP_D.reduce((s,d)=>s+d*(Number((c.chips[k]||{})[d])||0),0);return t}
+ for(const [k] of CNT_CHIPS)t[k+'_chips']=CHIP_D.reduce((s,d)=>s+chipVal(d)*(Number((c.chips[k]||{})[d])||0),0);return t}
 function lastCount(){return S.counts.slice().sort((a,b)=>String(b.at).localeCompare(String(a.at)))[0]}
 function cageOpen(){const l=lastCount();if(!l&&S.settings)return {first:true};return l&&l.kind==='open'?l:null}
 function bookNow(){const b=balances();const o={};for(const k of Object.keys(LINE_LBL))o[k]=b[k]||0;return o}
@@ -436,8 +437,8 @@ async function postClose(){const f=S.flow,d=f.d,X=closeNumbers(),day=bizDay(),no
  const info={insurance:X.insCnt,insBook:X.insBook,insReason:d.insReason,pbSettled:X.settled,pbUnsettled:X.uns.map(p=>({who:p.who,amt:-p.net,reason:(d.pb[p.who]||{}).r||''})),pbResult:X.pbRes,tips:X.alloc,tipTotal:X.tipT,dealerTips:(d.dealers||[]).filter(r=>num(r.a)>0).map(r=>({n:r.n.trim(),a:num(r.a)})),mass:X.mass,net:X.net};
  await saveEntry({...base,type:'close_day',amount:X.net,legs:[],pl:null,closeInfo:info,summary:`Close: on-day net income ${sgn(X.net)} to Cash float (insurance ${sgn(X.insCnt)}, playing behind ${sgn(X.pbRes)})`});
  f.info=info}
-function cntBlock(kind,key,label,denoms,unit){const v=S.cnt[kind][key];const tot=denoms.reduce((s,d)=>s+d*(Number(v[d])||0),0);
- return `<div class="card"><b>${label}</b><div class="sub">${unit}</div>${denoms.map(d=>`<div class="crow"><span class="num">${d.toLocaleString('en-US')}${kind==='chips'&&d===25?' <span class="sub">house</span>':''}</span><input class="num" data-cq="${kind}|${key}|${d}" inputmode="numeric" value="${v[d]??''}" placeholder="0"><span class="num sub" style="text-align:right" id="cl-${kind}-${key}-${d}">${v[d]?pesoE(d*v[d]):'-'}</span></div>`).join('')}
+function cntBlock(kind,key,label,denoms,unit){const v=S.cnt[kind][key];const val=d=>kind==='chips'?chipVal(d):d;const tot=denoms.reduce((s,d)=>s+val(d)*(Number(v[d])||0),0);
+ return `<div class="card"><b>${label}</b><div class="sub">${unit}</div>${denoms.map(d=>`<div class="crow"><span class="num">${d.toLocaleString('en-US')}${kind==='chips'&&d===HOUSE_D?' <span class="sub">house · no value</span>':''}</span><input class="num" data-cq="${kind}|${key}|${d}" inputmode="numeric" value="${v[d]??''}" placeholder="0"><span class="num sub" style="text-align:right" id="cl-${kind}-${key}-${d}">${v[d]?(kind==='chips'&&d===HOUSE_D?v[d]+' pcs':pesoE(d*v[d])):'-'}</span></div>`).join('')}
  <div class="row" style="border-top:1px solid var(--line);margin-top:4px"><b>Total</b><b class="num" id="ct-${kind}-${key}">${pesoE(tot)}</b></div></div>`}
 function vCountForm(){const c=S.cnt;
  return `<h2 style="margin-top:4px">Count the cage</h2>
@@ -462,6 +463,7 @@ function vCountResult(){const c=S.cnt,r=computeResult(),lines=Object.keys(LINE_L
  return `<h2 style="margin-top:4px">${bad.length?'Some lines don\'t match the books':'Everything matches the books'}</h2>
  <div class="card" style="max-width:900px"><table><tr><th>Item</th><th class="r">Books</th><th class="r">Counted</th><th class="r">Difference</th><th>Reason</th></tr>
  ${lines.map(k=>{const d=r.diffs[k];return `<tr><td>${LINE_LBL[k]}</td><td class="r num">${pesoE(r.bk[k])}</td><td class="r num">${pesoE(r.t[k])}</td><td class="r num ${d?'neg':''}">${d?sgnE(d):'0'}</td><td>${d?`<input data-rs="${k}" value="${esc(c.reasons[k]||'')}" placeholder="What happened?">`:''}</td></tr>`}).join('')}
+ ${(()=>{const n=houseQty(c),pl=lastCount(),pv=pl?houseQty(pl):null;return `<tr><td>House 25 chips <span class="sub">(pieces, no cash value)</span></td><td class="r num">${pv==null?'—':pv+' pcs'}</td><td class="r num">${n} pcs</td><td class="r num ${pv!=null&&n!==pv?'neg':''}">${pv==null?'':(n-pv?(n-pv>0?'+':'')+(n-pv)+' pcs':'0')}</td><td class="sub">Last count vs now</td></tr>`})()}
  ${FX_CUR.map(k=>{const x=r.fx[k],d=x.diff;return `<tr><td>Foreign cash · ${k}${c.fx.same?' <span class="sub">(no change today)</span>':''}</td><td class="r num">${k} ${x.book.toLocaleString('en-US')}</td><td class="r num">${k} ${x.counted.toLocaleString('en-US')}</td><td class="r num ${d?'neg':''}">${d?`${sgnE(d)} (${sgnE(x.php)} ₱)`:'0'}</td><td>${d?`<input data-rs="fx_${k}" value="${esc(c.reasons['fx_'+k]||'')}" placeholder="What happened?">`:''}</td></tr>`}).join('')}
 </table>
  ${c.kind==='close'?(()=>{const cr=creditToday(bizDay()),ms=(S.flow&&S.flow.info&&S.flow.info.mass)||0,gap=round2(r.t.day_cash+cr+ms-r.short);return `<div class="row" style="margin-top:8px"><span>Chips given to players today and not returned</span><span class="num">${pesoE(r.out)}</span></div>${r.diffs.chip_chips?`<div class="row"><span>Chip count difference</span><span class="num">${sgnE(r.diffs.chip_chips)}</span></div>`:''}
@@ -483,7 +485,7 @@ async function saveCount(){const c=S.cnt,r=computeResult(),day=bizDay(),now=new 
  const dc=c.kind==='close'?dayCash(day):null;const openToday=S.counts.filter(x=>x.kind==='open'&&x.day===day).sort((a,b)=>String(b.at).localeCompare(String(a.at)))[0];
  const doc={kind:c.kind,day,at:now.toISOString(),time:now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),cashier:c.cashier.trim(),supervisor:c.supervisor.trim(),
   cash:c.cash,chips:c.chips,counted:r.t,book:r.bk,diffs:r.diffs,reasons:c.reasons,short:r.short,dayIn:dc?dc.ins:null,dayOut:dc?dc.outs:null,players:c.kind==='close'?playersSummary(day):null,chipsOut:r.out||0,credit:c.kind==='close'?creditToday(day):0,
-  closeInfo:c.kind==='close'&&S.flow?S.flow.info||null:null,fxCount:{same:!!c.fx.same,...r.fx},midoriDay:c.kind==='open'?prevBizDay():null,midori:midori||(c.kind==='open'?S.midori[prevBizDay()]||null:null),
+  closeInfo:c.kind==='close'&&S.flow?S.flow.info||null:null,fxCount:{same:!!c.fx.same,...r.fx},house:{qty:houseQty(c),prev:lastCount()?houseQty(lastCount()):null},midoriDay:c.kind==='open'?prevBizDay():null,midori:midori||(c.kind==='open'?S.midori[prevBizDay()]||null:null),
   openChips:openToday?openToday.counted.chip_chips:null,photo:null};
  if(midori)await saveMidoriDay(prevBizDay(),midori);
  let id;if(MEM){id='c'+Date.now();S.counts.push({id,...doc})}else{const ref=DB.collection('counts').doc();await ref.set(doc);id=ref.id}
@@ -506,10 +508,10 @@ function repPage1(c){const cc=c.cash||{},ch=c.chips||{},pages=c.kind==='close'?2
  ${CASH_D.map(d=>`<tr><td>${d.toLocaleString('en-US')}</td>${CNT_CASH.map(([k])=>{const q=Number((cc[k]||{})[d])||0;return `<td style="text-align:right">${q||''}</td><td style="text-align:right">${q?(q*d).toLocaleString('en-US'):''}</td>`}).join('')}</tr>`).join('')}
  <tr><td><b>Total</b></td>${CNT_CASH.map(([k])=>`<td></td><td style="text-align:right"><b>${(c.counted[k+'_cash']||0).toLocaleString('en-US')}</b></td>`).join('')}</tr></table>
  <h3>Chip count</h3><table><tr><th>Chip</th>${CNT_CHIPS.map(([,l])=>`<th style="text-align:right">${l} pcs</th><th style="text-align:right">P</th>`).join('')}</tr>
- ${CHIP_D.map(d=>`<tr><td>${d.toLocaleString('en-US')}${d===25?' (house)':''}</td>${CNT_CHIPS.map(([k])=>{const q=Number((ch[k]||{})[d])||0;return `<td style="text-align:right">${q||''}</td><td style="text-align:right">${q?(q*d).toLocaleString('en-US'):''}</td>`}).join('')}</tr>`).join('')}
+ ${CHIP_D.map(d=>`<tr><td>${d.toLocaleString('en-US')}${d===HOUSE_D?' (house, no value)':''}</td>${CNT_CHIPS.map(([k])=>{const q=Number((ch[k]||{})[d])||0;return `<td style="text-align:right">${q||''}</td><td style="text-align:right">${q?(d===HOUSE_D?'—':(q*d).toLocaleString('en-US')):''}</td>`}).join('')}</tr>`).join('')}
  <tr><td><b>Total</b></td>${CNT_CHIPS.map(([k])=>`<td></td><td style="text-align:right"><b>${(c.counted[k+'_chips']||0).toLocaleString('en-US')}</b></td>`).join('')}</tr></table>
  <h3>Books vs counted</h3><table><tr><th>Item</th><th style="text-align:right">Books</th><th style="text-align:right">Counted</th><th style="text-align:right">Difference</th><th>Reason</th></tr>
- ${lines.map(k=>`<tr><td>${LINE_LBL[k]}</td><td style="text-align:right">${pesoE(c.book[k])}</td><td style="text-align:right">${pesoE(c.counted[k]||0)}</td><td style="text-align:right">${c.diffs[k]?sgnE(c.diffs[k]):'0'}</td><td>${esc((c.reasons||{})[k]||'')}</td></tr>`).join('')}${c.fxCount?FX_CUR.map(k=>{const x=c.fxCount[k]||{book:0,counted:0,diff:0};return `<tr><td>Foreign cash · ${k}${c.fxCount.same?' (no change today)':''}</td><td style="text-align:right">${k} ${x.book.toLocaleString('en-US')}</td><td style="text-align:right">${k} ${x.counted.toLocaleString('en-US')}</td><td style="text-align:right">${x.diff?sgnE(x.diff):'0'}</td><td>${esc((c.reasons||{})['fx_'+k]||'')}</td></tr>`}).join(''):''}
+ ${lines.map(k=>`<tr><td>${LINE_LBL[k]}</td><td style="text-align:right">${pesoE(c.book[k])}</td><td style="text-align:right">${pesoE(c.counted[k]||0)}</td><td style="text-align:right">${c.diffs[k]?sgnE(c.diffs[k]):'0'}</td><td>${esc((c.reasons||{})[k]||'')}</td></tr>`).join('')}${c.house?`<tr><td>House 25 chips (pieces, no value)</td><td style="text-align:right">${c.house.prev==null?'—':c.house.prev+' pcs'}</td><td style="text-align:right">${c.house.qty} pcs</td><td style="text-align:right">${c.house.prev==null?'':c.house.qty-c.house.prev}</td><td>Last count vs now</td></tr>`:''}${c.fxCount?FX_CUR.map(k=>{const x=c.fxCount[k]||{book:0,counted:0,diff:0};return `<tr><td>Foreign cash · ${k}${c.fxCount.same?' (no change today)':''}</td><td style="text-align:right">${k} ${x.book.toLocaleString('en-US')}</td><td style="text-align:right">${k} ${x.counted.toLocaleString('en-US')}</td><td style="text-align:right">${x.diff?sgnE(x.diff):'0'}</td><td>${esc((c.reasons||{})['fx_'+k]||'')}</td></tr>`}).join(''):''}
 </table>
  ${c.kind==='open'?`<h3>MIDORI rake and BBJ · business day ${esc(c.midoriDay||'')}</h3>${md?`<table><tr><th>Table</th><th style="text-align:right">Rake</th><th style="text-align:right">BBJ</th></tr>${TABLES.map(t=>`<tr><td>${t}</td><td style="text-align:right">${Number((md.rake||{})[t]||0).toLocaleString('en-US')}</td><td style="text-align:right">${Number((md.bbj||{})[t]||0).toLocaleString('en-US')}</td></tr>`).join('')}<tr><td><b>Total</b></td><td style="text-align:right"><b>${TABLES.reduce((s,t)=>s+Number((md.rake||{})[t]||0),0).toLocaleString('en-US')}</b></td><td style="text-align:right"><b>${TABLES.reduce((s,t)=>s+Number((md.bbj||{})[t]||0),0).toLocaleString('en-US')}</b></td></tr></table>`:'<div class="cap">MIDORI had not sent the numbers yet.</div>'}`:''}
  ${sigBlock(c)}<div class="cap" style="margin-top:18px">Report ${esc(c.day)}-${c.kind}-${esc(String(c.id||'').slice(0,6))}</div></div>`}
@@ -594,8 +596,8 @@ function bindCounts(){const q=$;
  const ins=[...document.querySelectorAll('[data-cq]')];
  ins.forEach((i,ix)=>{i.oninput=()=>{const [kind,key,d]=i.dataset.cq.split('|');const n=Math.floor(num(i.value));
   if(i.value==='')delete S.cnt[kind][key][d];else if(Number.isFinite(n)&&n>=0)S.cnt[kind][key][d]=n;
-  const v=S.cnt[kind][key][d];q(`cl-${kind}-${key}-${d}`).textContent=v?pesoE(v*Number(d)):'-';
-  const denoms=kind==='cash'?CASH_D:CHIP_D;q(`ct-${kind}-${key}`).textContent=pesoE(denoms.reduce((s,x)=>s+x*(Number(S.cnt[kind][key][x])||0),0));q('cn-err').textContent=''};
+  const v=S.cnt[kind][key][d];q(`cl-${kind}-${key}-${d}`).textContent=v?(kind==='chips'&&Number(d)===HOUSE_D?v+' pcs':pesoE(v*Number(d))):'-';
+  const denoms=kind==='cash'?CASH_D:CHIP_D;q(`ct-${kind}-${key}`).textContent=pesoE(denoms.reduce((s,x)=>s+(kind==='chips'?chipVal(x):x)*(Number(S.cnt[kind][key][x])||0),0));q('cn-err').textContent=''};
   i.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();(ins[ix+1]||q('cn-submit')).focus()}}});
  if(q('cn-submit'))q('cn-submit').onclick=()=>{const c=S.cnt;
   if(!c.supervisor.trim()){q('cn-err').textContent='Enter the supervisor.';return}
