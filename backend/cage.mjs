@@ -2,6 +2,7 @@
 // GET  /cage?since=<rev>  → documents changed after that rev (deleted ones come back with deleted:true)
 // POST /cage/doc          → {coll, id, op:'set'|'update'|'delete', data?, ifVersion?}
 import { auditStmt } from './audit.mjs';
+import { handleOperation } from './operation.mjs';
 
 const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos'];
 const MANAGER_ONLY = ['config', 'manpower']; // starting balances, rates and staff costs
@@ -20,6 +21,14 @@ export async function handleCage(req, env, path, now, reply, user, role) {
       docs: rows.map((r) => ({ coll: r.coll, id: r.id, version: r.version, rev: r.rev, deleted: !!r.deleted, data: r.deleted ? null : JSON.parse(r.data) })),
       user, role,
     });
+  }
+  // PPM buy-in and cash-out per player for a business day, for the cage's comparison (names and numbers only).
+  if (path === '/cage/ppm' && req.method === 'GET') {
+    const day = new URL(req.url).searchParams.get('day') || '';
+    const u = new URL('https://x/operation'); if (/^\d{4}-\d{2}-\d{2}$/.test(day)) u.searchParams.set('day', day);
+    const op = await handleOperation(new Request(u), env, now, (o) => o, 'admin');
+    if (!op || op.error) return reply({ error: (op && op.error) || 'PPM not available' }, 500);
+    return reply({ day: op.day, rows: (op.visitor_list || []).map((v) => ({ no: v.member_no || null, name: v.member_no ? (v.nickname || v.name) : v.name, buy_in: v.buy_in || 0, cash_out: v.cash_out || 0, playing: !!v.playing_now, open: v.missing_cash_out || 0 })) });
   }
   if (path.startsWith('/cage/photo/') && req.method === 'GET') {
     const id = path.slice('/cage/photo/'.length);

@@ -59,3 +59,8 @@ assert.equal(r.body.data, 'data:image/jpeg;base64,AAAA');
 const log = sql.prepare("SELECT action FROM audit_log WHERE action LIKE 'cage.%'").all().map((x) => x.action);
 assert.ok(log.includes('cage.settings') && log.includes('cage.delete'));
 console.log('cage tests passed');
+
+// PPM comparison rows are open to staff and carry names and numbers only.
+r = await call('/cage/ppm?day=2026-11-14', 'GET', null, maria);
+assert.equal(r.status, 200); assert.ok(Array.isArray(r.body.rows));
+console.log('cage ppm ok');
