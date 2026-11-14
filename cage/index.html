@@ -96,7 +96,7 @@ const TYPES=[
  {k:'ap_out',l:'Payable paid',d:'Money we owe is paid'}];
 const SYS_TYPES={count_adj:'Count difference',other_out:'Cash out · other',fx_in:'Foreign cash in',fx_out:'Foreign cash out',chip_short:'BBJ / Rake',transfer:'Transfer',ins:'Insurance win/loss',behind:'Playing behind',buyin:'Player buy-in',cashout:'Player cash-out',ins_settle:'Insurance chips → cash',p_deposit:'Player deposit',p_withdraw:'Player withdrawal',op_out:'Cash out (operation)',op_in:'Cash in (operation)',swap_c2ch:'Cash → chips',swap_ch2c:'Chips → cash',ins_move:'Insurance → chips/cash',mass_redeem:'Redeem mass chips',mass_close:'Close: mass chips → on-day cash',tips_out:'Close: tips → tip reserves',tip_pay:'Tips paid',day_close:'Cash in · On-day buy-in',close_day:'Close: on-day net income',behind:'Playing behind'};
 const typeLabel=k=>(TYPES.find(x=>x.k===k)||{}).l||SYS_TYPES[k]||k;
-const CASH_D=[1000,500,200,100,50,20,10,5,1];const CHIP_D=[10000,1000,100,25];const HOUSE_D=25;const chipVal=d=>Number(d)===HOUSE_D?0:Number(d);
+const CASH_D=[1000,500,100,50,20,10,5,1];const CHIP_D=[10000,1000,100,25];const HOUSE_D=25;const chipVal=d=>Number(d)===HOUSE_D?0:Number(d);
 const houseQty=c=>Object.values((c&&c.chips)||{}).reduce((s,x)=>s+(Number((x||{})[HOUSE_D])||0),0);
 const DEFAULT_SETTINGS={openDate:'2026-11-01',rent:0,pagcorMin:0,pagcorRate:.25,cdcRate:.05,everestRakeRate:.70,bbjEverestRate:.21,
  fxRates:{TWD:1.8,USD:60},open:{cf_cash:0,ins_cash:0,ins_chips:0,day_cash:0,bb_cash:0,chip_chips:0,chipsOut:0,mass_chips:0,box:0,fx_TWD:0,fx_USD:0},owners:[],supervisors:['Joy','Geraldine','Cey','Phoebe']};
