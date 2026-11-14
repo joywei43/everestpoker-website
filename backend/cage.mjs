@@ -30,6 +30,23 @@ export async function handleCage(req, env, path, now, reply, user, role) {
     if (!op || op.error) return reply({ error: (op && op.error) || 'PPM not available' }, 500);
     return reply({ day: op.day, rows: (op.visitor_list || []).map((v) => ({ no: v.member_no || null, name: v.member_no ? (v.nickname || v.name) : v.name, buy_in: v.buy_in || 0, cash_out: v.cash_out || 0, playing: !!v.playing_now, open: v.missing_cash_out || 0 })) });
   }
+  // Insurance tickets from the insurance page, per business day, so the cage counts insurance chips without typing them again.
+  // Settled only: miss = house keeps the premium (+), hit = house paid the payout (−). Pending tickets are listed, not counted.
+  if (path === '/cage/insurance' && req.method === 'GET') {
+    const q = new URL(req.url).searchParams, ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+    const from = q.get('from'), to = q.get('to');
+    if (!ok(from) || !ok(to) || from > to) return reply({ error: 'Give from and to days.' }, 400);
+    const rows = (await env.DB.prepare("SELECT id,day,created_at,table_name,pot,amount,payout,result FROM insurance_tickets WHERE day>=? AND day<=? AND result<>'void' ORDER BY id LIMIT 5000").bind(from, to).all()).results || [];
+    const days = {};
+    for (const r of rows) {
+      const d = days[r.day] = days[r.day] || { net: 0, sold: 0, paid: 0, kept: 0, hits: 0, misses: 0, pending: 0, pending_amount: 0, tickets: 0 };
+      d.tickets++; d.sold += r.amount;
+      if (r.result === 'miss') { d.misses++; d.kept += r.amount; d.net += r.amount; }
+      else if (r.result === 'hit') { d.hits++; d.paid += r.payout; d.net -= r.payout; }
+      else { d.pending++; d.pending_amount += r.amount; }
+    }
+    return reply({ from, to, days, tickets: rows.filter((r) => r.day === to) });
+  }
   if (path.startsWith('/cage/photo/') && req.method === 'GET') {
     const id = path.slice('/cage/photo/'.length);
     if (!ID.test(id)) return reply({ error: 'Bad id' }, 400);

@@ -128,7 +128,7 @@ function balances(upTo){
  for(const p of S.players)if(!p.account&&p.under&&S.players.some(h=>h.id===p.under&&h.account)){b.dep[p.under]=(b.dep[p.under]||0)+(b.dep[p.id]||0)-(b.loan[p.id]||0);b.dep[p.id]=0;b.loan[p.id]=0}
  for(const x of (st.arap||[])){const v=Number(x.amt||0);if(x.kind==='ar')b.ar[x.name]=(b.ar[x.name]||0)+v;else if(x.kind==='ap')b.ap[x.name]=(b.ap[x.name]||0)+v;else if(x.kind==='pb'){b.behind-=v;b.pbBy[x.name]=(b.pbBy[x.name]||0)+v}}
  for(const e of liveEntries()){
-  if(upTo&&e.date>upTo)continue;if(e.date<st.openDate)continue;
+  if(upTo&&e.date>upTo)continue;if(e.date<st.openDate)continue;if(e.type==='ins'&&e.date>=INS_LINK)continue;
   for(const g of e.legs||[]){
    if(g.a==='dep')b.dep[g.p]=(b.dep[g.p]||0)+g.v;
    else if(g.a==='loan')b.loan[g.p]=(b.loan[g.p]||0)+g.v;
@@ -140,6 +140,7 @@ function balances(upTo){
    else if(g.a==='tipsheld'){b.tipsheld=(b.tipsheld||0)+g.v;if(g.p){b.tipsBy=b.tipsBy||{};b.tipsBy[g.p]=(b.tipsBy[g.p]||0)+g.v}}
    else{const k=g.a+'_'+g.m;b[k]=(b[k]||0)+g.v}
   }}
+ const il=insLive();if(il)for(const [d,x] of Object.entries(il.days)){if(d<st.openDate||d<INS_LINK||(upTo&&d>upTo))continue;b.ins_chips=round2((b.ins_chips||0)+x.net)}
  return b}
 function midoriMonth(m){
  const st=settings();const days=Object.entries(S.midori).filter(([d])=>monthOf(d)===m).sort();
@@ -229,6 +230,7 @@ function monthPL(m){
  for(const e of liveEntries()){if(monthOf(e.date)!==m)continue;
   if(e.pl){if(e.pl.v>=0)inc[e.pl.cat]=(inc[e.pl.cat]||0)+e.pl.v;else exp[e.pl.cat]=(exp[e.pl.cat]||0)-e.pl.v}
   if(e.type==='behind')behind+=e.legs.find(g=>g.a==='behind').v}
+ {const il=insLive();if(il)for(const [d,x] of Object.entries(il.days)){if(monthOf(d)!==m||d<INS_LINK)continue;if(x.net>=0)inc['Insurance win/loss']=(inc['Insurance win/loss']||0)+x.net;else exp['Insurance win/loss']=(exp['Insurance win/loss']||0)-x.net}}
  const mp=S.manpower[m];if(mp)for(const [k,l] of MP_FIELDS)if(Number(mp[k]||0))exp['Manpower · '+l]=Number(mp[k]);
  const sum=o=>Object.values(o).reduce((s,v)=>s+v,0);
  return{inc:Object.entries(inc),exp:Object.entries(exp).sort((a,b)=>b[1]-a[1]),incT:sum(inc),expT:sum(exp),behind}}
@@ -410,7 +412,7 @@ function vCloseStep(){const f=S.flow,d=f.d,b=balances(),day=bizDay();const nav=(
   const first=!S.counts.length,o=settings().open;
   return (first?`<div class="hl"><b class="t">⚠ First close: check the starting numbers</b>These came from Settings. If any is wrong, press Cancel and fix Settings first.<table style="margin-top:6px">${[['Cash float',o.cf_cash],['Chip float (tray)',o.chip_chips],['Insurance cash',o.ins_cash],['Insurance chips',o.ins_chips],['On-day buy-in cash',o.day_cash],['Chips given to players today',o.chipsOut],['Mass chips',o.mass_chips],['Foreign cash TWD',o.fx_TWD,'TWD'],['Foreign cash USD',o.fx_USD,'USD']].map(([l,v,c])=>`<tr><td>${l}</td><td class="r num">${c?c+' '+Number(v||0).toLocaleString('en-US'):pesoE(Number(v||0))}</td></tr>`).join('')}</table></div>`:'')+card(`<b>Step 1 · Make sure every player has cashed out and returned their chips</b><table style="margin-top:8px"><tr><th>Player</th><th class="r">Bought in</th><th class="r">Cashed out</th></tr>${Object.entries(by).map(([n,x])=>`<tr><td>${esc(n)}</td><td class="r num">${x.in.toLocaleString('en-US')}</td><td class="r num">${x.out.toLocaleString('en-US')}</td></tr>`).join('')||'<tr><td colspan="3" class="sub">No buy-ins recorded today</td></tr>'}</table>
   <label style="display:flex;gap:8px;align-items:center;color:var(--ink);margin-top:12px"><input type="checkbox" id="cs-players" style="width:auto" ${d.players?'checked':''}> All players have cashed out or returned their chips. All tables are empty.</label>${nav('','ins')}`)}
- if(f.step==='ins')return card(`<b>Step 2 · Count insurance chips and change them to cash</b><div class="row"><span>Insurance chips in the books</span><b class="num">${pesoE(X.insBook)}</b></div>
+ if(f.step==='ins')return card(`<b>Step 2 · Count insurance chips and change them to cash</b>${(()=>{const il=insLive(),x=il&&il.days[bizDay()];return !il?'<div class="note bad" style="margin-top:6px">Insurance tickets are not loaded yet. Wait a moment before going on.</div>':x&&x.pending?`<div class="note warn" style="margin-top:6px">⚠ ${x.pending} insurance ticket(s) are not settled (${pesoE(x.pending_amount)}). Ask the supervisor to settle them on the Insurance page first. 還有未結算保單。</div>`:''})()}<div class="sub" style="margin-top:4px">From the Insurance page: settled tickets of the day, kept as chips until now.</div><div class="row"><span>Insurance chips in the books</span><b class="num">${pesoE(X.insBook)}</b></div>
   <label>Insurance chips counted (₱)</label><input id="cs-ins" inputmode="decimal" value="${esc(d.insCount===''?X.insBook:d.insCount)}" style="max-width:220px">
   ${Math.abs(X.insCnt-X.insBook)>0.001?`<label>Why is it different?</label><input id="cs-insr" value="${esc(d.insReason)}">`:''}
   <div class="hl"><b class="t">Do this now</b><ol><li>Put the insurance chips into the <b>chip float</b> tray.</li><li>Take the same amount of cash from <b>on-day cash</b> and put it into the <b>cash float</b>.</li></ol>After this, insurance chips should be 0.</div>${nav('players','tips')}`);
@@ -554,7 +556,7 @@ function vDesk(op){const b=balances(),l=lastCount();if(!S.qa){qaNew(S.deskKind||
 
  <div style="max-width:680px;margin-top:10px"><div class="flex" style="gap:8px">${big('buyin','Player buy-in<br><small style="font-weight:400">玩家買入</small>','buy')}${big('cashout','Player cash-out<br><small style="font-weight:400">玩家結出</small>','out')}</div>
  ${op.first?vFirstChecklist():''}${pk?vQuickForm():''}
- <div class="flex" style="margin-top:12px;gap:8px"><button data-qa="ins" style="flex:1;padding:12px" class="${q.k==='ins'?'c-ins':'o-ins'}">Insurance win / loss<br><small>保險輸贏</small></button><button data-qa="xfer" style="flex:1;padding:12px" class="${q.k==='xfer'?'on':''}">Chip transfer<br><small>籌碼轉讓（玩家給玩家）</small></button></div>${['ins','xfer'].includes(q.k)?`<div id="form-here">${vQuickForm()}</div>`:''}
+ <div class="flex" style="margin-top:12px;gap:8px"><button data-qa="ins" style="flex:1;padding:12px" class="${q.k==='ins'?'c-ins':'o-ins'}">Insurance today<br><small>保險（自動帶入）</small></button><button data-qa="xfer" style="flex:1;padding:12px" class="${q.k==='xfer'?'on':''}">Chip transfer<br><small>籌碼轉讓（玩家給玩家）</small></button></div>${q.k==='ins'?`<div id="form-here">${vInsLive()}</div>`:q.k==='xfer'?`<div id="form-here">${vQuickForm()}</div>`:''}
  <div class="card" style="margin-top:12px;padding:12px 14px"><b>Operation</b><div class="flex" style="margin-top:8px;gap:8px"><button data-qa="op_in" style="flex:1;padding:10px" class="${q.k==='op_in'?'c-buy':'o-buy'}">Cash in</button><button data-qa="op_out" style="flex:1;padding:10px" class="${q.k==='op_out'?'c-out':'o-out'}">Cash out</button></div></div>${['op_in','op_out'].includes(q.k)?`<div id="form-here">${vQuickForm()}</div>`:''}
  <details style="margin-top:12px" ${pk||['ins','xfer','other_out','op_in','op_out'].includes(q.k)?'':'open'}><summary class="sub" style="cursor:pointer">More (deposits, float swaps, mass chips, tips, foreign cash)</summary>${vQuickGrid(QA.filter(a=>!['buyin','cashout','ins','xfer','other_out','op_in','op_out'].includes(a.k)).map(a=>a.k))}${!pk&&!['ins','xfer','op_in','op_out'].includes(q.k)?`<div id="form-here">${vQuickForm()}</div>`:''}${vInsFloat()}</details></div>
  ${vRecords()}
@@ -646,6 +648,7 @@ function bindCounts(){const q=$;
   if(to==='net'&&S.cnt){S.cnt=null;S.flow.step='net';render();return}
   const fwd=CLOSE_STEPS.findIndex(s=>s[0]===to)>CLOSE_STEPS.findIndex(s=>s[0]===S.flow.step)||to==='post';
   if(fwd){if(S.flow.step==='players'&&!d.players){err.textContent='Tick the box when every player has cashed out.';return}
+   if(S.flow.step==='ins'&&!insLive()){err.textContent='Insurance tickets are not loaded yet. Wait a moment and press Next again.';return}
    if(S.flow.step==='ins'&&(!Number.isFinite(num(d.insCount))&&d.insCount!=='')){err.textContent='Enter the insurance chips counted.';return}
    if(S.flow.step==='ins'&&Math.abs(closeNumbers().insCnt-closeNumbers().insBook)>0.001&&!d.insReason.trim()){err.textContent='Write why the insurance chips are different.';return}
    if(S.flow.step==='tips'){if((d.dealers||[]).some(r=>(r.a!==''&&!(num(r.a)>=0))||(num(r.a)>0&&!r.n.trim()))){err.textContent='Each dealer amount needs a name and a number.';return}if(d.personal.some(r=>(r.n.trim()||r.a)&&(!r.n.trim()||!(num(r.a)>0)))){err.textContent='Each personal tip needs a name and an amount.';return}}
@@ -664,6 +667,25 @@ const isAcct=p=>!!(p&&p.account);
 const acctOf=p=>!p?null:isAcct(p)?p:(p.under?S.players.find(x=>x.id===p.under&&isAcct(x))||null:null);
 const subsOf=h=>S.players.filter(x=>x.under===h.id&&!isAcct(x));
 function pBal(pid,b=balances()){return (b.dep[pid]||0)-(b.loan[pid]||0)}
+/* Insurance comes from the insurance page (tickets settled by the supervisor). From INS_LINK on, it is not typed at the cage. */
+const INS_LINK='2026-11-14';let INS_LIVE=null;
+function insLive(){const st=settings(),from=[st.openDate||INS_LINK,INS_LINK].sort()[1],to=bizDay(),key=from+'|'+to,c=INS_LIVE;
+ if(from>to)return {days:{},tickets:[],at:Date.now()};
+ if((!c||c.key!==key||Date.now()-c.at>30000)&&!(c&&c.loading)&&typeof api==='function'&&!MEM&&typeof TOKEN!=='undefined'&&TOKEN&&DB){INS_LIVE={...(c||{}),loading:true,at:c?c.at:0};
+  api('/cage/insurance?from='+from+'&to='+to).then(r=>{const changed=!c||JSON.stringify(c.days)!==JSON.stringify(r.days||{})||JSON.stringify(c.tickets)!==JSON.stringify(r.tickets||[]);INS_LIVE={key,days:r.days||{},tickets:r.tickets||[],at:Date.now()};if(changed&&canRender())render()}).catch(e=>{INS_LIVE={days:(c&&c.days)||{},tickets:(c&&c.tickets)||[],key,err:errMsg(e),at:Date.now()};if(canRender())render()})}
+ return INS_LIVE&&INS_LIVE.days?INS_LIVE:null}
+function vInsLive(){const il=insLive(),day=bizDay(),x=(il&&il.days[day])||{net:0,sold:0,paid:0,kept:0,hits:0,misses:0,pending:0,pending_amount:0,tickets:0};
+ const manual=liveEntries().filter(e=>e.type==='ins'&&e.date===day);
+ if(!il)return `<div class="card" style="margin-top:12px;max-width:680px"><b style="font-size:16px">Insurance today 保險</b><div class="sub" style="margin-top:6px">${INS_LIVE&&INS_LIVE.err?'Could not load insurance: '+esc(INS_LIVE.err):'Loading insurance tickets…'}</div></div>`;
+ const T=(il.tickets||[]).slice().reverse();
+ return `<div class="card" style="margin-top:12px;max-width:680px"><div class="row" style="padding-top:0"><b style="font-size:16px">Insurance today 保險 · from the Insurance page</b><span class="sub">updated ${new Date(il.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span></div>
+ <div class="sub">Nothing to type here. The supervisor sells and settles tickets on the Insurance page; the result comes in by itself and is kept as insurance <b>chips</b> until the cage is closed. 不用在帳房記保險，督導在保險頁面結算後自動帶入，關帳前全部先算籌碼。</div>
+ <table style="margin-top:8px"><tr><td>Tickets 張數</td><td class="r num">${x.tickets}</td></tr><tr><td>Missed → house kept premium 沒中，收保費 (${x.misses})</td><td class="r num pos">+${x.kept.toLocaleString('en-US')}</td></tr><tr><td>Hit → house paid 中了，賠付 (${x.hits})</td><td class="r num neg">−${x.paid.toLocaleString('en-US')}</td></tr>
+ <tr><td><b>Insurance chips today 今日保險籌碼</b></td><td class="r num big ${x.net<0?'neg':''}">${sgn(x.net)}</td></tr></table>
+ ${x.pending?`<div class="note warn" style="margin-top:8px">⚠ ${x.pending} ticket${x.pending>1?'s':''} not settled yet (${pesoE(x.pending_amount)}). Not counted. Ask the supervisor to settle ${x.pending>1?'them':'it'} on the Insurance page before closing. 還有未結算的保單，關帳前請督導結算。</div>`:''}
+ ${manual.length?`<div class="note warn" style="margin-top:8px">${manual.length} insurance entr${manual.length>1?'ies were':'y was'} typed at the cage today (${manual.map(e=>esc(e.summary)).join(', ')}). ${manual.length>1?'They are':'It is'} no longer counted; the Insurance page is used instead.</div>`:''}
+ ${T.length?`<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Tickets</summary><table><tr><th>Time</th><th>Table</th><th class="r">Premium</th><th class="r">Pays</th><th>Result</th></tr>${T.map(t=>`<tr><td>${new Date(t.created_at*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Manila'})}</td><td>${esc(t.table_name)} ${esc(t.pot)}</td><td class="r num">${t.amount.toLocaleString('en-US')}</td><td class="r num">${t.payout.toLocaleString('en-US')}</td><td>${t.result==='miss'?'<span class="pos">Missed +'+t.amount.toLocaleString('en-US')+'</span>':t.result==='hit'?'<span class="neg">Hit −'+t.payout.toLocaleString('en-US')+'</span>':'<span class="sub">Pending</span>'}</td></tr>`).join('')}</table></details>`:''}
+ <div class="flex" style="margin-top:12px"><button class="link" id="qa-cancel">Close</button></div></div>`}
 const PPM_LIVE={};
 function ppmLive(day){const c=PPM_LIVE[day];if((!c||Date.now()-c.at>60000)&&!(c&&c.loading)&&typeof api==='function'&&!MEM&&typeof TOKEN!=='undefined'&&TOKEN&&DB){PPM_LIVE[day]={...(c||{}),loading:true,at:c?c.at:0};
   api('/cage/ppm?day='+day).then(r=>{PPM_LIVE[day]={rows:r.rows||[],at:Date.now()};if(canRender())render()}).catch(e=>{PPM_LIVE[day]={rows:(c&&c.rows)||[],err:errMsg(e),at:Date.now()};if(canRender())render()})}return PPM_LIVE[day]&&PPM_LIVE[day].rows?PPM_LIVE[day]:null}
@@ -692,7 +714,7 @@ const QA=[
  {k:'deposit',l:'Player deposit',zh:'玩家存款',key:'D'},{k:'withdraw',l:'Player withdrawal',zh:'玩家提款',key:'W'},
  {k:'op_out',l:'Cash out (operation)',zh:'營運支出',key:'O'},{k:'op_in',l:'Cash in (operation)',zh:'營運收入',key:'I'},
  {k:'swap_c2ch',l:'Cash → chips',zh:'現金換籌碼',key:'1'},{k:'swap_ch2c',l:'Chips → cash',zh:'籌碼換現金',key:'2'},{k:'ins_move',l:'Insurance → chips / cash',zh:'保險金換籌碼/現金',key:'3'},
- {k:'ins',l:'Insurance win / loss',key:'4'},{k:'ins_close',l:'Close insurance chips → cash',zh:'保險籌碼結成現金',key:'5'},{k:'mass_redeem',l:'Redeem mass chips at casino',zh:'Mass chip 跟賭場兌現',key:'6'},{k:'pb',l:'Playing behind',zh:'Playing behind 抓碼',key:'7'},{k:'tip_pay',l:'Pay tips to staff',zh:'發小費',key:'8'},{k:'fx_in',l:'Foreign cash in (rate lock)',zh:'外幣換入（鎖匯）',key:'9'},{k:'fx_out',l:'Foreign cash out',zh:'外幣換出',key:'0'}];
+ {k:'ins_close',l:'Close insurance chips → cash',zh:'保險籌碼結成現金',key:'5'},{k:'mass_redeem',l:'Redeem mass chips at casino',zh:'Mass chip 跟賭場兌現',key:'6'},{k:'pb',l:'Playing behind',zh:'Playing behind 抓碼',key:'7'},{k:'tip_pay',l:'Pay tips to staff',zh:'發小費',key:'8'},{k:'fx_in',l:'Foreign cash in (rate lock)',zh:'外幣換入（鎖匯）',key:'9'},{k:'fx_out',l:'Foreign cash out',zh:'外幣換出',key:'0'}];
 const POUCH_EN={cf:'Cash float',ins:'Insurance',chip:'Chip float',day:'On-day cash',bb:'BBJ/Rake cash'};
 function qaNew(k){S.qa={k,to:'',cur:'TWD',rate:'',fv:'',player:'',amount:'',method:k==='buyin'?'cash':k==='cashout'?'cash':'cash',approver:'',cat:'',note:'',pouch:'cf',dir:'',ack:false,step:'form'};S.qaMsg=null}
 function vQuickGrid(keys){const list=keys?QA.filter(a=>keys.includes(a.k)):QA;return `<div class="types" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">${list.map(a=>`<button class="${S.qa&&S.qa.k===a.k&&!S.qa.isDefault?'on':''}" data-qa="${a.k}">${a.l}<small>${a.zh||''} · Shortcut ${a.key}</small></button>`).join('')}</div>`}
