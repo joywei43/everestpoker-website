@@ -804,7 +804,7 @@ async function viewOperation(view) {
     : (isManager() ? `<div class="msg row between">Bad Beat Jackpot board is empty. ${bbjBtn}</div>` : '');
   view.innerHTML = `<div class="row between" style="align-items:flex-end"><div><h1>Live Operation</h1>
       <p class="sub">Business day <b>${esc(d.day)}</b> · ${dt(d.start)} → ${d.is_today ? 'now' : dt(d.end)}. A game that runs through the night stays on the day it started; the next day begins when tables open again after it ends (12:00 at the latest).</p></div>
-    <div class="row">${prevDay ? `<a class="btn" href="#/liveoperation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/liveoperation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/liveoperation">Today</a>`}<a class="btn" href="#/operationreport">Operation Report →</a></div></div>
+    <div class="row"><label class="small muted" style="display:flex;align-items:center;gap:6px">Go to day <input type="date" id="opDay" value="${esc(d.day)}" max="${esc(d.is_today ? d.day : today())}" style="width:auto"></label>${prevDay ? `<a class="btn" href="#/liveoperation?day=${prevDay}">← ${prevDay}</a>` : ''}${d.is_today ? '' : `<a class="btn" href="#/liveoperation?day=${nextDay}">${nextDay} →</a><a class="btn primary" href="#/liveoperation">Today</a>`}<a class="btn" href="#/operationreport">Operation Report →</a></div></div>
     ${d.is_today ? `<section class="card"><div class="row between" style="margin-bottom:12px"><h2>Floor <span class="small muted" style="font-weight:400">· ${d.open_tables} open · ${v.at_table_now} players</span></h2><span class="small muted">Live from PPM · refreshes every 30 s · tap a table, then a player</span></div>
       <div class="floor"><div class="floor-tables">${tables.map((t) => tableOval(t, t.name === floorTable)).join('')}</div>
       <aside class="floor-side" id="side">${sel ? `<div class="row between"><div><b style="font-size:20px">${esc(sel.name)}</b> <span class="chip ${sel.running ? 'green' : ''}">${sel.running ? 'Open' : 'Closed'}</span>
@@ -839,7 +839,9 @@ async function viewOperation(view) {
     el.onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); pick(); } };
   });
   view.querySelectorAll('[data-seat]').forEach((el) => el.onclick = (e) => { e.stopPropagation(); const p = find(el.dataset.seat); if (p) playerCard(view, p, el); });
-  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation' && !document.getElementById('pcard') && !(view.querySelector('#rund') || {}).open && !(view.querySelector('#bbjd') || {}).open) viewOperation(view).catch(() => {}); else if (parseHash().page === 'liveoperation') operationTimer = setTimeout(() => viewOperation(view).catch(() => {}), 30000); }, 30000);
+  const dayIn = view.querySelector('#opDay');
+  if (dayIn) dayIn.addEventListener('change', () => { if (/^\d{4}-\d{2}-\d{2}$/.test(dayIn.value)) location.hash = '#/liveoperation?day=' + dayIn.value; });
+  if (d.is_today) operationTimer = setTimeout(() => { if (parseHash().page === 'liveoperation' && !document.getElementById('pcard') && document.activeElement?.id !== 'opDay' && !(view.querySelector('#rund') || {}).open && !(view.querySelector('#bbjd') || {}).open) viewOperation(view).catch(() => {}); else if (parseHash().page === 'liveoperation') operationTimer = setTimeout(() => viewOperation(view).catch(() => {}), 30000); }, 30000);
 }
 
 // ---------- History Log ----------
