@@ -747,7 +747,11 @@ function playerCard2(name){const p=findPlayer(name),day=bizDay(),pp=ppmFor(day,n
  <div class="row"><span class="sub">This business day in PPM: buy-in / cash-out</span><span class="num">${pp?`${pesoE(pp.buyin)} / ${pesoE(pp.cashout)}`:'No record'}</span></div></div>`}
 function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (₱)</label><input id="qa-amt" inputmode="decimal" value="${esc(q.amount)}" placeholder="0">`;let f='';
  const p=findPlayer(q.player);
- if(q.k==='buyin'){f=`${playerField(q)}${amt}<label>Buy-in method</label>${seg('qamethod',[['cash','Cash 現金'],['mass','Mass chip'],['account','Player account 帳卡']],q.method==='credit'?'account':q.method)}
+ if(q.k==='buyin'){f=`${playerField(q)}${q.method==='fx'?'':amt}<label>Buy-in method</label>${seg('qamethod',[['cash','Cash 現金'],['fx','Foreign cash 外幣'],['mass','Mass chip'],['account','Player account 帳卡']],q.method==='credit'?'account':q.method)}
+  ${q.method==='fx'?(()=>{const r=q.rate===''?fxRate(q.cur):num(q.rate),fv=num(q.fv),php=Number.isFinite(fv*r)?round2(fv*r):0;const held=fxByGuest().find(g=>lname(g.who)===lname(q.player));return `<label>Currency 幣別</label>${seg('qacur',FX_CUR.map(c=>[c,c]),q.cur)}
+  <div class="form2"><div><label>Foreign amount 外幣金額 (${q.cur})</label><input id="qa-fv" inputmode="decimal" value="${esc(q.fv)}" placeholder="0"></div><div><label>Locked rate 鎖匯 (₱ per 1 ${q.cur})</label><input id="qa-rate" inputmode="decimal" value="${esc(q.rate===''?String(fxRate(q.cur)):q.rate)}"></div></div>
+  <div class="row" style="margin-top:8px"><span>Chips to give 給籌碼 (locked for this player 鎖定金額)</span><b class="num big" id="qa-php">${pesoE(php)}</b></div>
+  <div class="sub">The ${q.cur} stays in the cage as foreign cash, locked at this rate for the player. Chips come from the chip float. 外幣留在帳房，依此匯率鎖給該玩家。</div>${held?`<div class="note info" style="margin-top:6px">${esc(held.who)} already has ${fxLine(held.fx)} locked (${pesoE(held.php)}).</div>`:''}`})():''}
   ${q.method==='mass'?'<div class="sub" style="margin-top:4px">Player pays with casino mass chips. Keep them apart and redeem them at the casino.</div>':''}
   ${q.method==='account'||q.method==='credit'?`<div id="acct-panel">${acctPanel(q)}</div>`:''}`}
  if(q.k==='cashout'){const cd=p?cageDay(bizDay(),p.id):{credit:false},ac=acctOf(p),neg=ac&&pBal(ac.id)<0,lock=cd.credit||neg;if(lock)q.method='account';
@@ -796,8 +800,12 @@ function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],su
  const needAmt=()=>{if(!(a>0))fail('Enter an amount above 0.')};const needAppr=()=>{if(!q.approver)fail('Choose who approved this.')};
  const p=findPlayer(q.player);
  switch(q.k){
-  case 'buyin':{if(!q.player.trim())fail('Enter the player.');needAmt();
+  case 'buyin':{if(!q.player.trim())fail('Enter the player.');
+   if(q.method==='fx'){const fv=num(q.fv),r=q.rate===''?fxRate(q.cur):num(q.rate);if(!(fv>0))fail('Enter the foreign amount.');if(!(r>0))fail('Enter the locked rate.');const php=round2(fv*r);
+    E.legs=[{a:'fx',cur:q.cur,fv,v:php},{a:'chip',m:'chips',v:-php}];E.who=q.player.trim();E.fx={cur:q.cur,fv,rate:r};E.method='fx';E.amountOverride=php;E.summary=`${q.player.trim()} buy-in ${pesoE(php)} · ${q.cur} ${fv.toLocaleString('en-US')} @ ${r} (locked)`;break}
+   needAmt();
    if(q.method==='cash'){E.legs=[{a:'day',m:'cash',v:a},{a:'chip',m:'chips',v:-a}];E.summary=`${q.player.trim()} buy-in ${pesoE(a)} · cash`}
+   else if(q.method==='fx'){}
    else if(q.method==='mass'){E.legs=[{a:'mass',m:'chips',v:a},{a:'chip',m:'chips',v:-a}];E.summary=`${q.player.trim()} buy-in ${pesoE(a)} · casino mass chips (to redeem)`}
    else{const ac=acctOf(p);if(!ac)fail(`${q.player.trim()} has no player account and is not under one. Player account is only for account holders and their players: ${S.players.filter(isAcct).map(x=>x.name).join(', ')||'none'}.`);
     const bal=pBal(ac.id),fromDep=round2(Math.min(a,Math.max(0,bal))),cr=round2(a-fromDep);if(cr>0)needAppr();
@@ -866,7 +874,7 @@ function vRecords(){const day=S.recDay||bizDay();const [y,m,d]=day.split('-').ma
  for(const r of (live?live.rows:[])){let k=r.no?'n:'+normNo(r.no):null;if(!k){const p=S.players.find(x=>!x.no&&lname(x.name)===lname(r.name));k=p?keyOf(p):'x:'+lname(r.name)}const x=ent(k);if(!x.n)x.n=r.no?`${r.name} #${r.no}`:r.name;x.pp.buyin+=r.buy_in;x.pp.cashout+=r.cash_out;x.inPpm=true;x.playing=x.playing||r.playing;x.open+=r.open||0}
  for(const r of ((S.ppm[day]||{}).rows||[])){const p=findPlayer(r.n);const x=ent(p?keyOf(p):'x:'+lname(r.n));if(!x.n)x.n=r.n;x.pp.buyin+=Number(r.buyin||0);x.pp.cashout+=Number(r.cashout||0);x.inPpm=true}
  const rows=[...cmp.values()].map(x=>{const bi=Math.abs(x.ct.buyin-x.pp.buyin)<.01,co=Math.abs(x.ct.cashout-x.pp.cashout)<.01;return{...x,ok:bi&&co,wait:bi&&!co&&(x.playing||x.open>0)}}).sort((a,b)=>(a.ok+a.wait)-(b.ok+b.wait)||a.n.localeCompare(b.n));
- const ML={cash:'Cash',mass:'Mass chip',credit:'Credit',account:'Back to account'};
+ const ML={cash:'Cash',mass:'Mass chip',credit:'Credit',account:'Back to account',fx:'Foreign cash'};
  return `<h2>Records · cash in and cash out <span class="sub">紀錄</span> <input type="date" id="rec-day" value="${day}" style="width:auto;margin-left:8px"> <span class="sub">Business day ${label}</span></h2>
  <div class="grid g2"><div class="card"><div class="flex" style="gap:6px;flex-wrap:wrap">${fb('all','All 全部')}${fb('in','Cash in 收入')}${fb('out','Cash out 支出')}${fb('players','Players 玩家')}${fb('op','Operation 營運')}</div>
  <div class="flex" style="gap:16px;margin:8px 0;flex-wrap:wrap"><span>In 收入 <b class="num pos">${pesoE(sumT(IN))}</b></span><span>Out 支出 <b class="num neg">${pesoE(sumT(['cashout','op_out']))}</b></span><span>Net 淨額 <b class="num">${sgnE(sumT(IN)-sumT(['cashout','op_out']))}</b></span></div>
@@ -876,10 +884,14 @@ function vRecords(){const day=S.recDay||bizDay();const [y,m,d]=day.split('-').ma
  ${rows.map(r=>`<tr><td>${esc(r.n)}</td><td class="r num">${r.ct.buyin.toLocaleString('en-US')} / ${r.ct.cashout.toLocaleString('en-US')}</td><td class="r num">${r.pp.buyin.toLocaleString('en-US')} / ${r.pp.cashout.toLocaleString('en-US')}</td><td>${r.xfer?'<span class="pill info" title="Includes chip transfers">T</span> ':''}${r.ok?'<span class="pill cash">OK</span>':r.wait?'<span class="pill info">At table</span>':!r.inPpm?'<span class="pill warn">Not in PPM</span>':'<span class="pill warn">Check</span>'}</td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nothing yet</td></tr>'}</table>
  <div class="sub" style="margin-top:6px">${live?`PPM from the website · updated ${new Date(PPM_LIVE[day].at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}${PPM_LIVE[day].err?' · '+esc(PPM_LIVE[day].err):''}. At table = still playing, no cash-out in PPM yet.`:'Loading PPM…'}</div>
  <details style="margin-top:10px"><summary class="sub">Add PPM numbers by hand (only if PPM is missing someone)</summary><div class="sub" style="margin:6px 0">One player per line: name, buy-in, cash-out</div><textarea id="ppm-text" rows="5" placeholder="Masarap, 72000, 0">${esc(((S.ppm[day]||{}).rows||[]).map(r=>`${r.n}, ${r.buyin}, ${r.cashout}`).join('\n'))}</textarea><div class="err" id="ppm-err"></div><button id="ppm-save" style="margin-top:6px">Save PPM numbers</button></details></div></div>`}
+/* Foreign cash locked per guest: rate-lock advances and foreign-cash buy-ins, less returns to that guest. */
+function fxByGuest(){const m=new Map(),add=(who,cur,fv,v)=>{const k=lname(who);const g=m.get(k)||{who,fx:{},php:0};g.fx[cur]=g.fx[cur]||{amt:0,php:0};g.fx[cur].amt=round2(g.fx[cur].amt+fv);g.fx[cur].php=round2(g.fx[cur].php+v);g.php=round2(g.php+v);m.set(k,g)};
+ const st=settings();for(const e of liveEntries()){if(e.date<st.openDate)continue;const who=e.who||(e.player?playerName(e.player):'');if(!who)continue;for(const g of e.legs||[])if(g.a==='fx')add(who,g.cur,g.fv,g.v)}
+ return [...m.values()].filter(g=>Math.abs(g.php)>0.001||Object.values(g.fx).some(x=>Math.abs(x.amt)>0.001)).sort((a,b)=>b.php-a.php)}
 function vInsFloat(){const b=balances();return `<h2>Insurance, mass chips and foreign cash</h2><div class="grid g3" style="max-width:860px"><div class="card"><div class="row" style="padding-top:0"><b>Insurance cash</b><b class="num big">${pesoE(b.ins_cash||0)}</b></div></div>
  <div class="card"><div class="row" style="padding-top:0"><b>Mass chips to redeem</b><b class="num big">${pesoE(b.mass_chips||0)}</b></div>${(b.mass_chips||0)>0?'<button data-qa="mass_redeem" style="margin-top:6px">Redeem at casino</button>':''}</div>
  <div class="card"><div class="row" style="padding-top:0"><b>Insurance chips (today)</b><b class="num big">${pesoE(b.ins_chips||0)}</b></div>${Math.abs(b.ins_chips||0)>0.001?'<button data-qa="ins_close" style="margin-top:6px">Close today (chips → cash)</button>':''}</div>
- <div class="card"><div class="row" style="padding-top:0"><b>Foreign cash held</b><b class="num big">${pesoE(FX_CUR.reduce((s,c)=>s+((b.fx||{})[c]||{php:0}).php,0))}</b></div><div class="sub">${fxLine(b.fx||{})}</div><div class="sub">Pesos the company advanced at locked rates</div></div></div>`}
+ <div class="card"><div class="row" style="padding-top:0"><b>Foreign cash held</b><b class="num big">${pesoE(FX_CUR.reduce((s,c)=>s+((b.fx||{})[c]||{php:0}).php,0))}</b></div><div class="sub">${fxLine(b.fx||{})}</div><div class="sub">Pesos the company advanced at locked rates</div>${(()=>{const G=fxByGuest();return G.length?`<table style="margin-top:6px"><tr><th>Guest 客人</th><th>Foreign 外幣</th><th class="r">Locked 鎖定 ₱</th></tr>${G.map(g=>`<tr><td>${esc(g.who)}</td><td>${fxLine(g.fx)}</td><td class="r num">${pesoE(g.php)}</td></tr>`).join('')}</table>`:''})()}</div></div>`}
 function bindQA(){const q=$;
  document.querySelectorAll('[data-desk]').forEach(x=>x.onclick=()=>{S.deskKind=x.dataset.desk;qaNew(x.dataset.desk);S.qa.isDefault=true;render();const f=q('qa-player');f&&f.focus()});
  document.querySelectorAll('[data-qa]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.qa);render();const fh=q('form-here');if(fh)fh.scrollIntoView({block:'nearest',behavior:'smooth'});const f=q('qa-player')||q('qa-amt');f&&f.focus({preventScroll:!!fh})});
@@ -912,11 +924,11 @@ function bindQA(){const q=$;
  if(q('qa-amt')){q('qa-amt').oninput=()=>{Q.amount=q('qa-amt').value;refreshAcct();if(S.qaMsg){reset();const n=document.querySelector('#qa-ack');if(n){render();q('qa-amt').focus()}}};q('qa-amt').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();(q('qa-save')||q('qa-ack')).click()}}}
  if(q('qa-cat'))q('qa-cat').onchange=()=>{Q.cat=q('qa-cat').value;reset()};
  if(q('qa-note'))q('qa-note').oninput=()=>{Q.note=q('qa-note').value};
- const fxCalc=()=>{if(Q.k==='fx_in'&&q('qa-php')){const r=Q.rate===''?fxRate(Q.cur):num(Q.rate),v=num(Q.fv)*r;q('qa-php').textContent=pesoE(Number.isFinite(v)?round2(v):0)}
+ const fxCalc=()=>{if((Q.k==='fx_in'||(Q.k==='buyin'&&Q.method==='fx'))&&q('qa-php')){const r=Q.rate===''?fxRate(Q.cur):num(Q.rate),v=num(Q.fv)*r;q('qa-php').textContent=pesoE(Number.isFinite(v)?round2(v):0);if(Q.k==='buyin')Q.amount=Number.isFinite(v)?String(round2(v)):''}
   if(Q.k==='fx_out'&&q('qa-lock')){const h=(balances().fx||{})[Q.cur]||{amt:0,php:0},v=h.amt?num(Q.fv)*h.php/h.amt:0;const l=Number.isFinite(v)?round2(v):0;q('qa-lock').textContent=pesoE(l);if(q('qa-amt'))q('qa-amt').placeholder=String(l)}};
  if(q('qa-fv'))q('qa-fv').oninput=()=>{Q.fv=q('qa-fv').value;reset();fxCalc()};if(q('qa-rate'))q('qa-rate').oninput=()=>{Q.rate=q('qa-rate').value;reset();fxCalc()};
  const segBind=(name,key)=>document.querySelectorAll(`[data-field=${name}] button`).forEach(b=>b.onclick=()=>{Q[key]=b.dataset.v;reset();render()});
- segBind('qamethod','method');segBind('qacat','cat');segBind('qacur','cur');if(Q.k==='fx_in'&&document.querySelector('[data-field=qacur]'))document.querySelectorAll('[data-field=qacur] button').forEach(b=>b.addEventListener('click',()=>{Q.rate=''}));segBind('qaappr','approver');segBind('qapouch','pouch');segBind('qadir','dir');
+ segBind('qamethod','method');segBind('qacat','cat');segBind('qacur','cur');if((Q.k==='fx_in'||Q.k==='buyin')&&document.querySelector('[data-field=qacur]'))document.querySelectorAll('[data-field=qacur] button').forEach(b=>b.addEventListener('click',()=>{Q.rate=''}));segBind('qaappr','approver');segBind('qapouch','pouch');segBind('qadir','dir');
  if(q('qa-cancel'))q('qa-cancel').onclick=()=>{S.qa=null;S.qaMsg=null;render()};
  const go=async()=>{try{const ok=await qaSave();if(!ok)return;const l=QA.find(x=>x.k===Q.k).l;if(['buyin','cashout'].includes(Q.k))S.deskKind=Q.k;S.qa=null;S.qaMsg=null;render();flash(l+' saved');const pf=$('qa-player');if(pf&&S.tab==='counts')pf.focus()}catch(e){S.qaMsg={kind:'bad',text:e.message||errMsg(e)};render()}};
  if(q('qa-save'))q('qa-save').onclick=go;if(q('qa-ack'))q('qa-ack').onclick=()=>{Q.ack=true;go()};
