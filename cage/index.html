@@ -934,7 +934,8 @@ function vRecords(){const day=S.recDay||bizDay();const [y,m,d]=day.split('-').ma
  <details style="margin-top:10px"><summary class="sub">Add PPM numbers by hand (only if PPM is missing someone)</summary><div class="sub" style="margin:6px 0">One player per line: name, buy-in, cash-out</div><textarea id="ppm-text" rows="5" placeholder="Masarap, 72000, 0">${esc(((S.ppm[day]||{}).rows||[]).map(r=>`${r.n}, ${r.buyin}, ${r.cashout}`).join('\n'))}</textarea><div class="err" id="ppm-err"></div><button id="ppm-save" style="margin-top:6px">Save PPM numbers</button></details></div></div>`}
 /* Foreign cash locked per guest: rate-lock advances and foreign-cash buy-ins, less returns to that guest. */
 function fxByGuest(){const m=new Map(),add=(key,who,cur,fv,v)=>{const g=m.get(key)||{key,who,fx:{},php:0};g.fx[cur]=g.fx[cur]||{amt:0,php:0};g.fx[cur].amt=round2(g.fx[cur].amt+fv);g.fx[cur].php=round2(g.fx[cur].php+v);g.php=round2(g.php+v);m.set(key,g)};
- const st=settings();for(const e of liveEntries()){if(e.date<st.openDate)continue;const who=e.player?playerName(e.player):e.who||'';if(!who)continue;const key=e.player?'p:'+e.player:'w:'+lname(who);
+ const st=settings();for(const g of (st.open.fxGuests||[]))if(g.who&&g.cur&&g.amt)add('w:'+lname(g.who),g.who,g.cur,Number(g.amt),Number(g.php||0));
+for(const e of liveEntries()){if(e.date<st.openDate)continue;const who=e.player?playerName(e.player):e.who||'';if(!who)continue;const key=e.player?'p:'+e.player:'w:'+lname(who);
   if(e.type==='fx_release'){for(const [c,x] of Object.entries(e.fxRel||{}))add(key,who,c,-x.amt,-x.php);continue}
   for(const g of e.legs||[])if(g.a==='fx')add(key,who,g.cur,g.fv,g.v)}
  for(const g of m.values())for(const c of Object.keys(g.fx))if(Math.abs(g.fx[c].amt)<0.001&&Math.abs(g.fx[c].php)<0.001)delete g.fx[c];
@@ -1084,7 +1085,7 @@ function bind(){
    m.textContent=`Importing ${n+1} of ${docs.length}…`;await DB.doc(d.coll+'/'+d.id).set(data);n++}
   flash(`Imported ${n}, kept ${skip} that were already here.`)}catch(e){m.textContent='Import failed: '+errMsg(e)}};
  if(q('st-pastgo'))q('st-pastgo').onclick=()=>{const v=q('st-pastday').value;if(!v)return;S.dayOverride=v;try{sessionStorage.setItem('cage-day',v)}catch(e){}S.tab='counts';S.qa=null;render()};
- if(q('st-save'))q('st-save').onclick=async()=>{const st=settings();const open={};let bad=false;
+ if(q('st-save'))q('st-save').onclick=async()=>{const st=settings();const open={...(st.open.fxGuests?{fxGuests:st.open.fxGuests}:{})};let bad=false;
   document.querySelectorAll('[data-open]').forEach(i=>{const n=num(i.value||0);if(!Number.isFinite(n))bad=true;open[i.dataset.open]=n});
   const p={};document.querySelectorAll('[data-st]').forEach(i=>{const n=num(i.value);if(!Number.isFinite(n)||n<0)bad=true;p[i.dataset.st]=n});
   const fxRates={};document.querySelectorAll('[data-fx]').forEach(i=>{const n=num(i.value);if(!(n>0))bad=true;fxRates[i.dataset.fx]=n});const date=q('st-date').value;if(bad||!date){q('st-err').textContent='Check the start day and that every amount is a number.';return}
