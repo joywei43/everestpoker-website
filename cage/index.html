@@ -380,7 +380,7 @@ function vSignIn(){const st=staffList(),f=S.flow;
  :`<label>Name</label><input id="si-name" placeholder="Mary Anne"><div class="sub" style="margin-top:6px">No staff PINs are set yet. Add them in Settings.</div>`}
  <div class="err" id="si-err"></div><div class="flex" style="margin-top:12px"><button class="primary" id="si-go">Sign in</button><button class="link" id="flow-cancel">Cancel</button></div></div>`}
 /* flows */
-function startFlow(kind){S.flow={kind,step:S.user?(kind==='open'?'count':'players'):'signin',d:{players:false,insCount:'',insReason:'',tipPool:'',dealers:(tipPeople()[dealerRole()]||[]).map(n=>({n,a:''})),personal:[],mass:'',pb:{},supervisor:''}};S.cnt=null;S.qa=null;
+function startFlow(kind){S.flow={kind,step:S.user?(kind==='open'?'count':'chips'):'signin',d:{players:false,insCount:'',insReason:'',tipPool:'',dealers:(tipPeople()[dealerRole()]||[]).map(n=>({n,a:''})),personal:[],mass:'',pb:{},supervisor:''}};S.cnt=null;S.qa=null;
  if(S.user&&kind==='open')toCount('open')}
 function toCount(kind){S.cnt={kind,step:'count',cashier:S.user?S.user.name:'',supervisor:S.flow?S.flow.d.supervisor:'',cash:{cf:{},ins:{},day:{},bb:{},pd:{}},chips:{chip:{},ins:{},mass:{}},reasons:{},midori:{rake:{},bbj:{}},midoriSkip:false,fx:{same:true,TWD:'',USD:''}};if(S.flow)S.flow.step='count'}
 function fxMovedToday(){const l=lastCount(),since=l?String(l.at):'';return liveEntries().filter(e=>(e.type==='fx_in'||e.type==='fx_out')&&String(e.createdAt)>since)}
@@ -388,7 +388,7 @@ function fxBook(){const f=balances().fx||{};return Object.fromEntries(FX_CUR.map
 function vCounts(){if(S.cnt&&S.cnt.step==='report'){const doc=S.counts.find(c=>c.id===S.cnt.id)||S.cnt.saved;return vCountReport(doc)}
  if(S.flow){if(S.flow.step==='signin')return flowHead()+vSignIn();if(S.cnt&&S.cnt.step==='count')return flowHead()+vCountForm();if(S.cnt&&S.cnt.step==='result')return flowHead()+vCountResult();return flowHead()+vCloseStep()}
  return vCountHome()}
-const CLOSE_STEPS=[['players','Players cashed out'],['ins','Insurance chips'],['tips','Tips'],['mass','Mass chips'],['pb','Playing behind'],['net','On-day net income'],['count','Count everything'],['result','Check and print']];
+const CLOSE_STEPS=[['chips','Chips back 清點歸還籌碼'],['count','Count cash 清點現金'],['result','Check and print 核對列印']];
 const OPEN_STEPS=[['count','Count chips, cash and insurance'],['result','MIDORI numbers, check and print']];
 function flowHead(){const f=S.flow,steps=f.kind==='open'?OPEN_STEPS:CLOSE_STEPS;const cur=S.cnt?S.cnt.step:f.step;const ix=steps.findIndex(s=>s[0]===cur);
  return `<div class="flex" style="margin-bottom:8px"><b style="font-size:17px">${f.kind==='open'?'Open':'Close'} the cage · business day ${bizDay()}</b>${S.user?`<span class="sub">Signed in: ${esc(S.user.name)}</span>`:''}</div>
@@ -408,6 +408,31 @@ function closeNumbers(){const d=S.flow.d,b=balances(),day=bizDay();const insBook
 function allocTable(X){const al=Object.entries(X.alloc).filter(([,v])=>v);return al.length?`<table style="margin-top:8px"><tr><th>Goes to tip reserve of</th><th class="r">₱</th></tr>${al.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="r num">${v.toLocaleString('en-US')}</td></tr>`).join('')}<tr><td><b>Total cashed out from chips</b></td><td class="r num"><b>${X.tipT.toLocaleString('en-US')}</b></td></tr></table>`:''}
 function vCloseStep(){const f=S.flow,d=f.d,b=balances(),day=bizDay();const nav=(back,next,label='Next')=>`<div class="err" id="cs-err"></div><div class="flex" style="margin-top:12px">${back?`<button data-cs="${back}">Back</button>`:''}<button class="primary" data-cs="${next}">${label}</button><button class="link" id="flow-cancel">Cancel</button></div>`;
  const card=b=>`<div class="card" style="max-width:820px">${b}</div>`;const X=closeNumbers();
+ if(f.step==='chips'){const list=liveEntries().filter(e=>e.date===day&&(e.type==='buyin'||e.type==='cashout'));const by={};for(const e of list){const n=playerName(e.player);by[n]=by[n]||{in:0,out:0};by[n][e.type==='buyin'?'in':'out']+=e.amount}
+  const il=insLive(),ix=il&&il.days[day],insCash=b.ins_cash||0,massB=b.mass_chips||0,pbRows=X.pb.filter(p=>p.net<0);
+  return card(`<b style="font-size:17px">1 · Count and return the chips 清點歸還籌碼</b>
+  <details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Players today 今日玩家 (${Object.keys(by).length})</summary><table style="margin-top:6px"><tr><th>Player</th><th class="r">Bought in</th><th class="r">Cashed out</th></tr>${Object.entries(by).map(([n,x])=>`<tr><td>${esc(n)}</td><td class="r num">${x.in.toLocaleString('en-US')}</td><td class="r num">${x.out.toLocaleString('en-US')}</td></tr>`).join('')||'<tr><td colspan="3" class="sub">No buy-ins recorded today</td></tr>'}</table></details>
+  <label style="display:flex;gap:8px;align-items:center;color:var(--ink);margin-top:8px"><input type="checkbox" id="cs-players" style="width:auto" ${d.players?'checked':''}> All players have cashed out. All tables are empty. 所有玩家已結出，桌上沒有籌碼。</label>
+  <h3 style="margin:16px 0 4px">Insurance chips 保險籌碼</h3>
+  ${!il?'<div class="note bad">Insurance tickets are not loaded yet. Wait a moment.</div>':ix&&ix.pending?`<div class="note warn">⚠ ${ix.pending} insurance ticket(s) not settled (${pesoE(ix.pending_amount)}). Ask the supervisor to settle them first. 還有未結算保單。</div>`:''}
+  <div class="row" style="max-width:420px"><span>From the Insurance page 系統數字</span><b class="num">${pesoE(X.insBook)}</b></div>
+  <label>Counted 實點 (₱)</label><input id="cs-ins" inputmode="decimal" value="${esc(d.insCount===''?X.insBook:d.insCount)}" style="max-width:220px">
+  ${Math.abs(X.insCnt-X.insBook)>0.001?`<label>Why is it different? 差額原因</label><input id="cs-insr" value="${esc(d.insReason)}">`:''}
+  <h3 style="margin:16px 0 4px">Tip chips 小費籌碼</h3>
+  <div class="sub">Each dealer's tips today. The dealer keeps ${(tipSplit().find(([n])=>n===dealerRole())||[0,0])[1]}% of their own; the rest goes to the other roles.</div>
+  ${(d.dealers||[]).map((r,i)=>`<div class="flex" style="margin:6px 0"><input data-dt="${i}|n" value="${esc(r.n)}" placeholder="Dealer" style="max-width:200px"><input data-dt="${i}|a" inputmode="decimal" value="${esc(r.a)}" placeholder="₱" style="max-width:140px"><button class="link" data-dtdel="${i}">Remove</button></div>`).join('')}<button class="link" id="cw-adddt">+ Add dealer</button>
+  <div class="row" style="max-width:420px"><span>Dealer tips total</span><b class="num" id="tip-pool">${pesoE(X.pool)}</b></div>
+  <details ${d.personal.length?'open':''}><summary class="sub" style="cursor:pointer">Personal tips kept in full (service, cage) 個人小費</summary>${d.personal.map((r,i)=>`<div class="flex" style="margin:6px 0"><input data-pt="${i}|n" value="${esc(r.n)}" placeholder="Name" style="max-width:200px"><input data-pt="${i}|a" inputmode="decimal" value="${esc(r.a)}" placeholder="₱" style="max-width:140px"><button class="link" data-ptdel="${i}">Remove</button></div>`).join('')}<button class="link" id="cw-addpt">+ Add personal tip</button></details>
+  <div id="tip-alloc">${allocTable(X)}</div>
+  ${massB>0.001?`<h3 style="margin:16px 0 4px">Mass chips 公關碼</h3><div class="row" style="max-width:420px"><span>In the books</span><b class="num">${pesoE(massB)}</b></div><label>Cash received from MIDORI (0 if not changed yet)</label><input id="cs-mass" inputmode="decimal" value="${esc(d.mass===''?massB:d.mass)}" style="max-width:220px">`:''}
+  ${pbRows.length?`<h3 style="margin:16px 0 4px">Playing behind not paid back 代打未結</h3><table><tr><th>Who</th><th class="r">Net</th><th>Status</th></tr>${pbRows.map(p=>{const st=d.pb[p.who]||{};return `<tr><td>${esc(p.who)}</td><td class="r num neg">${sgnE(p.net)}</td><td>${seg('pbst_'+encodeURIComponent(p.who),[['open','Not settled'],['lost','Settled (lost)']],st.st||'open')}${(st.st||'open')==='open'?`<input data-pbr="${esc(p.who)}" value="${esc(st.r||'')}" placeholder="Why not settled?" style="margin-top:6px">`:''}</td></tr>`}).join('')}</table>`:''}
+  <div class="hl" style="margin-top:16px"><b class="t">Do this now 現在請做</b><ol>
+   <li>Put the insurance chips and the tip chips into the <b>chip float</b> tray. 保險籌碼、小費籌碼放回籌碼盤。</li>
+   ${X.insCnt>0.001?`<li>Insurance won ${pesoE(X.insCnt)}: take it from <b>on-day cash</b> into the <b>cash float</b>. 保險贏的錢從當日現金放入現金流。</li>`:X.insCnt<-0.001?`<li>Insurance lost ${pesoE(-X.insCnt)}: take it from the <b>cash float</b> into <b>on-day cash</b>. 保險輸的錢從現金流補回當日現金。</li>`:''}
+   <li>Tips: take <b id="do-tip">${pesoE(X.tipT)}</b> from <b>on-day cash</b> into the <b>tip envelope</b>. 小費現金放入小費袋。</li>
+   ${insCash>0.001?`<li>Put the insurance cash ${pesoE(insCash)} into the <b>cash float</b>. Insurance money is cash flow from now on. 保險金併入現金流。</li>`:''}
+   ${massB>0.001?'<li>Put the MIDORI cash into the <b>cash float</b>.</li>':''}</ol></div>
+  <div class="err" id="cs-err"></div><div class="flex" style="margin-top:12px"><button class="primary" data-cs="post">Done · go to count cash 完成，去清點現金</button><button class="link" id="flow-cancel">Cancel</button></div>`)}
  if(f.step==='players'){const list=liveEntries().filter(e=>e.date===day&&(e.type==='buyin'||e.type==='cashout'));const by={};for(const e of list){const n=playerName(e.player);by[n]=by[n]||{in:0,out:0};by[n][e.type==='buyin'?'in':'out']+=e.amount}
   const first=!S.counts.length,o=settings().open;
   return (first?`<div class="hl"><b class="t">⚠ First close: check the starting numbers</b>These came from Settings. If any is wrong, press Cancel and fix Settings first.<table style="margin-top:6px">${[['Cash float',o.cf_cash],['Chip float (tray)',o.chip_chips],['Insurance cash',o.ins_cash],['Insurance chips',o.ins_chips],['On-day buy-in cash',o.day_cash],['Chips given to players today',o.chipsOut],['Mass chips',o.mass_chips],['Foreign cash TWD',o.fx_TWD,'TWD'],['Foreign cash USD',o.fx_USD,'USD']].map(([l,v,c])=>`<tr><td>${l}</td><td class="r num">${c?c+' '+Number(v||0).toLocaleString('en-US'):pesoE(Number(v||0))}</td></tr>`).join('')}</table></div>`:'')+card(`<b>Step 1 · Make sure every player has cashed out and returned their chips</b><table style="margin-top:8px"><tr><th>Player</th><th class="r">Bought in</th><th class="r">Cashed out</th></tr>${Object.entries(by).map(([n,x])=>`<tr><td>${esc(n)}</td><td class="r num">${x.in.toLocaleString('en-US')}</td><td class="r num">${x.out.toLocaleString('en-US')}</td></tr>`).join('')||'<tr><td colspan="3" class="sub">No buy-ins recorded today</td></tr>'}</table>
@@ -441,6 +466,7 @@ async function postClose(){const f=S.flow,d=f.d,X=closeNumbers(),day=bizDay(),no
  if(Math.abs(X.insBook)>0.001||Math.abs(X.insCnt)>0.001){const diff=round2(X.insCnt-X.insBook);await saveEntry({...base,type:'ins_settle',amount:Math.abs(X.insCnt),legs:[{a:'ins',m:'chips',v:-X.insBook},{a:'chip',m:'chips',v:X.insCnt},{a:'day',m:'cash',v:-X.insCnt},{a:'cf',m:'cash',v:X.insCnt}],pl:diff?{cat:'Count difference',v:diff}:null,note:diff?d.insReason:'',summary:`Close: insurance chips ${pesoE(X.insCnt)} → cash into Cash float`})}
  if(X.tipT>0){const legs=[{a:'chip',m:'chips',v:X.tipT},{a:'day',m:'cash',v:-X.tipT},{a:'tip',m:'cash',v:X.tipT}];for(const [n,v] of Object.entries(X.alloc))legs.push({a:'tipsheld',p:n,v});
   await saveEntry({...base,type:'tips_out',amount:X.tipT,legs,split:Object.entries(X.alloc).map(([who,v])=>({who,v})),summary:`Close: tips ${pesoE(X.tipT)} cashed out from chips → tip reserves`})}
+ if((b.ins_cash||0)>0.001)await saveEntry({...base,type:'ins_move',amount:b.ins_cash,legs:[{a:'ins',m:'cash',v:-b.ins_cash},{a:'cf',m:'cash',v:b.ins_cash}],summary:`Close: insurance cash ${pesoE(b.ins_cash)} → Cash float (insurance money is part of the cash flow)`});
  if(X.mass>0)await saveEntry({...base,type:'mass_close',amount:X.mass,legs:[{a:'mass',m:'chips',v:-X.mass},{a:'cf',m:'cash',v:X.mass}],summary:`Close: mass chips ${pesoE(X.mass)} changed with MIDORI → Cash float`});
  const info={insurance:X.insCnt,insBook:X.insBook,insReason:d.insReason,pbSettled:X.settled,pbUnsettled:X.uns.map(p=>({who:p.who,amt:-p.net,reason:(d.pb[p.who]||{}).r||''})),pbResult:X.pbRes,tips:X.alloc,tipTotal:X.tipT,dealerTips:(d.dealers||[]).filter(r=>num(r.a)>0).map(r=>({n:r.n.trim(),a:num(r.a)})),mass:X.mass,net:X.net};
  await saveEntry({...base,type:'close_day',amount:X.net,legs:[],pl:null,closeInfo:info,summary:`Close: on-day net income ${sgn(X.net)} to Cash float (insurance ${sgn(X.insCnt)}, playing behind ${sgn(X.pbRes)})`});
@@ -451,15 +477,15 @@ function cntBlock(kind,key,label,denoms,unit){const v=S.cnt[kind][key]=S.cnt[kin
 function vCountForm(){const c=S.cnt;
  return `<h2 style="margin-top:4px">Count the cage</h2>
  <div class="form2" style="max-width:760px"><div><label>Cage cashier</label><input value="${esc(c.cashier)}" disabled></div><div><label>Supervisor (signs on paper)</label><input data-cn="supervisor" value="${esc(c.supervisor)}" placeholder="Phoebe"></div></div>
- ${c.kind==='close'?`<div class="hl"><b class="t">⚠ Before you count</b><ol><li>Count each pouch <b>on its own</b>. Do not move money between pouches while counting.</li><li><b>On-day cash</b>: count it separately. After saving, it goes into the cash float automatically — then put it in the cash float.</li><li>Insurance chips and mass chips should now be <b>0</b> if steps 2 and 4 were done.</li><li>The supervisor must be a <b>different person</b> and signs the printed report.</li></ol></div>`:`<div class="hl"><b class="t">⚠ Before you count</b>Count each pouch on its own. The supervisor must be a different person.</div>`}
- <h2>Cash · number of bills and coins</h2><div class="cnt">${CNT_CASH.map(([k,l])=>cntBlock('cash',k,l,CASH_D,'Pieces of each bill')).join('')}</div>
- <h2>Chips · number of pieces</h2><div class="cnt">${CNT_CHIPS.map(([k,l])=>cntBlock('chips',k,l,CHIP_D,'Pieces of each chip')).join('')}</div>
+ ${c.kind==='close'?`<div class="hl"><b class="t">⚠ Before you count</b><ol><li>Count each pouch <b>on its own</b>. Do not move money between pouches while counting.</li><li><b>On-day cash</b>: count it separately. After saving, it goes into the cash float automatically — then put it in the cash float.</li><li>Insurance chips, tip chips and insurance cash were already put back in step 1.</li><li>The supervisor must be a <b>different person</b> and signs the printed report.</li></ol></div>`:`<div class="hl"><b class="t">⚠ Before you count</b>Count each pouch on its own. The supervisor must be a different person.</div>`}
+ <h2>Cash · number of bills and coins</h2><div class="cnt">${CNT_CASH.filter(([k])=>k!=='ins'||Math.abs(balances().ins_cash||0)>0.001).map(([k,l])=>cntBlock('cash',k,l,CASH_D,'Pieces of each bill')).join('')}</div>
+ <h2>Chips · number of pieces</h2><div class="cnt">${CNT_CHIPS.filter(([k])=>k==='chip'||Math.abs(balances()[k+'_chips']||0)>0.001).map(([k,l])=>cntBlock('chips',k,l,CHIP_D,'Pieces of each chip')).join('')}</div>
  <h2>Foreign cash · amount in each currency</h2>${(()=>{const bk=fxBook(),mv=fxMovedToday();return `<div class="card" style="max-width:760px">
  <label style="display:flex;gap:8px;align-items:center;color:var(--ink);margin-top:0"><input type="checkbox" id="fx-same" style="width:auto" ${c.fx.same?'checked':''}> <b>No change today</b> — the foreign cash matches the books: ${FX_CUR.map(k=>`${k} ${bk[k].amt.toLocaleString('en-US')}`).join(' · ')}</label>
  ${mv.length?`<div class="sub" style="margin-top:4px">Moved since the last count: ${mv.map(e=>esc(e.summary.split(' · ').slice(0,2).join(' · '))).join('; ')}</div>`:''}
  ${c.fx.same?'':`<div class="form2" style="margin-top:6px">${FX_CUR.map(k=>`<div><label>${k} counted</label><input data-fxc="${k}" inputmode="decimal" value="${esc(c.fx[k])}" placeholder="${bk[k].amt}"></div>`).join('')}</div>`}</div>`})()}
  <div class="note warn">Count each pouch on its own. Don't move money between pouches while counting. Press Enter to jump to the next line.</div>
- <div class="err" id="cn-err"></div><div class="flex" style="margin-top:8px"><button class="primary" id="cn-submit">Submit count</button>${c.kind==='close'?'<button data-cs="net">Back</button>':''}<button class="link" id="flow-cancel">Cancel</button></div>`}
+ <div class="err" id="cn-err"></div><div class="flex" style="margin-top:8px"><button class="primary" id="cn-submit">Submit count</button>${c.kind==='close'?'':''}<button class="link" id="flow-cancel">Cancel</button></div>`}
 function chipsOutToday(day){const st=settings();let v=day===st.openDate?Number(st.open.chipsOut||0):0;for(const e of liveEntries()){if(e.date!==day||!['buyin','cashout','p_deposit','p_withdraw','ins_settle','tips_out','other_out','op_out'].includes(e.type))continue;for(const g of e.legs||[])if(g.a==='chip'&&g.m==='chips')v-=g.v}return round2(v)}
 function creditToday(day){return liveEntries().filter(e=>e.date===day&&e.type==='buyin').reduce((s,e)=>s+(e.method==='credit'?e.amount:e.method==='account'?(e.credit||0):0),0)}
 function fxResult(c){const bk=fxBook(),o={};for(const k of FX_CUR){const b=bk[k],cnt=c.fx.same?b.amt:(c.fx[k]===''?0:num(c.fx[k])),d=round2(cnt-b.amt),rate=b.amt?b.php/b.amt:fxRate(k);o[k]={book:b.amt,counted:cnt,diff:d,php:round2(d*rate)}}return o}
@@ -597,7 +623,7 @@ function bindCounts(){const q=$;
  if(q('ot-buy'))q('ot-buy').onclick=()=>{S.tab='entry';S.type='buyback';S.form={date:bizDay(),pouch:'cf',medium:'cash',amount:String(round2(balances().box||0))};S.pending=null;render()};
  if(q('si-go'))q('si-go').onclick=async()=>{const name=(q('si-name').value||'').trim();if(!name){q('si-err').textContent='Choose your name.';return}
   const st=staffList();if(st.length){const s=st.find(x=>x.name===name);const h=await hashPin(name,q('si-pin').value);if(!s||s.pin!==h){q('si-err').textContent='Wrong PIN.';return}setUser({name:s.name,role:s.role||''})}else setUser({name,role:''});
-  const k=S.flow.kind;if(k==='open')toCount('open');else S.flow.step='players';render()};
+  const k=S.flow.kind;if(k==='open')toCount('open');else S.flow.step='chips';render()};
  if(q('si-pin'))q('si-pin').onkeydown=e=>{if(e.key==='Enter')q('si-go').click()};
  document.querySelectorAll('[data-viewcnt]').forEach(b=>b.onclick=()=>{S.cnt={step:'report',id:b.dataset.viewcnt};render()});
  document.querySelectorAll('[data-cn]').forEach(i=>i.oninput=()=>{S.cnt[i.dataset.cn]=i.value;if(S.flow)S.flow.d.supervisor=i.value;q('cn-err').textContent=''});
@@ -633,7 +659,7 @@ function bindCounts(){const q=$;
  if(q('cs-players'))q('cs-players').onchange=()=>{d.players=q('cs-players').checked};
  if(q('cs-ins'))q('cs-ins').onchange=()=>{d.insCount=q('cs-ins').value;render()};
  if(q('cs-insr'))q('cs-insr').oninput=()=>{d.insReason=q('cs-insr').value};
- const ra=()=>{const el=q('tip-alloc');if(el)el.innerHTML=allocTable(closeNumbers())};
+ const ra=()=>{const el=q('tip-alloc');if(el)el.innerHTML=allocTable(closeNumbers());const dt=q('do-tip');if(dt)dt.textContent=pesoE(closeNumbers().tipT)};
  document.querySelectorAll('[data-dt]').forEach(i=>{i.oninput=()=>{const [ix,f]=i.dataset.dt.split('|');d.dealers[ix][f]=i.value;ra();const t=q('tip-pool');if(t)t.textContent=pesoE(closeNumbers().pool)}});
  document.querySelectorAll('[data-dtdel]').forEach(x=>x.onclick=()=>{d.dealers.splice(Number(x.dataset.dtdel),1);render()});
  if(q('cw-adddt'))q('cw-adddt').onclick=()=>{d.dealers=d.dealers||[];d.dealers.push({n:'',a:''});render()};
@@ -645,8 +671,17 @@ function bindCounts(){const q=$;
  document.querySelectorAll('[data-pbr]').forEach(i=>i.oninput=()=>{const w=i.dataset.pbr;d.pb[w]=d.pb[w]||{};d.pb[w].r=i.value});
  document.querySelectorAll('[data-cs]').forEach(x=>x.onclick=async()=>{const to=x.dataset.cs,err=q('cs-err')||q('cn-err');
   if(q('cs-ins'))d.insCount=q('cs-ins').value;if(q('cs-pool'))d.tipPool=q('cs-pool').value;if(q('cs-mass'))d.mass=q('cs-mass').value;
-  if(to==='net'&&S.cnt){S.cnt=null;S.flow.step='net';render();return}
+  if((to==='net'||to==='chips')&&S.cnt){S.cnt=null;S.flow.step='chips';render();return}
   const fwd=CLOSE_STEPS.findIndex(s=>s[0]===to)>CLOSE_STEPS.findIndex(s=>s[0]===S.flow.step)||to==='post';
+  if(fwd&&S.flow.step==='chips'){const X=closeNumbers(),b=balances();
+   if(!d.players){err.textContent='Tick the box when every player has cashed out. 請確認所有玩家都已結出。';return}
+   if(!insLive()){err.textContent='Insurance tickets are not loaded yet. Wait a moment and press again.';return}
+   if(d.insCount!==''&&!Number.isFinite(num(d.insCount))){err.textContent='Enter the insurance chips counted.';return}
+   if(Math.abs(X.insCnt-X.insBook)>0.001&&!d.insReason.trim()){err.textContent='Write why the insurance chips are different.';return}
+   if((d.dealers||[]).some(r=>(r.a!==''&&!(num(r.a)>=0))||(num(r.a)>0&&!r.n.trim()))){err.textContent='Each dealer amount needs a name and a number.';return}
+   if(d.personal.some(r=>(r.n.trim()||r.a)&&(!r.n.trim()||!(num(r.a)>0)))){err.textContent='Each personal tip needs a name and an amount.';return}
+   if((b.mass_chips||0)>0.001){const m=d.mass===''?0:num(d.mass);if(!Number.isFinite(m)||m<0){err.textContent='Enter the cash from MIDORI (0 if not changed).';return}if(m>(b.mass_chips||0)+0.001){err.textContent='More than the mass chips in the books.';return}}
+   const u=X.uns.find(p=>!((d.pb[p.who]||{}).r||'').trim());if(u){err.textContent=`Write why ${u.who} is not settled.`;return}}
   if(fwd){if(S.flow.step==='players'&&!d.players){err.textContent='Tick the box when every player has cashed out.';return}
    if(S.flow.step==='ins'&&!insLive()){err.textContent='Insurance tickets are not loaded yet. Wait a moment and press Next again.';return}
    if(S.flow.step==='ins'&&(!Number.isFinite(num(d.insCount))&&d.insCount!=='')){err.textContent='Enter the insurance chips counted.';return}
@@ -654,6 +689,7 @@ function bindCounts(){const q=$;
    if(S.flow.step==='tips'){if((d.dealers||[]).some(r=>(r.a!==''&&!(num(r.a)>=0))||(num(r.a)>0&&!r.n.trim()))){err.textContent='Each dealer amount needs a name and a number.';return}if(d.personal.some(r=>(r.n.trim()||r.a)&&(!r.n.trim()||!(num(r.a)>0)))){err.textContent='Each personal tip needs a name and an amount.';return}}
    if(S.flow.step==='mass'){const m=d.mass===''?0:num(d.mass);if(!Number.isFinite(m)||m<0){err.textContent='Enter the cash from MIDORI.';return}if(m>(balances().mass_chips||0)+0.001){err.textContent='More than the mass chips in the books.';return}}
    if(S.flow.step==='pb'){const u=closeNumbers().uns.find(p=>!((d.pb[p.who]||{}).r||'').trim());if(u){err.textContent=`Write why ${u.who} is not settled.`;return}}}
+  if(to==='post'&&S.flow.info){toCount('close');render();return}
   if(to==='post'){x.disabled=true;x.textContent='Saving…';try{await postClose();toCount('close');render()}catch(e){x.disabled=false;x.textContent='Confirm and go to the count';err.textContent=e.message||errMsg(e)}return}
   S.flow.step=to;render()});
 }
