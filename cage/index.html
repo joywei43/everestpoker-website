@@ -127,9 +127,13 @@ function balances(upTo){
  for(const p of S.players){b.dep[p.id]=Number(p.openDep||0);b.loan[p.id]=Number(p.openLoan||0)}
  for(const p of S.players)if(!p.account&&p.under&&S.players.some(h=>h.id===p.under&&h.account)){b.dep[p.under]=(b.dep[p.under]||0)+(b.dep[p.id]||0)-(b.loan[p.id]||0);b.dep[p.id]=0;b.loan[p.id]=0}
  for(const x of (st.arap||[])){const v=Number(x.amt||0);if(x.kind==='ar')b.ar[x.name]=(b.ar[x.name]||0)+v;else if(x.kind==='ap')b.ap[x.name]=(b.ap[x.name]||0)+v;else if(x.kind==='pb'){b.behind-=v;b.pbBy[x.name]=(b.pbBy[x.name]||0)+v}}
+ /* Insurance chips are changed to cash at every close, so the pouch starts from 0 after the last close: only the business days after it count. */
+ const lastClose=liveEntries().filter(e=>e.type==='close_day'&&e.date>=st.openDate&&(!upTo||e.date<=upTo)).reduce((m,e)=>e.date>m?e.date:m,'');
+ if(lastClose)b.ins_chips=0;
  for(const e of liveEntries()){
   if(upTo&&e.date>upTo)continue;if(e.date<st.openDate)continue;if(e.type==='ins'&&e.date>=INS_LINK)continue;
   for(const g of e.legs||[]){
+   if(g.a==='ins'&&g.m==='chips'&&lastClose&&e.date<=lastClose)continue;
    if(g.a==='dep')b.dep[g.p]=(b.dep[g.p]||0)+g.v;
    else if(g.a==='loan')b.loan[g.p]=(b.loan[g.p]||0)+g.v;
    else if(g.a==='owner')b.owner[g.p]=(b.owner[g.p]||0)+g.v;
@@ -140,7 +144,7 @@ function balances(upTo){
    else if(g.a==='tipsheld'){b.tipsheld=(b.tipsheld||0)+g.v;if(g.p){b.tipsBy=b.tipsBy||{};b.tipsBy[g.p]=(b.tipsBy[g.p]||0)+g.v}}
    else{const k=g.a+'_'+g.m;b[k]=(b[k]||0)+g.v}
   }}
- const il=insLive();if(il)for(const [d,x] of Object.entries(il.days)){if(d<st.openDate||d<INS_LINK||(upTo&&d>upTo))continue;b.ins_chips=round2((b.ins_chips||0)+x.net)}
+ const il=insLive();if(il)for(const [d,x] of Object.entries(il.days)){if(d<st.openDate||d<INS_LINK||(upTo&&d>upTo)||(lastClose&&d<=lastClose))continue;b.ins_chips=round2((b.ins_chips||0)+x.net)}
  return b}
 function midoriMonth(m){
  const st=settings();const days=Object.entries(S.midori).filter(([d])=>monthOf(d)===m).sort();
@@ -704,7 +708,7 @@ const acctOf=p=>!p?null:isAcct(p)?p:(p.under?S.players.find(x=>x.id===p.under&&i
 const subsOf=h=>S.players.filter(x=>x.under===h.id&&!isAcct(x));
 function pBal(pid,b=balances()){return (b.dep[pid]||0)-(b.loan[pid]||0)}
 /* Insurance comes from the insurance page (tickets settled by the supervisor). From INS_LINK on, it is not typed at the cage. */
-const INS_LINK='2026-11-14';let INS_LIVE=null;
+const INS_LINK='2026-11-15';let INS_LIVE=null;
 function insLive(){const st=settings(),from=[st.openDate||INS_LINK,INS_LINK].sort()[1],to=bizDay(),key=from+'|'+to,c=INS_LIVE;
  if(from>to)return {days:{},tickets:[],at:Date.now()};
  if((!c||c.key!==key||Date.now()-c.at>30000)&&!(c&&c.loading)&&typeof api==='function'&&!MEM&&typeof TOKEN!=='undefined'&&TOKEN&&DB){INS_LIVE={...(c||{}),loading:true,at:c?c.at:0};
