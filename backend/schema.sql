@@ -233,6 +233,11 @@ CREATE TABLE IF NOT EXISTS insurance_tickets(id INTEGER PRIMARY KEY AUTOINCREMEN
   odds REAL NOT NULL, pot_amount INTEGER NOT NULL, max_buy INTEGER NOT NULL, amount INTEGER NOT NULL, payout INTEGER NOT NULL, result TEXT NOT NULL DEFAULT 'pending',
   result_card TEXT, settled_at INTEGER, settled_by TEXT, void_reason TEXT, detail TEXT);
 CREATE INDEX IF NOT EXISTS insurance_day ON insurance_tickets(day,id);
+-- Correction requests for insurance tickets: a supervisor asks, the owner (master) approves or rejects with a reason. before/after: JSON {result, amount, payout}.
+CREATE TABLE IF NOT EXISTS insurance_corrections(id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER NOT NULL, day TEXT NOT NULL, requested_at INTEGER NOT NULL, requested_by TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL, before TEXT NOT NULL, after TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', decided_at INTEGER, decided_by TEXT, decision_note TEXT);
+CREATE INDEX IF NOT EXISTS insurance_corrections_status ON insurance_corrections(status,id);
+CREATE INDEX IF NOT EXISTS insurance_corrections_ticket ON insurance_corrections(ticket_id);
 CREATE TABLE IF NOT EXISTS insurance_float(id INTEGER PRIMARY KEY CHECK(id=1), day TEXT NOT NULL, balance INTEGER NOT NULL, capital INTEGER NOT NULL, updated_by TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
 
 -- Cage (finance): the cage page's records as JSON documents (entries, counts, players, settings…). rev orders every change so the page can fetch only what changed.

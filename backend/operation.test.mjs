@@ -267,6 +267,32 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
     assert.equal(r.tickets.length, 3); assert.equal(r.days.length, 1); assert.equal(r.days[0].net, 8550 - 14000, 'hit: house pays 14,000 and takes no premium'); assert.equal(r.days[0].float_end, 178635 + 8550 - 14000); assert.equal(r.float.balance, r.days[0].float_end); }
   assert.deepEqual(day.float, { opening_day: '2026-11-04', opening: 178635, capital: 100000, balance: 178635 + 8550 - 14000 });
 }
+{ // Insurance corrections: supervisor asks with a reason, only the owner (master) decides, with a reason.
+  const tk = (await call('/insurance', 'GET', null, maria3)).body.tickets.find((x) => x.result === 'hit');
+  const ask = (b, tok = maria3) => call(`/insurance/${tk.id}/correct`, 'POST', b, tok);
+  assert.equal((await ask({ result: 'miss' })).status, 400, 'reason needed');
+  assert.equal((await ask({ result: 'hit', reason: 'x' })).status, 400, 'nothing changes');
+  assert.equal((await ask({ result: 'bad', reason: 'x' })).status, 400);
+  const c1 = (await ask({ result: 'miss', reason: 'Wrong card tapped: river was 2c, not 9c' })).body.correction;
+  assert.equal(c1.status, 'pending'); assert.equal(c1.before.result, 'hit'); assert.equal(c1.after.result, 'miss');
+  assert.equal((await ask({ result: 'void', reason: 'again' })).status, 409, 'one pending request per ticket');
+  assert.equal((await call('/insurance/corrections?status=pending', 'GET', null, maria3)).body.corrections.length, 1);
+  assert.equal((await call(`/insurance/corrections/${c1.id}/decide`, 'POST', { approve: true, note: 'ok' }, maria3)).status, 403, 'staff cannot decide');
+  assert.equal((await call(`/insurance/corrections/${c1.id}/decide`, 'POST', { approve: true, note: '' }, boss)).status, 400, 'owner must write a reason');
+  assert.equal((await call(`/insurance/corrections/${c1.id}/decide`, 'POST', { approve: true, note: 'Checked the video' }, boss)).status, 200);
+  assert.equal((await call(`/insurance/corrections/${c1.id}/decide`, 'POST', { approve: false, note: 'x' }, boss)).status, 409, 'decided once');
+  let day2 = (await call('/insurance', 'GET', null, maria3)).body;
+  assert.equal(day2.tickets.find((x) => x.id === tk.id).result, 'miss');
+  assert.equal(day2.totals.net, 8550 + 2000, 'both tickets now kept');
+  assert.equal(day2.corrections[0].status, 'approved'); assert.equal(day2.corrections[0].decision_note, 'Checked the video');
+  const c2 = (await ask({ amount: 1500, payout: 10500, reason: 'Bought 1,500 not 2,000' })).body.correction;
+  assert.equal((await call(`/insurance/corrections/${c2.id}/decide`, 'POST', { approve: false, note: 'Ticket was right' }, boss)).status, 200);
+  day2 = (await call('/insurance', 'GET', null, maria3)).body;
+  assert.equal(day2.tickets.find((x) => x.id === tk.id).amount, 2000, 'rejected: no change');
+  const c3 = (await ask({ result: 'void', reason: 'Hand was a misdeal' })).body.correction;
+  await call(`/insurance/${tk.id}/void`, 'POST', { reason: 'changed meanwhile' }, boss);
+  assert.equal((await call(`/insurance/corrections/${c3.id}/decide`, 'POST', { approve: true, note: 'ok' }, boss)).status, 409, 'ticket changed after the request');
+}
 { // New = first game ever on that day: over all of history every member is new exactly once.
   const all = (await call('/report?from=2026-10-01&to=2026-11-10', 'GET', null, boss)).body;
   assert.equal(all.totals.new_members, all.totals.unique_members, 'each member is new once, on their first day');
