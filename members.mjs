@@ -640,18 +640,21 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (parts.length === 2 && method === 'GET') {
       const t30 = now - 30 * DAY;
       // W/L only counts sessions that have a cash-out, against those sessions' own buy-ins.
-      const stat = (since) => env.DB.prepare(`SELECT COUNT(*) sessions, COUNT(DISTINCT ps.play_date) days, COALESCE(SUM(ps.active_seconds),0) secs, COALESCE(SUM(ps.rest_seconds),0) rest_secs,
+      const stat = (since, until = 1e12) => env.DB.prepare(`SELECT COUNT(*) sessions, COUNT(DISTINCT ps.play_date) days, COALESCE(SUM(ps.active_seconds),0) secs, COALESCE(SUM(ps.rest_seconds),0) rest_secs,
           COALESCE(SUM(ps.buy_in),0) buy_in, COUNT(sr.session_id) with_cash_out, COALESCE(SUM(sr.cash_out),0) cash_out,
           COALESCE(SUM(CASE WHEN sr.session_id IS NOT NULL THEN sr.cash_out - COALESCE(ps.buy_in,0) END),0) win_loss, COALESCE(SUM(sr.busted),0) busted
-        FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.member_id=? AND ps.start_at>=?`).bind(m.id, since).first();
-      const rwSum = (since) => env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN approved_at IS NOT NULL THEN amount ELSE 0 END),0) amt, COALESCE(SUM(CASE WHEN approved_at IS NULL THEN amount ELSE 0 END),0) pending FROM rewards WHERE member_id=? AND voided=0 AND given_at>=?').bind(m.id, since).first();
-      const [s30, sAll, r30, rAll] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0)]);
+        FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.member_id=? AND ps.start_at>=? AND ps.start_at<?`).bind(m.id, since, until).first();
+      const rwSum = (since, until = 1e12) => env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN approved_at IS NOT NULL THEN amount ELSE 0 END),0) amt, COALESCE(SUM(CASE WHEN approved_at IS NULL THEN amount ELSE 0 END),0) pending FROM rewards WHERE member_id=? AND voided=0 AND given_at>=? AND given_at<?').bind(m.id, since, until).first();
+      // ?day=YYYY-MM-DD: the same totals for one business day.
+      const dayQ = new URL(req.url).searchParams.get('day');
+      const bdQ = /^\d{4}-\d{2}-\d{2}$/.test(dayQ || '') ? await businessDay(env, now, dayQ) : null;
+      const [s30, sAll, r30, rAll, sDay, rDay] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0), bdQ ? stat(bdQ.start, bdQ.end) : null, bdQ ? rwSum(bdQ.start, bdQ.end) : null]);
       { // a game still in progress counts too (time and buy-in so far; no cash-out yet)
         const seat = (await liveSeats(env)).find((x) => x.member_id === m.id && x.started != null);
         if (seat) {
           const bd = await businessDay(env, now);
           const playedToday = await env.DB.prepare('SELECT 1 FROM play_sessions WHERE member_id=? AND start_at>=? LIMIT 1').bind(m.id, bd.start).first();
-          for (const st of [s30, sAll]) { st.sessions += 1; st.secs += seat.active_seconds; st.rest_secs += seat.rest_seconds; st.buy_in += seat.buy_in || 0; if (!playedToday) st.days += 1; }
+          for (const st of [s30, sAll, ...(sDay && bdQ.is_today ? [sDay] : [])]) { st.sessions += 1; st.secs += seat.active_seconds; st.rest_secs += seat.rest_seconds; st.buy_in += seat.buy_in || 0; if (!playedToday) st.days += 1; }
         }
       }
       let share = null;
@@ -672,7 +675,8 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
       return reply({
         playing,
         member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups, dupsM),
-        stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share },
+        stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share,
+          ...(sDay ? { day: { ...sDay, rewards: rDay.amt, rewards_pending: rDay.pending, day: bdQ.day, start: bdQ.start, end: bdQ.end, is_today: bdQ.is_today } } : {}) },
         sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id), pending_change: pendingBySession.get(s.id) || null })),
         rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
         group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),

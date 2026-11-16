@@ -365,7 +365,7 @@ async function viewMember(view, no) {
       </div>
     </section>
     <div class="row between"><div role="group" aria-label="Period" class="seg">
-        <button type="button" data-period="30" aria-pressed="${period === '30'}">Last 30 days</button><button type="button" data-period="all" aria-pressed="${period === 'all'}">All time</button></div>
+        <button type="button" data-period="30" aria-pressed="${period === '30'}">Last 30 days</button><button type="button" data-period="all" aria-pressed="${period === 'all'}">All time</button><label class="small" style="display:flex;align-items:center;gap:6px;padding:0 10px">Business day<input type="date" id="mDay" max="${today()}" style="width:auto;padding:4px 6px"></label></div>
       <span class="small muted">Playing hours = time at the table − rest</span></div>
     <div class="grid" id="statTiles">${statTiles(period === 'all' ? sAll : s30)}</div>
     ${(data.playing || []).map((x) => `<section class="card" style="border:2px solid var(--gold);display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center">
@@ -379,7 +379,7 @@ async function viewMember(view, no) {
     </section>`).join('')}
     <section class="card"><div class="row between" style="margin-bottom:10px"><h2>Game sessions</h2><span class="small muted">Synced from PPM when the player leaves the seat</span></div>
       <div class="tbl"><table><thead><tr><th>Date</th><th>Game</th><th class="num">Playing hours</th><th>Table · Seat</th><th>Start – End</th><th class="num">Buy-in</th><th class="num">Cash-out</th><th class="num">W/L</th><th>Group</th>${isManager() ? '<th></th>' : ''}</tr></thead><tbody>
-      ${data.sessions.map((x) => `<tr><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num">${playTime(x.active_seconds, x.rest_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
+      ${data.sessions.map((x) => `<tr data-start="${x.start_at}"><td>${esc(x.play_date)}</td><td>${esc(x.game_type)} ${esc(x.blinds)}</td><td class="num">${playTime(x.active_seconds, x.rest_seconds)}</td><td>${esc(x.table_name)} · S${esc(x.seat)}</td><td class="mono">${time(x.start_at)}–${time(x.end_at)}</td><td class="num">${x.buy_in === null ? esc(x.transfer_note || '—') : peso(x.buy_in)}</td>
         <td class="num">${isManager() ? `<button type="button" class="linkbtn" data-co="${x.id}" title="Enter or correct the cash-out">${x.cash_out == null ? 'Add' : (x.busted ? 'Busted' : peso(x.cash_out))}</button>` : (x.cash_out == null ? '—' : x.busted ? 'Busted' : peso(x.cash_out))}</td>
         <td class="num" style="font-weight:600;color:${x.cash_out == null ? 'inherit' : x.cash_out - (x.buy_in || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${x.cash_out == null ? '—' : signedPeso(x.cash_out - (x.buy_in || 0))}</td><td>${groupChip(x.group_name)}</td>${isManager() ? `<td>${x.pending_change ? `<span class="chip amber" title="${esc(x.pending_change.summary)} · asked by ${esc(x.pending_change.requested_by)}: ${esc(x.pending_change.reason)}">Waiting for approval</span>${isMaster() ? ' <a class="small" href="#/approvals">Review</a>' : ''}` : `<span class="row" style="flex-wrap:nowrap;gap:6px"><button type="button" class="btn sm" data-editsess="${x.id}" title="Correct times, buy-in or cash-out">Edit</button><button type="button" class="btn sm" data-movesess="${x.id}" title="This session belongs to another member">Move</button><button type="button" class="btn sm" data-unsess="${x.id}" title="Wrong person? Send this session back to Unmatched PPM">Unlink</button><button type="button" class="btn sm danger" data-delsess="${x.id}" title="Remove this session completely">Delete</button></span>`}</td>` : ''}</tr>`).join('') || '<tr><td colspan="11" class="muted">No PPM sessions yet.</td></tr>'}
       </tbody></table></div></section>
@@ -477,7 +477,24 @@ async function viewMember(view, no) {
     period = b.dataset.period; try { localStorage.setItem('everest-period', period); } catch (e) {}
     view.querySelectorAll('[data-period]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.period === period)));
     view.querySelector('#statTiles').innerHTML = statTiles(period === 'all' ? sAll : s30);
+    const di = view.querySelector('#mDay'); if (di) di.value = '';
+    view.querySelectorAll('tr[data-start]').forEach((tr) => { tr.hidden = false; });
+    const dn = view.querySelector('#mDayNote'); if (dn) dn.remove();
   });
+  // One business day: totals for that day only, and only that day's game sessions in the list.
+  const dayIn = view.querySelector('#mDay');
+  if (dayIn) dayIn.onchange = async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayIn.value)) return;
+    try {
+      const d = await api('/members/' + encodeURIComponent(no) + '?day=' + dayIn.value), st = d.stats.day;
+      view.querySelectorAll('[data-period]').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+      view.querySelector('#statTiles').innerHTML = statTiles(st);
+      view.querySelectorAll('tr[data-start]').forEach((tr) => { const t = Number(tr.dataset.start); tr.hidden = !(t >= st.start && t < st.end); });
+      let dn = view.querySelector('#mDayNote');
+      if (!dn) { dn = document.createElement('div'); dn.id = 'mDayNote'; dn.className = 'small muted'; view.querySelector('#statTiles').after(dn); }
+      dn.textContent = `Business day ${st.day}${st.is_today ? ' (today, includes the game in progress)' : ''} · Game sessions below show this day only. Click Last 30 days or All time to go back.`;
+    } catch (err) { alert(err.message); }
+  };
   view.querySelectorAll('[data-co]').forEach((b) => b.onclick = async () => {
     const raw = prompt('Cash-out amount in pesos. Type 0 or "busted" if they lost the whole buy-in. Leave empty to remove.', '');
     if (raw === null) return;
