@@ -9,15 +9,16 @@
 <script src="/config.js"></script>
 <style>
 :root{--bg:#f6f5f1;--card:#fff;--ink:#1f1e1b;--sub:#6b6a64;--line:#e3e1da;--accent:#185FA5;--accent-bg:#E6F1FB;--ok:#3B6D11;--ok-bg:#EAF3DE;--warn:#854F0B;--warn-bg:#FAEEDA;--bad:#A32D2D;--bad-bg:#FCEBEB;--field:#fbfaf7;--chip:#534AB7;--chip-bg:#EEEDFE}
-@media (prefers-color-scheme:dark){:root{--bg:#1a1a18;--card:#242422;--ink:#f1efe8;--sub:#a9a79f;--line:#3a3a37;--accent:#85B7EB;--accent-bg:#0C447C;--ok:#C0DD97;--ok-bg:#27500A;--warn:#FAC775;--warn-bg:#633806;--bad:#F7C1C1;--bad-bg:#791F1F;--field:#1f1f1d;--chip:#CECBF6;--chip-bg:#3C3489}}
+html{color-scheme:dark}
+:root{--bg:#1a1a18;--card:#242422;--ink:#f1efe8;--sub:#a9a79f;--line:#3a3a37;--accent:#85B7EB;--accent-bg:#0C447C;--ok:#C0DD97;--ok-bg:#27500A;--warn:#FAC775;--warn-bg:#633806;--bad:#F7C1C1;--bad-bg:#791F1F;--field:#1f1f1d;--chip:#CECBF6;--chip-bg:#3C3489}
 *{box-sizing:border-box}
 .hl{border:2px solid #E0A100;background:rgba(224,161,0,.12);border-radius:10px;padding:12px 14px;margin:10px 0;max-width:820px}.hl b.t{display:block;color:#B07A00;font-size:15px;margin-bottom:4px}.hl ol,.hl ul{margin:6px 0 0 18px;padding:0}.hl li{margin:3px 0}
-@media (prefers-color-scheme:dark){.hl b.t{color:#FFC94D}}
+.hl b.t{color:#FFC94D}
 .big-num{font-size:26px;font-weight:800}.ok-t{color:var(--ok)}.bad-t{color:var(--bad)}
 :root{--buy:#1E8E4E;--out:#C2372F;--insb:#1F63B5}
 button.c-buy,button.c-out,button.c-ins{color:#fff;font-weight:700;border-color:transparent}button.c-buy{background:var(--buy)}button.c-out{background:var(--out)}button.c-ins{background:var(--insb)}
 button.o-buy{border:2px solid var(--buy);color:var(--buy);background:transparent}button.o-out{border:2px solid var(--out);color:var(--out);background:transparent}button.o-ins{border:2px solid var(--insb);color:var(--insb);background:transparent}
-@media (prefers-color-scheme:dark){button.o-buy{color:#6FD39A}button.o-out{color:#F28B82}button.o-ins{color:#8AB4F8}}
+button.o-buy{color:#6FD39A}button.o-out{color:#F28B82}button.o-ins{color:#8AB4F8}
 .sugg{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.sugg button{padding:6px 10px;font-size:14px}.sugg .sub{align-self:center}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif}
@@ -50,7 +51,7 @@ input,select,textarea{font:inherit;color:var(--ink);background:var(--field);bord
 label{display:block;font-size:13px;color:var(--sub);margin:12px 0 4px}
 button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-@media (prefers-color-scheme:dark){button.primary{color:#042C53}}
+button.primary{color:#042C53}
 button.link{border:none;background:none;color:var(--accent);padding:2px 4px}
 .seg{display:flex;gap:6px;flex-wrap:wrap}.seg button{padding:8px 12px}.seg button.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
 .types{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
