@@ -52,7 +52,6 @@ export async function handleInsurance(req, env, path, now, reply, user, role) {
 
   // Date range for the admin console: tickets, totals, a line per day and the float at the end of the range.
   if (path === '/insurance/range' && method === 'GET') {
-    if (role === 'staff') return reply({ error: 'Manager only.' }, 403);
     const q = new URL(req.url).searchParams, ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
     const to = ok(q.get('to')) ? q.get('to') : (await businessDay(env, now)).day, from = ok(q.get('from')) && q.get('from') <= to ? q.get('from') : to;
     const rows = await all(env.DB.prepare('SELECT * FROM insurance_tickets WHERE day>=? AND day<=? ORDER BY id DESC LIMIT 2000').bind(from, to));

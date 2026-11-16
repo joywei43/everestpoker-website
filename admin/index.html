@@ -155,7 +155,7 @@ async function loadMe() {
 }
 // Old addresses (from /members/) still work.
 const ALIASES = { operation: 'liveoperation', groups: 'playergroups', unmatched: 'unmatchedppm', staff: 'staffaccounts', import: 'importmembers', report: 'operationreport' };
-function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: ALIASES[page] || page || (isManager() ? 'liveoperation' : 'members'), arg: rest.map(decodeURIComponent).join('/') }; }
+function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0]; const [page, ...rest] = h.split('/'); return { page: ALIASES[page] || page || 'liveoperation', arg: rest.map(decodeURIComponent).join('/') }; }
 
 // ---------- shell ----------
 function render() {
@@ -166,9 +166,9 @@ function render() {
     <nav class="side" aria-label="Main">
       <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Admin console</small></div></div>
       <div class="navlinks">
-        ${isManager() ? link('liveoperation', 'Live Operation') : ''}
-        ${isManager() ? link('operationreport', 'Operation Report') : ''}
-        ${isManager() ? link('insurance', 'Insurance') : ''}
+        ${link('liveoperation', 'Live Operation')}
+        ${link('operationreport', 'Operation Report')}
+        ${link('insurance', 'Insurance')}
         <a href="../cage/" target="_blank" rel="noopener">Cage ↗</a>
         ${link('members', 'Members')}
         ${link('playergroups', 'Player groups')}
@@ -187,7 +187,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { tablereport: isManager() ? viewTableReport : viewMembers, insurance: isManager() ? viewInsurance : viewMembers, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: isManager() ? viewOperation : viewMembers, operationreport: isManager() ? viewReport : viewMembers, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
+  const pages = { tablereport: viewTableReport, insurance: viewInsurance, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: viewOperation, operationreport: viewReport, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -1149,7 +1149,7 @@ async function viewReport(view) {
     </tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--line)"><td>Total</td><td class="num">${peso(T.revenue)}</td><td class="num">${J.totals && J.totals.days ? peso2(J.totals.amount) : '—'}</td><td></td><td class="num">${hm(T.table_seconds)}</td><td class="num">${hm(T.operating_seconds)}</td><td class="num">${T.visits}</td><td class="num">${T.new_members}</td><td class="num">${hm(T.play_seconds)}</td><td class="num">${peso(T.buy_in)}</td><td class="num">${peso(T.cash_out)}</td><td></td><td></td></tr></tfoot></table></div></section>
     <section class="card"><div class="row between" style="margin-bottom:10px;gap:8px;flex-wrap:wrap"><div><h2>Bad Beat Jackpot ledger</h2>
       <p class="small muted" style="margin:2px 0 0">Collected → 30% admin fee (Pagcor 25% · CDC 5% · Everest 70% of it) and 70% to the pot (Main 70% · 1st Reserved 30% of it). A payout comes out of Main; 1st Reserved then becomes the new Main.</p></div>
-      <span class="row" style="gap:6px">${J.balance ? '<button class="btn sm" id="bbjPay">Record payout</button><button class="btn sm" id="bbjCsv">Export BBJ CSV</button>' : ''}${isMaster() ? '<button class="btn sm" id="bbjOpen">Opening balance</button>' : ''}</span></div>
+      <span class="row" style="gap:6px">${J.balance ? (isManager() ? '<button class="btn sm" id="bbjPay">Record payout</button>' : '') + '<button class="btn sm" id="bbjCsv">Export BBJ CSV</button>' : ''}${isMaster() ? '<button class="btn sm" id="bbjOpen">Opening balance</button>' : ''}</span></div>
       ${J.balance ? `<div class="tbl"><table><thead><tr><th>Day</th><th class="num">Collected</th><th class="num">Admin fee 30%</th><th class="num">Pagcor</th><th class="num">CDC</th><th class="num">Everest</th><th class="num">To pot 70%</th><th class="num">Main +49%</th><th class="num">Reserved +21%</th><th class="num">Main balance</th><th class="num">1st Reserved</th><th>By</th></tr></thead><tbody>
         <tr class="muted"><td colspan="9">Balance before ${esc(d.from)}</td><td class="num">${peso2(J.before.main)}</td><td class="num">${peso2(J.before.reserve)}</td><td></td></tr>
         ${J.rows.map((r) => r.kind === 'payout'
@@ -1209,7 +1209,7 @@ async function viewReport(view) {
     };
     dlg.showModal(); if (inputs[0]) inputs[0].focus();
   };
-  view.querySelectorAll('tr[data-day]').forEach((tr) => { const r = d.days.find((x) => x.day === tr.dataset.day); tr.onclick = () => openDay(r); tr.onkeydown = (e) => { if (e.key === 'Enter') openDay(r); }; });
+  if (isManager()) view.querySelectorAll('tr[data-day]').forEach((tr) => { const r = d.days.find((x) => x.day === tr.dataset.day); tr.onclick = () => openDay(r); tr.onkeydown = (e) => { if (e.key === 'Enter') openDay(r); }; });
   view.querySelector('#csv').onclick = () => {
     const lines = [['Day', 'Weekday', 'Revenue PHP', 'BBJ collected PHP', 'Tables', 'Table hours', 'Operating hours', 'Visitors', 'Members', 'New members', 'Sessions', 'Player hours', 'Buy-in PHP', 'Cash-out PHP', 'Levels (table hours)', 'Revenue by table', 'Entered by']]
       .concat(d.days.map((r) => [r.day, wd(r.day), r.revenue ?? '', r.bbj_amount ?? '', r.tables.join(' '), (r.table_seconds / 3600).toFixed(2), (r.operating_seconds / 3600).toFixed(2), r.visitors, r.members, r.new_members, r.sessions, (r.play_seconds / 3600).toFixed(2), r.buy_in, r.cash_out,

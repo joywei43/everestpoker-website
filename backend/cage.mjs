@@ -61,6 +61,8 @@ export async function handleCage(req, env, path, now, reply, user, role) {
     if (!COLLS.includes(coll) || typeof id !== 'string' || !ID.test(id) || !['set', 'update', 'delete'].includes(op)) return reply({ error: 'Invalid request' }, 400);
     if (MANAGER_ONLY.includes(coll) && !isManager(role)) return reply({ error: 'Only a manager can change this.' }, 403);
     if (op === 'delete' && !isManager(role)) return reply({ error: 'Only a manager can delete.' }, 403);
+    // Everyone can record; correcting a record (voiding it) is for managers.
+    if (coll === 'entries' && b.data && typeof b.data === 'object' && 'voided' in b.data && !isManager(role)) return reply({ error: 'Only a manager can void a record.' }, 403);
     if (op !== 'delete' && (!b.data || typeof b.data !== 'object' || Array.isArray(b.data))) return reply({ error: 'Invalid data' }, 400);
     const cur = await env.DB.prepare('SELECT data,deleted,version FROM cage_docs WHERE coll=? AND id=?').bind(coll, id).first();
     if (b.ifVersion != null && (!cur || cur.version !== b.ifVersion)) return reply({ error: 'Someone else changed this. Reload and try again.' }, 409);

@@ -71,8 +71,8 @@ export async function businessDay(env, now, wanted) {
   return { day: d, start, end, is_today: now >= start && now < end };
 }
 
+// Everyone signed in can see the operation report; corrections stay with managers.
 export async function handleOperation(req, env, now, reply, role) {
-  if (role === 'staff') return reply({ error: 'Manager only.' }, 403);
   const url = new URL(req.url);
   const bd = await businessDay(env, now, url.searchParams.get('day'));
   const until = Math.min(now, bd.end);

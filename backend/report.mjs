@@ -20,8 +20,9 @@ async function dayOpenings(env, from, toPlusOne) {
 }
 
 export async function handleReport(req, env, path, now, reply, user, role) {
-  if (role === 'staff') return reply({ error: 'Manager only.' }, 403);
   const method = req.method;
+  // Everyone signed in can read reports; saving or correcting figures is for managers.
+  if (role === 'staff' && method !== 'GET') return reply({ error: 'Only a manager can change this.' }, 403);
 
   // Save one day's revenue and jackpot figures.
   const m = /^\/report\/day\/(\d{4}-\d{2}-\d{2})$/.exec(path);

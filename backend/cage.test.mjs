@@ -26,7 +26,8 @@ assert.equal(r.status, 200); assert.equal(r.body.docs.length, 0); assert.equal(r
 // Staff record an entry; update it; cannot delete it or change settings.
 r = await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'set', data: { type: 'buyin', amount: 5000 } }, maria);
 assert.equal(r.status, 200); assert.equal(r.body.version, 1);
-r = await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'update', data: { voided: true } }, maria);
+assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'update', data: { voided: true } }, maria)).status, 403, 'staff cannot void');
+r = await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'update', data: { voided: true } }, boss);
 assert.equal(r.status, 200); assert.equal(r.body.version, 2);
 assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'delete' }, maria)).status, 403);
 assert.equal((await call('/cage/doc', 'POST', { coll: 'config', id: 'settings', op: 'set', data: { a: 1 } }, maria)).status, 403);

@@ -275,7 +275,7 @@ function ledgerTable(list,withVoid=true){
  if(!list.length)return '<div class="sub">No entries yet.</div>';
  return `<table><tr><th>Business day</th><th>Type</th><th>Details</th><th>Pouch change</th>${withVoid?'<th></th>':''}</tr>${list.map(e=>`<tr class="${e.voided?'muted':''}"><td class="num">${esc(e.date)}<div class="sub">${esc(e.time||'')}</div></td><td>${esc(typeLabel(e.type))}</td>
  <td>${esc(e.summary)}${e.note?`<div class="sub">${esc(e.note)}</div>`:''}${e.voided?`<div class="sub">Voided: ${esc(e.voidReason||'')}</div>`:''}${!e.voided&&e.date<settings().openDate&&e.type!=='midori_pay'?'<div class="sub">Before the start date, not counted</div>':''}</td><td>${legText(e)}</td>
- ${withVoid?`<td>${e.voided?'':`<button class="link" data-void="${e.id}">Void</button>`}</td>`:''}</tr>`).join('')}</table>`}
+ ${withVoid?`<td>${e.voided||!canFix()?'':`<button class="link" data-void="${e.id}">Void</button>`}</td>`:''}</tr>`).join('')}</table>`}
 
 /* players */
 function vPlayers(){
@@ -749,6 +749,7 @@ function vInsLive(){const il=insLive(),day=bizDay(),x=(il&&il.days[day])||{net:0
  ${manual.length?`<div class="note warn" style="margin-top:8px">${manual.length} insurance entr${manual.length>1?'ies were':'y was'} typed at the cage today (${manual.map(e=>esc(e.summary)).join(', ')}). ${manual.length>1?'They are':'It is'} no longer counted; the Insurance page is used instead.</div>`:''}
  ${T.length?`<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Tickets</summary><table><tr><th>Time</th><th>Table</th><th class="r">Premium</th><th class="r">Pays</th><th>Result</th></tr>${T.map(t=>`<tr><td>${new Date(t.created_at*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Manila'})}</td><td>${esc(t.table_name)} ${esc(t.pot)}</td><td class="r num">${t.amount.toLocaleString('en-US')}</td><td class="r num">${t.payout.toLocaleString('en-US')}</td><td>${t.result==='miss'?'<span class="pos">Missed +'+t.amount.toLocaleString('en-US')+'</span>':t.result==='hit'?'<span class="neg">Hit −'+t.payout.toLocaleString('en-US')+'</span>':'<span class="sub">Pending</span>'}</td></tr>`).join('')}</table></details>`:''}
  <div class="flex" style="margin-top:12px"><button class="link" id="qa-cancel">Close</button></div></div>`}
+const canFix=()=>typeof MEM!=='undefined'&&MEM||S.role==='admin'||S.role==='master'; // voiding a record is for managers
 const PPM_LIVE={};
 function ppmLive(day){const c=PPM_LIVE[day];if((!c||Date.now()-c.at>60000)&&!(c&&c.loading)&&typeof api==='function'&&!MEM&&typeof TOKEN!=='undefined'&&TOKEN&&DB){PPM_LIVE[day]={...(c||{}),loading:true,at:c?c.at:0};
   api('/cage/ppm?day='+day).then(r=>{PPM_LIVE[day]={rows:r.rows||[],at:Date.now()};if(canRender())render()}).catch(e=>{PPM_LIVE[day]={rows:(c&&c.rows)||[],err:errMsg(e),at:Date.now()};if(canRender())render()})}return PPM_LIVE[day]&&PPM_LIVE[day].rows?PPM_LIVE[day]:null}

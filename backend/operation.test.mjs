@@ -22,7 +22,7 @@ sql.exec(await staffSql(['Boss:boss-pass', 'Maria:maria-pass:staff']));
 let boss = (await call('/login', 'POST', { username: 'Boss', password: 'boss-pass' })).body.token;
 const relogin = async () => { boss = (await call('/login', 'POST', { username: 'Boss', password: 'boss-pass' })).body.token; };
 const maria = (await call('/login', 'POST', { username: 'Maria', password: 'maria-pass' })).body.token;
-assert.equal((await call('/operation', 'GET', null, maria)).status, 403, 'managers only');
+assert.equal((await call('/operation', 'GET', null, maria)).status, 200, 'staff can see the operation report');
 await call('/members', 'POST', { nickname: 'Wei', member_no: '000001' }, boss);
 await call('/members', 'POST', { nickname: 'Jiho', member_no: '000002' }, boss);
 
@@ -96,7 +96,8 @@ assert.deepEqual(op.history, []);
 
 // Operation Report: managers enter revenue and BBJ per day; the rest comes from PPM.
 await relogin(); const maria2 = (await call('/login', 'POST', { username: 'Maria', password: 'maria-pass' })).body.token;
-assert.equal((await call('/report', 'GET', null, maria2)).status, 403, 'report: managers only');
+assert.equal((await call('/report', 'GET', null, maria2)).status, 200, 'report: staff can see it');
+assert.equal((await call('/report/day/2026-10-31', 'PUT', { bbj_main: '1' }, maria2)).status, 403, 'report: only managers change figures');
 assert.equal((await call('/report/day/2026-10-31', 'PUT', { bbj_main: '270,000.00', bbj_reserve: '74,000' }, boss)).status, 200);
 assert.equal((await call('/report/day/2026-11-02', 'PUT', { tables: { T1: '50,000', T3: 35000 }, bbj_main: '273,962.25', bbj_reserve: 74555.25 }, boss)).status, 200);
 assert.equal((await call('/report/day/2026-11-01', 'PUT', { bbj_main: 1000, bbj_reserve: 74100, bbj_paid: 271000 }, boss)).status, 200);
@@ -262,7 +263,7 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
   assert.equal((await call('/insurance/float', 'PUT', { day: '2026-11-04', balance: 178635, capital: 100000 }, boss)).status, 200);
   const day = (await call('/insurance', 'GET', null, maria3)).body;
   assert.deepEqual([day.totals.tickets, day.totals.sold, day.totals.paid, day.totals.hits, day.totals.misses, day.totals.net], [2, 10550, 14000, 1, 1, 8550 - 14000]);
-  assert.equal((await call('/insurance/range?from=2026-11-01&to=2026-11-30', 'GET', null, maria3)).status, 403, 'range: managers only');
+  assert.equal((await call('/insurance/range?from=2026-11-01&to=2026-11-30', 'GET', null, maria3)).status, 200, 'range: staff can see it');
   { const r = (await call('/insurance/range?from=2026-11-01&to=2026-11-30', 'GET', null, boss)).body;
     assert.equal(r.tickets.length, 3); assert.equal(r.days.length, 1); assert.equal(r.days[0].net, 8550 - 14000, 'hit: house pays 14,000 and takes no premium'); assert.equal(r.days[0].float_end, 178635 + 8550 - 14000); assert.equal(r.float.balance, r.days[0].float_end); }
   assert.deepEqual(day.float, { opening_day: '2026-11-04', opening: 178635, capital: 100000, balance: 178635 + 8550 - 14000 });
@@ -313,7 +314,7 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
     .run(m.id, 'hee', at('2026-10-20 21:00:00') / 1000, at('2026-10-20 21:30:00') / 1000);
   sql.prepare("INSERT INTO play_sessions(session_key,member_id,member_ref,group_id,play_date,table_name,seat,game_type,blinds,start_at,end_at,active_seconds,rest_seconds,buy_in,created_at) VALUES('T9|5|Walk-in|x|y',NULL,'Walk-in',NULL,'2026-10-20','T9',5,'NLH','50 / 100',?,?,5400,0,20000,1)")
     .run(at('2026-10-20 22:00:00') / 1000, at('2026-10-20 23:30:00') / 1000);
-  assert.equal((await call('/report/table?table=T9&from=2026-10-20&to=2026-10-20', 'GET', null, maria3)).status, 403, 'managers only');
+  assert.equal((await call('/report/table?table=T9&from=2026-10-20&to=2026-10-20', 'GET', null, maria3)).status, 200, 'table report: staff can see it');
   assert.equal((await call('/report/table?table=&from=2026-10-20&to=2026-10-20', 'GET', null, boss)).status, 400);
   const tr = (await call('/report/table?table=T9&from=2026-10-20&to=2026-10-20', 'GET', null, boss)).body;
   assert.equal(tr.table_seconds, 7 * 3600, 'T9 20:00 → 03:00 on the night it opened');
@@ -328,4 +329,4 @@ assert.equal((await call('/report?from=2026-11-05&to=2026-11-05', 'GET', null, b
   assert.deepEqual(tr2.rake, { amount: 14000, days: 1, per_hour: 2000 }, 'rake 14,000 over 7 table hours');
   assert.equal((await call('/report/table?table=T9&from=2026-10-21&to=2026-10-21', 'GET', null, boss)).body.players.length, 0);
 }
-console.log('PASS operation: managers only, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, table insurance, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');
+console.log('PASS operation: staff see, managers correct, noon cut-off, early opening, live tables, operating and table hours, visitors, buy-in live + finished, cash-out, history, report with revenue/BBJ/levels, BBJ ledger split + payout, table insurance, master table-run fixes, history log, telegram lineup, public lineup text, business day across the night');
