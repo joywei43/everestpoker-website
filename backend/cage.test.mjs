@@ -23,14 +23,11 @@ assert.equal((await call('/cage')).status, 401, 'sign-in required');
 let r = await call('/cage', 'GET', null, maria);
 assert.equal(r.status, 200); assert.equal(r.body.docs.length, 0); assert.equal(r.body.rev, 0);
 
-// Staff record an entry; update it; cannot delete it or change settings.
+// Staff record an entry and void it: every staff account has full access to the cage.
 r = await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'set', data: { type: 'buyin', amount: 5000 } }, maria);
 assert.equal(r.status, 200); assert.equal(r.body.version, 1);
-assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'update', data: { voided: true } }, maria)).status, 403, 'staff cannot void');
-r = await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'update', data: { voided: true } }, boss);
-assert.equal(r.status, 200); assert.equal(r.body.version, 2);
-assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'delete' }, maria)).status, 403);
-assert.equal((await call('/cage/doc', 'POST', { coll: 'config', id: 'settings', op: 'set', data: { a: 1 } }, maria)).status, 403);
+r = await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'update', data: { voided: true } }, maria);
+assert.equal(r.status, 200, 'staff can void'); assert.equal(r.body.version, 2);
 assert.equal((await call('/cage/doc', 'POST', { coll: 'nope', id: 'x', op: 'set', data: {} }, maria)).status, 400);
 assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'bad id', op: 'set', data: {} }, maria)).status, 400);
 assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'zz', op: 'update', data: {} }, maria)).status, 404);
@@ -48,6 +45,9 @@ const rev = r.body.rev;
 assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'delete' }, boss)).status, 200);
 r = await call('/cage?since=' + rev, 'GET', null, boss);
 assert.equal(r.body.docs.length, 1); assert.equal(r.body.docs[0].deleted, true);
+// Staff can also change settings and delete.
+assert.equal((await call('/cage/doc', 'POST', { coll: 'manpower', id: 'm1', op: 'set', data: { a: 1 } }, maria)).status, 200, 'staff can change settings');
+assert.equal((await call('/cage/doc', 'POST', { coll: 'manpower', id: 'm1', op: 'delete' }, maria)).status, 200, 'staff can delete');
 
 // Photos are kept apart and fetched one at a time.
 assert.equal((await call('/cage/doc', 'POST', { coll: 'photos', id: 'c1', op: 'set', data: { data: 'data:image/jpeg;base64,AAAA' } }, maria)).status, 200);

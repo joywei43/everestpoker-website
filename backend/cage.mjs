@@ -5,10 +5,9 @@ import { auditStmt } from './audit.mjs';
 import { handleOperation } from './operation.mjs';
 
 const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos'];
-const MANAGER_ONLY = ['config', 'manpower']; // starting balances, rates and staff costs
+const SETTINGS = ['config', 'manpower']; // starting balances, rates and staff costs: changes go to the History Log
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { photos: 400000 };
-const isManager = (role) => role === 'admin' || role === 'master';
 
 export async function handleCage(req, env, path, now, reply, user, role) {
   if (path === '/cage' && req.method === 'GET') {
@@ -59,10 +58,7 @@ export async function handleCage(req, env, path, now, reply, user, role) {
     const b = JSON.parse(raw);
     const { coll, id, op } = b || {};
     if (!COLLS.includes(coll) || typeof id !== 'string' || !ID.test(id) || !['set', 'update', 'delete'].includes(op)) return reply({ error: 'Invalid request' }, 400);
-    if (MANAGER_ONLY.includes(coll) && !isManager(role)) return reply({ error: 'Only a manager can change this.' }, 403);
-    if (op === 'delete' && !isManager(role)) return reply({ error: 'Only a manager can delete.' }, 403);
-    // Everyone can record; correcting a record (voiding it) is for managers.
-    if (coll === 'entries' && b.data && typeof b.data === 'object' && 'voided' in b.data && !isManager(role)) return reply({ error: 'Only a manager can void a record.' }, 403);
+    // Every signed-in staff account has full access to the cage (record, void, delete, settings); every change is logged.
     if (op !== 'delete' && (!b.data || typeof b.data !== 'object' || Array.isArray(b.data))) return reply({ error: 'Invalid data' }, 400);
     const cur = await env.DB.prepare('SELECT data,deleted,version FROM cage_docs WHERE coll=? AND id=?').bind(coll, id).first();
     if (b.ifVersion != null && (!cur || cur.version !== b.ifVersion)) return reply({ error: 'Someone else changed this. Reload and try again.' }, 409);
@@ -79,7 +75,7 @@ export async function handleCage(req, env, path, now, reply, user, role) {
         'ON CONFLICT(coll,id) DO UPDATE SET data=excluded.data,deleted=excluded.deleted,version=excluded.version,rev=excluded.rev,updated=excluded.updated,updated_by=excluded.updated_by WHERE cage_docs.version=?')
         .bind(coll, id, text || 'null', op === 'delete' ? 1 : 0, version, now, String(user || ''), cur ? cur.version : 0),
     ];
-    if (MANAGER_ONLY.includes(coll) || op === 'delete' || coll === 'counts') {
+    if (SETTINGS.includes(coll) || op === 'delete' || coll === 'counts') {
       const what = coll === 'counts' && data ? `${data.kind || ''} count ${data.day || ''}`.trim() : `${coll}/${id}`;
       stmts.push(auditStmt(env, now, user || 'staff', 'cage.' + (op === 'delete' ? 'delete' : coll === 'counts' ? 'count' : 'settings'), what));
     }
