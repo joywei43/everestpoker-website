@@ -66,6 +66,13 @@ export async function handleCage(req, env, path, now, reply, user, role) {
     let data = null;
     if (op === 'set') data = b.data;
     if (op === 'update') data = { ...JSON.parse(cur.data), ...b.data };
+    // Entries keep who recorded them (set by the server, not the browser) and who voided them.
+    if (coll === 'entries' && data) {
+      const old = cur && !cur.deleted ? JSON.parse(cur.data) : null;
+      data = { ...data, by: (old && old.by) || String(user || '') };
+      if (data.voided && !(old && old.voided)) data.voidedBy = String(user || '');
+      else if (old && old.voidedBy) data.voidedBy = old.voidedBy;
+    }
     const text = data ? JSON.stringify(data) : null;
     if (text && text.length > (MAX[coll] || 120000)) return reply({ error: 'Too large' }, 413);
     const version = cur ? cur.version + 1 : 1;
