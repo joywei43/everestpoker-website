@@ -40,7 +40,7 @@ assert.equal((await call('/cage/doc', 'POST', { coll: 'config', id: 'settings', 
 r = await call('/cage', 'GET', null, boss);
 assert.equal(r.body.docs.length, 2);
 const e1 = r.body.docs.find((d) => d.id === 'e1');
-assert.deepEqual(e1.data, { type: 'buyin', amount: 5000, voided: true });
+assert.deepEqual(e1.data, { type: 'buyin', amount: 5000, by: 'Maria', voided: true, voidedBy: 'Maria' });
 const rev = r.body.rev;
 assert.equal((await call('/cage/doc', 'POST', { coll: 'entries', id: 'e1', op: 'delete' }, boss)).status, 200);
 r = await call('/cage?since=' + rev, 'GET', null, boss);
@@ -71,3 +71,12 @@ assert.equal(r.status, 200);
 assert.deepEqual([r.body.days['2026-11-14'].net, r.body.days['2026-11-14'].pending, r.body.days['2026-11-14'].tickets, r.body.tickets.length], [-750, 1, 3, 3]);
 assert.equal((await call('/cage/insurance?from=x&to=2026-11-14', 'GET', null, maria)).status, 400);
 console.log('cage insurance ok');
+{ // entries remember who recorded and who voided them
+  await call('/cage/doc', 'POST', { coll: 'entries', id: 'byTest1', op: 'set', data: { amount: 1, by: 'Fake' } }, maria);
+  await call('/cage/doc', 'POST', { coll: 'entries', id: 'byTest1', op: 'update', data: { voided: true, voidReason: 'x' } }, boss);
+  const all = (await call('/cage?since=0', 'GET', null, boss)).body;
+  const d = (all.docs || all.changes || []).find((x) => x.id === 'byTest1');
+  const data = d.data || d;
+  assert.equal(data.by, 'Maria'); assert.equal(data.voidedBy, 'Boss');
+  console.log('cage by ok');
+}

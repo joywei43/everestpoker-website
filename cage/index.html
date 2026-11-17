@@ -189,7 +189,7 @@ function buildEntry(f){
   player:f.player||null,cat:f.cat||null,who:f.who||null,period:f.period||null,forMonth:f.forMonth||null,rakePart:f.rakePart?num(f.rakePart):null,bbjPart:f.bbjPart?num(f.bbjPart):null,medium:M||null,createdAt:new Date().toISOString(),voided:false}}
 
 /* ---------- storage ---------- */
-async function saveEntry(e){if(MEM){e.id='m'+Date.now()+Math.random().toString(36).slice(2,6);S.entries.push(e);render();return}
+async function saveEntry(e){if(S.user&&!e.by)e.by=S.user.name;if(MEM){e.id='m'+Date.now()+Math.random().toString(36).slice(2,6);S.entries.push(e);render();return}
  const ref=DB.collection('entries').doc();await ref.set(e)}
 async function voidEntry(id,reason){const e=S.entries.find(x=>x.id===id);if(!e)return;
  if(MEM){e.voided=true;e.voidReason=reason;render();return}
@@ -275,7 +275,7 @@ function legText(e){return (e.legs||[]).filter(g=>['cf','ins','chip','day','bb']
 function ledgerTable(list,withVoid=true){
  if(!list.length)return '<div class="sub">No entries yet.</div>';
  return `<table><tr><th>Business day</th><th>Type</th><th>Details</th><th>Pouch change</th>${withVoid?'<th></th>':''}</tr>${list.map(e=>`<tr class="${e.voided?'muted':''}"><td class="num">${esc(e.date)}<div class="sub">${esc(e.time||'')}</div></td><td>${esc(typeLabel(e.type))}</td>
- <td>${esc(e.summary)}${e.note?`<div class="sub">${esc(e.note)}</div>`:''}${e.voided?`<div class="sub">Voided: ${esc(e.voidReason||'')}</div>`:''}${!e.voided&&e.date<settings().openDate&&e.type!=='midori_pay'?'<div class="sub">Before the start date, not counted</div>':''}</td><td>${legText(e)}</td>
+ <td>${esc(e.summary)}${e.note?`<div class="sub">${esc(e.note)}</div>`:''}${e.by?`<div class="sub">Recorded by ${esc(e.by)}</div>`:''}${e.voided?`<div class="sub">Voided${e.voidedBy?' by '+esc(e.voidedBy):''}: ${esc(e.voidReason||'')}</div>`:''}${!e.voided&&e.date<settings().openDate&&e.type!=='midori_pay'?'<div class="sub">Before the start date, not counted</div>':''}</td><td>${legText(e)}</td>
  ${withVoid?`<td>${e.voided?'':`<button class="link" data-void="${e.id}">Void</button>`}</td>`:''}</tr>`).join('')}</table>`}
 
 /* players */
@@ -589,7 +589,10 @@ function repPage2(c){const ci=c.closeInfo||{},pl=c.players||{},md=S.midori[c.day
  <h3>Tips · ${pesoE(ci.tipTotal||0)} to tip reserves</h3>${Object.keys(ci.tips||{}).length?`<table>${Object.entries(ci.tips).map(([n,v])=>tr(esc(n),v.toLocaleString('en-US'))).join('')}</table>`:'<div class="cap">No tips</div>'}
  <h3>Foreign cash held</h3><div class="cap" style="font-size:12px;color:#1f1e1b">${c.fxCount?FX_CUR.filter(k=>(c.fxCount[k]||{}).counted).map(k=>`${k} ${c.fxCount[k].counted.toLocaleString('en-US')}`).join(' · ')||'None':'None'}</div>
  <h3>Other cash today · in ${pesoE(ti)} · out ${pesoE(to)}</h3>${ins.concat(outs).length?`<table>${ins.map(x=>tr(esc(x.s),'+'+x.v.toLocaleString('en-US'))).join('')}${outs.map(x=>tr(esc(x.s),'-'+x.v.toLocaleString('en-US'))).join('')}</table>`:'<div class="cap">None</div>'}
+ ${repByCashier(c.day)}
  <div class="sig" style="margin-top:22px"><div><div class="line"></div><div class="cap">Cashier signature</div></div><div><div class="line"></div><div class="cap">Supervisor signature</div></div></div></div>`}
+function repByCashier(day){const m=new Map();for(const e of liveEntries()){if(e.date!==day)continue;const k=e.by||'(not recorded)';const x=m.get(k)||{n:0,bi:0,co:0,ot:0};x.n++;if(e.type==='buyin')x.bi+=e.amount;else if(e.type==='cashout'||e.type==='chip_pay')x.co+=e.amount;else x.ot++;m.set(k,x)}
+ if(m.size<1)return '';return `<h3>Recorded by cashier · 帳房經手</h3><table><tr><th>Cashier</th><th class="r">Entries</th><th class="r">Buy-ins</th><th class="r">Cash-outs</th><th class="r">Other entries</th></tr>${[...m].map(([k,x])=>`<tr><td>${esc(k)}</td><td class="r">${x.n}</td><td class="r">${x.bi.toLocaleString('en-US')}</td><td class="r">${x.co.toLocaleString('en-US')}</td><td class="r">${x.ot}</td></tr>`).join('')}</table><div class="cap">One shared day: totals above are the whole cage; this table only shows who entered what.</div>`}
 function repHTML(c){return repPage1(c)+(c.kind==='close'?repPage2(c):'')}
 function vCountReport(c){if(!c)return '<div class="sub">Loading…</div>';
  return `<div class="flex" style="margin-bottom:12px"><button class="link" id="rp-back">← Back</button><b>${c.kind==='open'?'Opening':'Closing'} report · ${esc(c.day)}</b>
@@ -961,8 +964,9 @@ function bindVoids(){
   try{await voidEntry(b.dataset.void,r)}catch(err){tr.querySelector('.err').textContent=errMsg(err)}}});}
 function vRecords(side){const day=S.recDay||bizDay();const [y,m,d]=day.split('-').map(Number);const nx=new Date(y,m-1,d+1);const label=`${m}/${d} 12:00 – ${nx.getMonth()+1}/${nx.getDate()} 11:59`;
  const all=liveEntries().filter(e=>e.date===day&&['buyin','cashout','chip_pay','op_in','op_out','chip_transfer','swap_c2ch','swap_ch2c'].includes(e.type)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
- const RF=S.recFilter||'all',IN=['buyin','op_in'],sumT=t=>all.filter(e=>t.includes(e.type)).reduce((x,e)=>x+e.amount,0);
- const list=all.filter(e=>RF==='all'?true:RF==='in'?IN.includes(e.type):RF==='out'?['cashout','chip_pay','op_out'].includes(e.type):RF==='players'?['buyin','cashout','chip_pay','chip_transfer'].includes(e.type):['op_in','op_out','swap_c2ch','swap_ch2c'].includes(e.type));
+ const me=S.user&&S.user.name,base=S.recMine?all.filter(e=>e.by===me):all;
+ const RF=S.recFilter||'all',IN=['buyin','op_in'],sumT=t=>base.filter(e=>t.includes(e.type)).reduce((x,e)=>x+e.amount,0);
+ const list=base.filter(e=>RF==='all'?true:RF==='in'?IN.includes(e.type):RF==='out'?['cashout','chip_pay','op_out'].includes(e.type):RF==='players'?['buyin','cashout','chip_pay','chip_transfer'].includes(e.type):['op_in','op_out','swap_c2ch','swap_ch2c'].includes(e.type));
  const TL={swap_c2ch:['Cash → chips 換碼','info'],swap_ch2c:['Chips → cash 換現','info'],chip_pay:['By chip 籌碼兌現','warn'],buyin:['Buy-in 買入','cash'],cashout:['Cash-out 結出','bad'],op_in:['Cash in 營運收入','cash'],op_out:['Cash out 營運支出','bad'],chip_transfer:['Transfer 轉讓','info']};
  const fb=(k,l)=>`<button data-rf="${k}" class="${RF===k?'on':''}" style="padding:6px 12px">${l}</button>`;
  const pL=id=>{const pp=S.players.find(x=>x.id===id);return pp?pLabel(pp):playerName(id)};
@@ -975,10 +979,10 @@ function vRecords(side){const day=S.recDay||bizDay();const [y,m,d]=day.split('-'
  const rows=[...cmp.values()].map(x=>{const bi=Math.abs(x.ct.buyin-x.pp.buyin)<.01,co=Math.abs(x.ct.cashout-x.pp.cashout)<.01;return{...x,ok:bi&&co,wait:bi&&!co&&(x.playing||x.open>0)}}).sort((a,b)=>(a.ok+a.wait)-(b.ok+b.wait)||a.n.localeCompare(b.n));
  const ML={cash:'Cash',mass:'Mass chip',credit:'Credit',account:'Back to account',fx:'Foreign cash'};
  return `<h2>Records · cash in and cash out <span class="sub">紀錄</span> <input type="date" id="rec-day" value="${day}" style="width:auto;margin-left:8px"> <span class="sub">Business day ${label}</span></h2>
- <div class="grid ${side?'':'g2'}"><div class="card"><div class="flex" style="gap:6px;flex-wrap:wrap">${fb('all','All 全部')}${fb('in','Cash in 收入')}${fb('out','Cash out 支出')}${fb('players','Players 玩家')}${fb('op','Operation 營運')}</div>
+ <div class="grid ${side?'':'g2'}"><div class="card"><div class="flex" style="gap:6px;flex-wrap:wrap">${fb('all','All 全部')}${fb('in','Cash in 收入')}${fb('out','Cash out 支出')}${fb('players','Players 玩家')}${fb('op','Operation 營運')}<button data-rmine class="${S.recMine?'on':''}" style="padding:6px 12px;margin-left:auto" title="Only entries recorded by ${esc(me||'')}">Only mine 只看我記的</button></div>
  <div class="flex" style="gap:16px;margin:8px 0;flex-wrap:wrap"><span>In 收入 <b class="num pos">${pesoE(sumT(IN))}</b></span><span>Out 支出 <b class="num neg">${pesoE(sumT(['cashout','chip_pay','op_out']))}</b></span><span>Net 淨額 <b class="num">${sgnE(sumT(IN)-sumT(['cashout','chip_pay','op_out']))}</b></span></div>
  <table><tr><th>Time</th><th>Name / purpose</th><th></th><th class="r">₱</th><th>Method</th><th></th></tr>
- ${list.map(e=>`<tr><td class="num">${esc(e.time)}</td><td>${e.type==='chip_transfer'?esc(pL(e.player))+' → '+esc(pL(e.to)):e.player?esc(pL(e.player)):esc(e.cat||'')+(e.note?`<div class="sub">${esc(e.note)}</div>`:'')}</td><td><span class="pill ${TL[e.type][1]}">${TL[e.type][0]}</span></td><td class="r num">${e.amount.toLocaleString('en-US')}</td><td>${ML[e.method]||esc(e.method||'')}${e.approver?`<div class="sub">Approved by ${esc(e.approver)}</div>`:''}${e.ppmFlag?'<div><span class="pill warn">Check with Marketing</span></div>':''}</td><td><button class="link" data-void="${e.id}" title="Entered by mistake">Void 作廢</button></td></tr>`).join('')||'<tr><td colspan="6" class="sub">No records this business day</td></tr>'}</table></div>
+ ${list.map(e=>`<tr><td class="num">${esc(e.time)}${e.by?`<div class="sub" style="font-family:inherit">${esc(e.by)}</div>`:''}</td><td>${e.type==='chip_transfer'?esc(pL(e.player))+' → '+esc(pL(e.to)):e.player?esc(pL(e.player)):esc(e.cat||'')+(e.note?`<div class="sub">${esc(e.note)}</div>`:'')}</td><td><span class="pill ${TL[e.type][1]}">${TL[e.type][0]}</span></td><td class="r num">${e.amount.toLocaleString('en-US')}</td><td>${ML[e.method]||esc(e.method||'')}${e.approver?`<div class="sub">Approved by ${esc(e.approver)}</div>`:''}${e.ppmFlag?'<div><span class="pill warn">Check with Marketing</span></div>':''}</td><td><button class="link" data-void="${e.id}" title="Entered by mistake">Void 作廢</button></td></tr>`).join('')||'<tr><td colspan="6" class="sub">No records this business day</td></tr>'}</table></div>
  <div class="card"><b>Cage vs PPM</b><table><tr><th>Player</th><th class="r">Cage in / out</th><th class="r">PPM in / out</th><th></th></tr>
  ${rows.map(r=>`<tr><td>${esc(r.n)}</td><td class="r num">${r.ct.buyin.toLocaleString('en-US')} / ${r.ct.cashout.toLocaleString('en-US')}</td><td class="r num">${r.pp.buyin.toLocaleString('en-US')} / ${r.pp.cashout.toLocaleString('en-US')}</td><td>${r.xfer?'<span class="pill info" title="Includes chip transfers">T</span> ':''}${r.ok?'<span class="pill cash">OK</span>':r.wait?'<span class="pill info">At table</span>':!r.inPpm?'<span class="pill warn">Not in PPM</span>':'<span class="pill warn">Check</span>'}${r.twin?` <button class="link" data-twin="${r.twin[0]}|${r.twin[1]}" title="Same person as ${esc(r.twin[2])}">Merge into ${esc(r.twin[2])} 合併</button>`:''}</td></tr>`).join('')||'<tr><td colspan="4" class="sub">Nothing yet</td></tr>'}</table>
  <div class="sub" style="margin-top:6px">${live?`PPM from the website · updated ${new Date(PPM_LIVE[day].at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}${PPM_LIVE[day].err?' · '+esc(PPM_LIVE[day].err):''}. At table = still playing, no cash-out in PPM yet.`:'Loading PPM…'}</div>
@@ -1004,7 +1008,7 @@ function bindQA(){const q=$;
  document.querySelectorAll('[data-qa]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.qa);render();const fh=q('form-here');if(fh)fh.scrollIntoView({block:'nearest',behavior:'smooth'});const f=q('qa-player')||q('qa-amt');f&&f.focus({preventScroll:!!fh})});
  document.querySelectorAll('[data-twin]').forEach(b=>b.onclick=async()=>{const [a,c]=b.dataset.twin.split('|');b.disabled=true;try{await mergePlayers(a,c);render();flash('Players merged')}catch(e){b.disabled=false;flash(errMsg(e))}});
  bindVoids();
- if(!S.qa){if(q('rec-day'))q('rec-day').onchange=()=>{S.recDay=q('rec-day').value;render()};document.querySelectorAll('[data-rf]').forEach(b=>b.onclick=()=>{S.recFilter=b.dataset.rf;render()});bindPPM();return}
+ if(!S.qa){if(q('rec-day'))q('rec-day').onchange=()=>{S.recDay=q('rec-day').value;render()};document.querySelectorAll('[data-rf]').forEach(b=>b.onclick=()=>{S.recFilter=b.dataset.rf;render()});document.querySelectorAll('[data-rmine]').forEach(b=>b.onclick=()=>{S.recMine=!S.recMine;render()});bindPPM();return}
  const Q=S.qa;const reset=()=>{S.qaMsg=null;Q.ack=false;Q.ppmFlag=false};
  const pickMember=m=>{const nick=lname(m.nickname||m.name);const ex=S.players.find(x=>x.no&&normNo(x.no)===normNo(m.member_no))||S.players.filter(x=>!x.no&&(lname(x.name)===nick||lname(x.name)===lname(m.name||''))).sort((a,b)=>(isAcct(b)-isAcct(a))||(!!acctOf(b)-!!acctOf(a)))[0];Q.member=m;pick(ex?pLabel(ex):`${m.nickname||m.name} #${m.member_no}`,true)};
  const pick=(n,keepMember)=>{if(!keepMember)Q.member=null;Q.player=n;const pe=q('qa-player');if(pe)pe.value=n;reset();render();const nf=q('qa-fv')&&!q('qa-fv').value?q('qa-fv'):q('qa-amt');nf&&nf.focus()};
@@ -1044,7 +1048,7 @@ function bindQA(){const q=$;
  if(q('qa-save'))q('qa-save').onclick=go;if(q('qa-ack'))q('qa-ack').onclick=()=>{Q.ack=true;go()};
  document.querySelectorAll('[data-twin]').forEach(b=>b.onclick=async()=>{const [a,c]=b.dataset.twin.split('|');b.disabled=true;try{await mergePlayers(a,c);render();flash('Players merged')}catch(e){b.disabled=false;flash(errMsg(e))}});
  bindVoids();
- if(q('rec-day'))q('rec-day').onchange=()=>{S.recDay=q('rec-day').value;render()};document.querySelectorAll('[data-rf]').forEach(b=>b.onclick=()=>{S.recFilter=b.dataset.rf;render()});bindPPM()}
+ if(q('rec-day'))q('rec-day').onchange=()=>{S.recDay=q('rec-day').value;render()};document.querySelectorAll('[data-rf]').forEach(b=>b.onclick=()=>{S.recFilter=b.dataset.rf;render()});document.querySelectorAll('[data-rmine]').forEach(b=>b.onclick=()=>{S.recMine=!S.recMine;render()});bindPPM()}
 function bindPPM(){const q=$;if(q('ppm-save'))q('ppm-save').onclick=async()=>{const rows=[];let bad='';q('ppm-text').value.split('\n').map(l=>l.trim()).filter(Boolean).forEach((l,i)=>{const [n,bi,co]=l.split(',').map(x=>x.trim());const B=num(bi||0),C=num(co||0);if(!n||!Number.isFinite(B)||!Number.isFinite(C))bad=`Line ${i+1} needs: name, buy-in, cash-out`;else rows.push({n,buyin:B,cashout:C})});
   if(bad){q('ppm-err').textContent=bad;return}const day=S.recDay||bizDay();try{if(MEM){S.ppm[day]={rows};render()}else await DB.doc('ppm/'+day).set({rows,updatedAt:new Date().toISOString()});flash('PPM numbers saved')}catch(e){q('ppm-err').textContent=errMsg(e)}}}
 document.addEventListener('keydown',e=>{const t=e.target.tagName;if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||e.ctrlKey||e.metaKey||e.altKey)return;if(!['counts','entry'].includes(S.tab)||S.pending||(S.cnt&&S.cnt.step!=='report'))return;
