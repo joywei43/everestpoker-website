@@ -15,7 +15,7 @@ const call = async (path, method = 'GET', data, token) => {
   const res = await worker.fetch(new Request('https://api.test' + path, { method, headers: { Origin: 'https://everestpokerroom.com', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(data ? { body: JSON.stringify(data) } : {}) }), env);
   return { status: res.status, body: await res.json() };
 };
-sql.exec(await staffSql(['Boss:boss-pass', 'Maria:maria-pass:staff']));
+sql.exec(await staffSql(['Boss:boss-pass', 'Maria:maria-pass:staff', 'Ana:ana-pass:admin']));
 const boss = (await call('/login', 'POST', { username: 'Boss', password: 'boss-pass' })).body.token;
 const maria = (await call('/login', 'POST', { username: 'Maria', password: 'maria-pass' })).body.token;
 
@@ -79,4 +79,17 @@ console.log('cage insurance ok');
   const data = d.data || d;
   assert.equal(data.by, 'Maria'); assert.equal(data.voidedBy, 'Boss');
   console.log('cage by ok');
+{ // correction requests
+  const put = (id, data, tok) => call('/cage/doc', 'POST', { coll: 'corrections', id, op: id === 'c1' && !data.status ? 'set' : 'set', data }, tok);
+  assert.equal((await put('c1', { status: 'pending', entryId: 'e1', money: true, reason: 'x' }, maria)).status, 200);
+  assert.equal((await put('c1', { status: 'approved' }, maria)).status, 403, 'staff cannot approve');
+  const ana = (await call('/login', 'POST', { username: 'Ana', password: 'ana-pass' })).body.token;
+  assert.equal((await put('c1', { status: 'approved' }, ana)).status, 403, 'manager cannot approve an amount change');
+  assert.equal((await put('c1', { status: 'approved', note: 'ok' }, boss)).status, 200);
+  assert.equal((await put('c1', { status: 'rejected' }, boss)).status, 409, 'decided once');
+  assert.equal((await call('/cage/doc', 'POST', { coll: 'corrections', id: 'c1', op: 'delete' }, boss)).status, 403);
+  assert.equal((await put('c2', { status: 'pending', money: false }, maria)).status, 200);
+  assert.equal((await put('c2', { status: 'approved' }, ana)).status, 200, 'manager approves a non-amount change');
+  console.log('cage corrections ok');
+}
 }
