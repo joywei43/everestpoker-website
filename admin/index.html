@@ -173,6 +173,7 @@ function render() {
         ${link('members', 'Members')}
         ${link('playergroups', 'Player groups')}
         ${link('unmatchedppm', 'Unmatched PPM')}
+        ${link('rewards', 'Rewards')}
         ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
         ${link('promotions', 'Promotions')}
         ${link('telegrampost', 'Telegram post')}
@@ -187,7 +188,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { tablereport: viewTableReport, insurance: viewInsurance, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: viewOperation, operationreport: viewReport, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
+  const pages = { rewards: viewRewards, tablereport: viewTableReport, insurance: viewInsurance, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: viewOperation, operationreport: viewReport, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -1292,6 +1293,51 @@ async function viewApprovals(view) {
   view.querySelectorAll('[data-no]').forEach((b) => b.onclick = async () => {
     const reason = (prompt('Why is this reward being voided?') || '').trim(); if (!reason) return;
     try { await api('/rewards/' + b.dataset.no + '/void', 'POST', { reason }); viewApprovals(view); refreshPending(); } catch (e) { alert(e.message); }
+  });
+}
+
+// ---------- Rewards: issue comps (linked to the cage) ----------
+const PAY_DEFAULT = { free_chip: 'chips', promo_chip: 'chips', promo_cash: 'cash', transportation: 'cash', hotel: '', tournament_ticket: '' };
+async function viewRewards(view) {
+  const q = new URLSearchParams(location.hash.split('?')[1] || ''), to = q.get('to') || today(), from = q.get('from') || to.slice(0, 8) + '01';
+  const data = await api(`/rewards/list?from=${from}&to=${to}`);
+  const live = data.rewards.filter((r) => !r.voided), tot = live.reduce((a, r) => a + r.amount, 0), byType = {};
+  for (const r of live) { const k = TYPES[r.type] + (r.type === 'transportation' && /^(Airfare|Taxi):/.test(r.detail) ? ' · ' + r.detail.split(':')[0] : ''); byType[k] = (byType[k] || 0) + r.amount; }
+  view.innerHTML = `<div><h1>Rewards</h1><p class="sub">Issue a comp to a member. When the cage pays it, it is recorded in the cage at the same time (cash from the cash float, or chips from the chip float).</p></div>
+    <section class="card"><h2 style="margin-bottom:10px">Issue comp</h2><form id="rwForm" class="form" style="background:#F6F7F9;border-radius:10px;padding:14px">
+      <label class="f" style="position:relative">Member<input type="text" id="rwMember" placeholder="Member number or name" required></label>
+      <label class="f">Type<select id="rwType">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+      <label class="f" id="rwSubWrap" hidden>Transportation<select id="rwSub"><option value="">Choose…</option><option>Airfare</option><option>Taxi</option></select></label>
+      <label class="f">Value (₱)<input type="number" min="1" step="1" id="rwAmt" required></label>
+      <label class="f">Date<input id="rwDate" type="date" value="${today()}" max="${today()}"></label>
+      <label class="f wide">Detail<input type="text" maxlength="180" id="rwDetail" placeholder="e.g. Manila → Cebu flight, hotel to club taxi, PromoChip code" required></label>
+      <label class="f">Paid by the cage<select id="rwPay"><option value="">Not by the cage (paid elsewhere)</option><option value="cash">Cash from the cash float</option><option value="chips">Chips from the chip float</option></select></label>
+      ${isManager() ? `<label class="f">Approved by<input type="text" id="rwAppr" value="${esc(staff)}"></label>` : '<div class="small muted">A manager approves it before it counts in cost totals.</div>'}
+      <div style="align-self:end"><button class="btn primary">Issue comp</button></div></form><div id="rwMsg"></div></section>
+    <div class="grid">${tile('Comps ' + from + ' – ' + to, peso(tot), live.length + ' rewards')}${Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([k, v]) => tile(esc(k), peso(v), '')).join('')}</div>
+    <section class="card"><div class="row between"><h2>Issued</h2><div class="row"><input type="date" id="rwFrom" value="${from}"> – <input type="date" id="rwTo" value="${to}"><button class="btn sm" id="rwGo">Show</button></div></div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Member</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Cage</th><th>Recorded · approved</th><th></th></tr></thead><tbody>
+    ${data.rewards.map((r) => `<tr style="${r.voided ? 'opacity:.5;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><a href="#/member/${encodeURIComponent(r.member_no)}"><b>${esc(r.nickname || r.name)}</b></a><div class="small muted mono">${esc(r.member_no)}</div></td>
+      <td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small muted">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num">${peso(r.amount)}</td>
+      <td class="small">${r.cage ? (r.cage.how === 'chips' ? 'Chips' : 'Cash') + (r.cage.voided ? ' · voided' : '') : '—'}</td><td class="small">${esc(r.recorded_by)}${r.approved ? ' · ' + esc(r.approved_by) : ' · <span class="chip amber">waiting</span>'}</td>
+      <td>${isMaster() && !r.voided ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">No rewards in these dates.</td></tr>'}
+    </tbody></table></div></section>`;
+  const $ = (id) => view.querySelector('#' + id), type = $('rwType');
+  memberPicker($('rwMember'));
+  const sync = () => { $('rwSubWrap').hidden = type.value !== 'transportation'; $('rwPay').value = PAY_DEFAULT[type.value] || ''; };
+  type.onchange = sync; sync();
+  $('rwGo').onclick = () => { location.hash = '#/rewards?' + new URLSearchParams({ from: $('rwFrom').value, to: $('rwTo').value }); };
+  $('rwForm').onsubmit = async (e) => {
+    e.preventDefault(); const msg = $('rwMsg');
+    try {
+      const r = await api('/rewards/issue', 'POST', { member_no: $('rwMember').value.trim(), type: type.value, sub: type.value === 'transportation' ? $('rwSub').value : '', amount: Number(String($('rwAmt').value).replace(/,/g, '')),
+        date: $('rwDate').value, detail: $('rwDetail').value.trim(), pay: $('rwPay').value, approved_by: $('rwAppr') ? $('rwAppr').value.trim() : '' });
+      await viewRewards(view); flash(view.querySelector('#rwMsg'), 'Comp issued' + (r.cage ? ' and recorded in the cage (' + (r.cage === 'cash' ? 'cash from the cash float' : 'chips from the chip float') + ')' : '') + (r.approved ? '.' : '. Waiting for a manager.'), 'ok');
+    } catch (err) { flash(msg, err.message, 'err'); }
+  };
+  view.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => {
+    const reason = (prompt('Why is this reward being voided? A cage payment is voided too.') || '').trim(); if (!reason) return;
+    try { await api('/rewards/' + b.dataset.void + '/void', 'POST', { reason }); viewRewards(view); } catch (e) { alert(e.message); }
   });
 }
 

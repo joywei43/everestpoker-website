@@ -849,6 +849,53 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     }
   }
 
+  // Rewards page: issue a comp to a member and, when the cage pays it, record it in the cage at the same time.
+  if (parts[0] === 'rewards' && parts[1] === 'list' && method === 'GET') {
+    const u = new URL(req.url), from = str(u.searchParams.get('from'), 10), to = str(u.searchParams.get('to'), 10);
+    if (!isDate(from) || !isDate(to) || from > to) return bad(reply, 'Give from and to dates.');
+    const rows = await all(env.DB.prepare(`SELECT rw.id,rw.type,rw.detail,rw.amount,rw.given_at,rw.recorded_by,rw.approved_by,rw.approved_at,rw.voided,rw.void_reason,rw.group_id,m.member_no,m.surname,m.middle_name,m.family_name,m.nickname
+      FROM rewards rw JOIN members m ON m.id=rw.member_id WHERE rw.given_at>=? AND rw.given_at<? ORDER BY rw.given_at DESC, rw.id DESC LIMIT 1000`).bind(dayStart(from), dayStart(to) + DAY));
+    const cage = await all(env.DB.prepare("SELECT id,data,deleted FROM cage_docs WHERE coll='entries' AND id LIKE 'rw-%'"));
+    const cmap = new Map(cage.map((c) => { const d = JSON.parse(c.data || 'null') || {}; return [c.id, { voided: !!d.voided || !!c.deleted, how: d.compPaid || '' }]; }));
+    return reply({ from, to, rewards: rows.map((r) => ({ id: r.id, type: r.type, detail: r.detail, amount: r.amount, given_at: r.given_at, recorded_by: r.recorded_by, approved_by: r.approved_by, approved: !!r.approved_at,
+      voided: !!r.voided, void_reason: r.void_reason, group_name: r.group_id ? (groups.get(r.group_id) || { name: r.group_id }).name : null, member_no: r.member_no, name: displayName(r), nickname: r.nickname,
+      cage: cmap.get('rw-' + r.id) || null })) });
+  }
+  if (parts[0] === 'rewards' && parts[1] === 'issue' && method === 'POST') {
+    const b = await readJson(req, 5000);
+    const m = await memberByNo(env, str(b.member_no, 20));
+    if (!m) return bad(reply, 'Member not found. Pick the member from the list.');
+    const type = str(b.type, 20), amount = Number(b.amount), sub = str(b.sub, 20), detail = str(b.detail, 180), pay = str(b.pay, 10);
+    if (!REWARD_TYPES.includes(type)) return bad(reply, 'Unknown reward type.');
+    if (type === 'transportation' && !['Airfare', 'Taxi'].includes(sub)) return bad(reply, 'Choose Airfare or Taxi.');
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 100000000) return bad(reply, 'Amount must be a whole number of pesos.');
+    if (!detail) return bad(reply, 'Write the detail.');
+    if (!['', 'cash', 'chips'].includes(pay)) return bad(reply, 'Unknown payment.');
+    const date = str(b.date, 10);
+    if (date && !isDate(date)) return bad(reply, 'Invalid date.');
+    const givenAt = date && date !== localDate(now) ? dayStart(date) + 12 * 3600 : now;
+    if (givenAt > now + DAY) return bad(reply, 'Date is in the future.');
+    const groupId = await groupAt(env, m.id, givenAt);
+    const fullDetail = (sub ? sub + ': ' : '') + detail;
+    const approver = manager ? (str(b.approved_by, 60) || who(b)) : '';
+    const row = await env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id')
+      .bind(m.id, groupId, type, fullDetail, amount, givenAt, who(b) || 'staff', approver, manager ? now : null, now).first();
+    const stmts = [audit(env, now, who(b) || 'staff', 'reward.add', m.id, `${type} ₱${amount} ${fullDetail}${pay ? ' · paid by the cage in ' + pay : ''}${manager ? '' : ' · waiting for approval'}`)];
+    if (pay) {
+      // The cage business day turns at noon (Manila).
+      const cageDay = date && date !== localDate(now) ? date : localDate(now - 12 * 3600);
+      const label = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', hotel: 'Hotel Stay', transportation: 'Transportation', tournament_ticket: 'Tournament Tickets' }[type] + (sub ? ' · ' + sub : '');
+      const nick = m.nickname || displayName(m);
+      const data = { type: pay === 'cash' ? 'op_out' : 'comp_chips', date: cageDay, time: new Date((now + 8 * 3600) * 1000).toISOString().slice(11, 16), createdAt: new Date(now * 1000).toISOString(), voided: false,
+        player: null, medium: pay === 'cash' ? 'cash' : 'chips', method: null, amount, cat: 'Player comps · ' + label, note: detail, approver: approver || null, rewardId: row.id, compPaid: pay, memberNo: m.member_no,
+        legs: pay === 'cash' ? [{ a: 'cf', m: 'cash', v: -amount }] : [{ a: 'chip', m: 'chips', v: -amount }], pl: { cat: 'Player comps · ' + label, v: -amount },
+        summary: `Comp · ${label} · ${nick} #${m.member_no} · ${detail} (from Rewards${pay === 'chips' ? ', chips from the chip float' : ', cash from the cash float'})`, by: who(b) || 'staff' };
+      stmts.push(env.DB.prepare('UPDATE cage_meta SET rev=rev+1 WHERE id=1'),
+        env.DB.prepare("INSERT INTO cage_docs(coll,id,data,deleted,version,rev,updated,updated_by) VALUES('entries',?,?,0,1,(SELECT rev FROM cage_meta WHERE id=1),?,?)").bind('rw-' + row.id, JSON.stringify(data), now, who(b) || 'staff'));
+    }
+    await env.DB.batch(stmts);
+    return reply({ ok: true, id: row.id, approved: manager, cage: pay || null });
+  }
   if (parts[0] === 'rewards' && parts[1] === 'pending' && method === 'GET') {
     const rows = await all(env.DB.prepare(`SELECT rw.id,rw.type,rw.detail,rw.amount,rw.given_at,rw.recorded_by,rw.group_id,m.member_no,m.surname,m.middle_name,m.family_name,m.nickname,m.member_no
       FROM rewards rw JOIN members m ON m.id=rw.member_id WHERE rw.voided=0 AND rw.approved_at IS NULL ORDER BY rw.given_at, rw.id LIMIT 300`));
@@ -878,7 +925,11 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (r.voided) return reply({ ok: true, unchanged: true });
     await env.DB.batch([
       env.DB.prepare('UPDATE rewards SET voided=1,void_reason=? WHERE id=?').bind(str(b.reason, 200), id),
-      audit(env, now, who(b), 'reward.void', r.member_id, `${r.type} ₱${r.amount} · ${str(b.reason, 200)}`)
+      audit(env, now, who(b), 'reward.void', r.member_id, `${r.type} ₱${r.amount} · ${str(b.reason, 200)}`),
+      // a comp the cage paid is voided in the cage too
+      env.DB.prepare("UPDATE cage_meta SET rev=rev+1 WHERE id=1"),
+      env.DB.prepare("UPDATE cage_docs SET data=json_set(data,'$.voided',json('true'),'$.voidReason',?,'$.voidedBy',?),version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=?,updated_by=? WHERE coll='entries' AND id=? AND deleted=0")
+        .bind('Reward voided: ' + str(b.reason, 180), who(b), now, who(b), 'rw-' + id)
     ]);
     return reply({ ok: true });
   }
