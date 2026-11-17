@@ -596,4 +596,11 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal((await call(`/rewards/${r1.id}/void`, 'POST', { staff: 'K. Lim', reason: 'Wrong player' }, token)).status, 200);
   assert.equal(JSON.parse(sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r1.id).data).voided, true);
 }
+{ // member stats for a range of business days
+  const r = (await call('/members/EV-000001?from=2026-10-01&to=2026-11-17', 'GET', null, token)).body.stats.day;
+  assert.equal(r.from, '2026-10-01'); assert.equal(r.to, '2026-11-17'); assert.ok(r.end > r.start);
+  const one = (await call('/members/EV-000001?day=2026-10-05', 'GET', null, token)).body.stats.day;
+  assert.equal(one.from, '2026-10-05'); assert.equal(one.to, '2026-10-05');
+  assert.ok(r.rewards >= one.rewards);
+}
 console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval, junket label, quick add from PPM');
