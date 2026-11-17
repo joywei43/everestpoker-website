@@ -923,7 +923,12 @@ function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (�
   ${q.dir==='return'?`<label>Guest</label><input id="qa-player" value="${esc(q.player)}" placeholder="Name">`:''}
   <label>Pesos received into cash float</label><input id="qa-amt" inputmode="decimal" value="${esc(q.amount)}" placeholder="${lock||0}"><div class="sub">Any difference from the locked value is recorded as FX gain or loss.</div>${apprField(q)}`}
  const m=S.qaMsg;
- return `<div class="card" style="margin-top:12px;max-width:680px"><b style="font-size:16px">${a.l}</b>${f}
+ const ng=S.newGuest?`<div id="ng-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"><div style="max-width:560px;width:100%;background:var(--card,#222);border-radius:14px;padding:22px;border:2px solid #E8A317">
+  <b style="font-size:20px">Pick the player from the list 請從清單選擇客人</b>
+  <p style="margin:10px 0"><b>${esc(S.newGuest)}</b> is not a member yet, or was typed instead of picked. 「${esc(S.newGuest)}」不是會員，或是用打字而沒有點選客人。</p>
+  <ol style="margin:0 0 10px 18px;line-height:1.6"><li>Type the name or member number and <b>tap the player</b> in the list. 輸入名字或會員號碼後，<b>點選</b>清單裡的客人。</li><li>New guest? Confirm with the Supervisor, add the member first (Admin → Members), then record the buy-in. 新客人請先和 Supervisor 確認，新增會員後，再補上買入紀錄。</li></ol>
+  <button class="primary" id="ng-ok">OK</button></div></div>`:'';
+ return `${ng}<div class="card" style="margin-top:12px;max-width:680px"><b style="font-size:16px">${a.l}</b>${f}
  ${m?`<div class="note ${m.kind||'bad'}">${esc(m.text)}</div>`:''}
  <div class="flex" style="margin-top:12px">${m&&m.ack?`<button class="primary" id="qa-ack">${esc(m.ack)}</button>`:`<button class="${{buyin:'c-buy',cashout:'c-out',ins:'c-ins',op_out:'c-out',op_in:'c-buy'}[q.k]||'primary'}" id="qa-save">${q.k==='buyin'&&(q.method==='credit'||q.method==='account')?'Confirm and issue chips':q.k==='ins_close'?'Change to cash':'Save'}</button>`}<button class="link" id="qa-cancel">${q.isDefault?'Clear':'Cancel'}</button></div></div>`}
 function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],summary:'',pl:null};const fail=t=>{throw new Error(t)};
@@ -991,9 +996,12 @@ function qaBuild(){const q=S.qa,a=num(q.amount),day=bizDay();const E={legs:[],su
  }
  return E}
 async function qaSave(){const q=S.qa,E=qaBuild(),now=new Date(),day=bizDay();let p=findPlayer(q.player);
+ {const mn0=q.member?(q.member.nickname||q.member.name):'',mm0=q.member&&[mn0,q.member.name||'',`${mn0} #${q.member.member_no}`].map(lname).includes(lname(q.player));
+  if(['buyin','cashout'].includes(q.k)&&!mm0&&!(p&&(p.no||isAcct(p)||acctOf(p)))){S.newGuest=q.player.trim()||'?';render();return false}}
  if(['buyin','cashout'].includes(q.k)&&!q.ack){const nm=p?p.name:q.player.trim(),pp=ppmFor(day,nm),cd=p?cageDay(day,p.id):{buyin:0,cashout:0},after=cd[q.k]+num(q.amount);
   if(((S.ppm[day]||{}).rows||[]).length&&(!pp||Math.abs((pp[q.k]||0)-after)>0.001)){S.qaMsg={kind:'warn',text:pp?`Doesn't match PPM: PPM shows ${q.k==='buyin'?'buy-in':'cash-out'} ${pesoE(pp[q.k])} for ${nm} this business day, the cage would have ${pesoE(after)}. Please check with Marketing.`:`${nm} has no PPM record this business day. Please check with Marketing.`,ack:'Save anyway, I\'ll check with Marketing'};q.ppmFlag=true;render();return false}}
  const mnick=q.member?(q.member.nickname||q.member.name):'';const mm=q.member&&[mnick,q.member.name||'',`${mnick} #${q.member.member_no}`].map(lname).includes(lname(q.player))?q.member:null;
+ if(['buyin','cashout'].includes(q.k)&&!mm&&!(p&&(p.no||isAcct(p)||acctOf(p)))){S.newGuest=q.player.trim()||'?';render();return false}
  if(['buyin','cashout'].includes(q.k)&&!p){const id=await savePlayer({name:mm?mnick:q.player.trim(),...(mm?{no:mm.member_no,group:mm.group_name||''}:{}),note:'',openDep:0,openLoan:0,account:false,createdAt:now.toISOString()});p={id,name:mm?mnick:q.player.trim()}}
  else if(p&&mm&&!p.no&&!MEM){try{await DB.doc('players/'+p.id).update({no:mm.member_no,group:mm.group_name||''})}catch(e){}}
  if(E.toNew){E.to=await savePlayer({...E.toNew,note:'',openDep:0,openLoan:0,account:false,createdAt:now.toISOString()})}
@@ -1048,6 +1056,7 @@ function vInsFloat(){const b=balances();return `<h2>Insurance, mass chips and fo
  <div class="card"><div class="row" style="padding-top:0"><b>Insurance chips (today)</b><b class="num big">${pesoE(b.ins_chips||0)}</b></div>${Math.abs(b.ins_chips||0)>0.001?'<button data-qa="ins_close" style="margin-top:6px">Close today (chips → cash)</button>':''}</div>
  <div class="card"><div class="row" style="padding-top:0"><b>Foreign cash held</b><b class="num big">${pesoE(FX_CUR.reduce((s,c)=>s+((b.fx||{})[c]||{php:0}).php,0))}</b></div><div class="sub">${fxLine(b.fx||{})}</div><div class="sub">Pesos the company advanced at locked rates</div>${(()=>{const G=fxByGuest();return G.length?`<table style="margin-top:6px"><tr><th>Guest 客人</th><th>Foreign 外幣</th><th class="r">Locked 鎖定 ₱</th></tr>${G.map(g=>`<tr><td>${esc(g.who)}</td><td>${fxLine(g.fx)}</td><td class="r num">${pesoE(g.php)}</td><td><button class="link" data-fxrel="${esc(g.key)}" title="Guest will not take the foreign cash back">Release 解除</button></td></tr>`).join('')}</table>`:''})()}<div class="sub" style="margin-top:6px">Company's own, free to exchange 公司可換回披索: ${fxLine(fxFree())}</div></div></div>`}
 function bindQA(){const q=$;
+ if(q('ng-ok'))q('ng-ok').onclick=()=>{S.newGuest=null;render();const el=q('qa-player');if(el){el.focus();el.select()}};
  document.querySelectorAll('[data-fxrel]').forEach(x=>x.onclick=async()=>{if(x.dataset.sure!=='1'){x.dataset.sure='1';x.textContent='Tap again to release 再按一次確認';return}const g=fxByGuest().find(z=>z.key===x.dataset.fxrel);if(!g)return;try{await fxRelease(g);render();flash('Lock released')}catch(e){flash(errMsg(e))}});
  document.querySelectorAll('[data-desk]').forEach(x=>x.onclick=()=>{S.deskKind=x.dataset.desk;qaNew(x.dataset.desk);S.qa.isDefault=true;render();const f=q('qa-player');f&&f.focus()});
  document.querySelectorAll('[data-qa]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.qa);render();const fh=q('form-here');if(fh)fh.scrollIntoView({block:'nearest',behavior:'smooth'});const f=q('qa-player')||q('qa-amt');f&&f.focus({preventScroll:!!fh})});
