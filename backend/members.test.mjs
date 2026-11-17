@@ -579,4 +579,21 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   const p2 = (await call('/members?limit=2&offset=2&sort=new', 'GET', null, token)).body;
   assert.deepEqual(p2.members.map((m) => m.member_no), all.slice(2, 4).map((m) => m.member_no), 'pages line up');
 }
+{ // Rewards page: issue a comp; the cage records it when it pays
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', amount: 1200, detail: 'airport' }, token)).status, 400, 'airfare or taxi');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', sub: 'Taxi', amount: 1200, detail: '' }, token)).status, 400, 'detail');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'NOPE', type: 'hotel', amount: 1, detail: 'x' }, token)).status, 400, 'member');
+  const r1 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', sub: 'Taxi', amount: 1200, detail: 'Hotel to club', pay: 'cash', date: '2026-11-17' }, token)).body;
+  assert.ok(r1.ok && r1.cage === 'cash');
+  const r2 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'free_chip', amount: 2000, detail: 'Birthday', pay: 'chips', date: '2026-11-17' }, token)).body;
+  const c1 = sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r1.id);
+  const d1 = JSON.parse(c1.data);
+  assert.equal(d1.type, 'op_out'); assert.deepEqual(d1.legs, [{ a: 'cf', m: 'cash', v: -1200 }]); assert.equal(d1.cat, 'Player comps · Transportation · Taxi'); assert.equal(d1.date, '2026-11-17');
+  assert.deepEqual(JSON.parse(sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r2.id).data).legs, [{ a: 'chip', m: 'chips', v: -2000 }]);
+  const list = (await call('/rewards/list?from=2026-11-17&to=2026-11-17', 'GET', null, token)).body.rewards;
+  const t = list.find((x) => x.id === r1.id);
+  assert.equal(t.detail, 'Taxi: Hotel to club'); assert.equal(t.cage.how, 'cash');
+  assert.equal((await call(`/rewards/${r1.id}/void`, 'POST', { staff: 'K. Lim', reason: 'Wrong player' }, token)).status, 200);
+  assert.equal(JSON.parse(sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r1.id).data).voided, true);
+}
 console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval, junket label, quick add from PPM');
