@@ -366,7 +366,7 @@ async function viewMember(view, no) {
       </div>
     </section>
     <div class="row between"><div role="group" aria-label="Period" class="seg">
-        <button type="button" data-period="30" aria-pressed="${period === '30'}">Last 30 days</button><button type="button" data-period="all" aria-pressed="${period === 'all'}">All time</button><label class="small" style="display:flex;align-items:center;gap:6px;padding:0 10px">Business day<input type="date" id="mDay" max="${today()}" style="width:auto;padding:4px 6px"></label></div>
+        <button type="button" data-period="30" aria-pressed="${period === '30'}">Last 30 days</button><button type="button" data-period="all" aria-pressed="${period === 'all'}">All time</button><label class="small" style="display:flex;align-items:center;gap:6px;padding:0 10px">Business days<input type="date" id="mFrom" max="${today()}" style="width:auto;padding:4px 6px"> to <input type="date" id="mTo" max="${today()}" value="${today()}" style="width:auto;padding:4px 6px"></label><button type="button" id="mRange">Show</button></div>
       <span class="small muted">Playing hours = time at the table − rest</span></div>
     <div class="grid" id="statTiles">${statTiles(period === 'all' ? sAll : s30)}</div>
     ${(data.playing || []).map((x) => `<section class="card" style="border:2px solid var(--gold);display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center">
@@ -402,7 +402,7 @@ async function viewMember(view, no) {
         <div id="rmsg" style="grid-column:1/-1"></div>
       </form>
       <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Detail</th><th class="num">Value</th><th>Charged to</th><th>Recorded · approved</th><th></th></tr></thead><tbody>
-      ${data.rewards.map((r) => `<tr style="${r.voided ? 'opacity:.55;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small" style="text-decoration:none">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}${r.approved_at ? ' · ' + esc(r.approved_by) : (r.voided ? '' : ' · <span class="chip amber">Waiting</span>')}</td><td class="row" style="flex-wrap:nowrap">${!r.voided && !r.approved_at && isManager() ? `<button class="btn sm primary" data-approve="${r.id}">Approve</button>` : ''}${!r.voided && isMaster() ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing recorded yet.</td></tr>'}
+      ${data.rewards.map((r) => `<tr data-given="${r.given_at}" style="${r.voided ? 'opacity:.55;text-decoration:line-through' : ''}"><td>${day(r.given_at)}</td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}${r.voided ? `<div class="small" style="text-decoration:none">Voided: ${esc(r.void_reason)}</div>` : ''}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}${r.approved_at ? ' · ' + esc(r.approved_by) : (r.voided ? '' : ' · <span class="chip amber">Waiting</span>')}</td><td class="row" style="flex-wrap:nowrap">${!r.voided && !r.approved_at && isManager() ? `<button class="btn sm primary" data-approve="${r.id}">Approve</button>` : ''}${!r.voided && isMaster() ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nothing recorded yet.</td></tr>'}
       </tbody></table></div>
       <p class="small muted" style="margin:0">Chips, hotel stays, transportation and tournament tickets are recorded at their peso value so every type adds up. PromoChip counts as Free Chip. Each reward is charged to the player's group on the date it was given.</p>
     </section>
@@ -478,22 +478,25 @@ async function viewMember(view, no) {
     period = b.dataset.period; try { localStorage.setItem('everest-period', period); } catch (e) {}
     view.querySelectorAll('[data-period]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.period === period)));
     view.querySelector('#statTiles').innerHTML = statTiles(period === 'all' ? sAll : s30);
-    const di = view.querySelector('#mDay'); if (di) di.value = '';
-    view.querySelectorAll('tr[data-start]').forEach((tr) => { tr.hidden = false; });
+    const di = view.querySelector('#mFrom'); if (di) di.value = '';
+    view.querySelectorAll('tr[data-start],tr[data-given]').forEach((tr) => { tr.hidden = false; });
     const dn = view.querySelector('#mDayNote'); if (dn) dn.remove();
   });
   // One business day: totals for that day only, and only that day's game sessions in the list.
-  const dayIn = view.querySelector('#mDay');
-  if (dayIn) dayIn.onchange = async () => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayIn.value)) return;
+  const fromIn = view.querySelector('#mFrom'), toIn = view.querySelector('#mTo'), rangeBtn = view.querySelector('#mRange');
+  if (fromIn && toIn) fromIn.onchange = () => { if (!toIn.value || toIn.value < fromIn.value) toIn.value = fromIn.value; };
+  if (rangeBtn) rangeBtn.onclick = async () => {
+    const f = fromIn.value || toIn.value, t = toIn.value || fromIn.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f) || !/^\d{4}-\d{2}-\d{2}$/.test(t)) { alert('Choose the first and the last business day.'); return; }
     try {
-      const d = await api('/members/' + encodeURIComponent(no) + '?day=' + dayIn.value), st = d.stats.day;
+      const d = await api('/members/' + encodeURIComponent(no) + '?from=' + f + '&to=' + t), st = d.stats.day;
       view.querySelectorAll('[data-period]').forEach((x) => x.setAttribute('aria-pressed', 'false'));
       view.querySelector('#statTiles').innerHTML = statTiles(st);
       view.querySelectorAll('tr[data-start]').forEach((tr) => { const t = Number(tr.dataset.start); tr.hidden = !(t >= st.start && t < st.end); });
       let dn = view.querySelector('#mDayNote');
       if (!dn) { dn = document.createElement('div'); dn.id = 'mDayNote'; dn.className = 'small muted'; view.querySelector('#statTiles').after(dn); }
-      dn.textContent = `Business day ${st.day}${st.is_today ? ' (today, includes the game in progress)' : ''} · Game sessions below show this day only. Click Last 30 days or All time to go back.`;
+      view.querySelectorAll('tr[data-given]').forEach((tr) => { const t = Number(tr.dataset.given); tr.hidden = !(t >= st.start && t < st.end); });
+      dn.textContent = `${st.from === st.to ? 'Business day ' + st.from : 'Business days ' + st.from + ' to ' + st.to}${st.is_today ? ' (includes the game in progress)' : ''} · Game sessions below show this period only. Click Last 30 days or All time to go back.`;
     } catch (err) { alert(err.message); }
   };
   view.querySelectorAll('[data-co]').forEach((b) => b.onclick = async () => {

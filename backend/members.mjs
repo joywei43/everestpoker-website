@@ -646,8 +646,15 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.member_id=? AND ps.start_at>=? AND ps.start_at<?`).bind(m.id, since, until).first();
       const rwSum = (since, until = 1e12) => env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN approved_at IS NOT NULL THEN amount ELSE 0 END),0) amt, COALESCE(SUM(CASE WHEN approved_at IS NULL THEN amount ELSE 0 END),0) pending FROM rewards WHERE member_id=? AND voided=0 AND given_at>=? AND given_at<?').bind(m.id, since, until).first();
       // ?day=YYYY-MM-DD: the same totals for one business day.
-      const dayQ = new URL(req.url).searchParams.get('day');
-      const bdQ = /^\d{4}-\d{2}-\d{2}$/.test(dayQ || '') ? await businessDay(env, now, dayQ) : null;
+      // ?from=&to=: a range of business days (from the start of the first to the end of the last).
+      const sp = new URL(req.url).searchParams, dRe = /^\d{4}-\d{2}-\d{2}$/;
+      const dayQ = sp.get('day'), fromQ = sp.get('from') || dayQ, toQ = sp.get('to') || dayQ;
+      let bdQ = null;
+      if (dRe.test(fromQ || '') && dRe.test(toQ || '')) {
+        const [a, z] = fromQ <= toQ ? [fromQ, toQ] : [toQ, fromQ];
+        const b1 = await businessDay(env, now, a), b2 = a === z ? b1 : await businessDay(env, now, z);
+        bdQ = { day: a === z ? a : a + ' – ' + z, from: a, to: z, start: b1.start, end: b2.end, is_today: b2.is_today };
+      }
       const [s30, sAll, r30, rAll, sDay, rDay] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0), bdQ ? stat(bdQ.start, bdQ.end) : null, bdQ ? rwSum(bdQ.start, bdQ.end) : null]);
       { // a game still in progress counts too (time and buy-in so far; no cash-out yet)
         const seat = (await liveSeats(env)).find((x) => x.member_id === m.id && x.started != null);
@@ -676,7 +683,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         playing,
         member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups, dupsM),
         stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share,
-          ...(sDay ? { day: { ...sDay, rewards: rDay.amt, rewards_pending: rDay.pending, day: bdQ.day, start: bdQ.start, end: bdQ.end, is_today: bdQ.is_today } } : {}) },
+          ...(sDay ? { day: { ...sDay, rewards: rDay.amt, rewards_pending: rDay.pending, day: bdQ.day, from: bdQ.from, to: bdQ.to, start: bdQ.start, end: bdQ.end, is_today: bdQ.is_today } } : {}) },
         sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id), pending_change: pendingBySession.get(s.id) || null })),
         rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
         group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),
