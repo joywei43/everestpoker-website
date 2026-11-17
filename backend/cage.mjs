@@ -4,7 +4,7 @@
 import { auditStmt } from './audit.mjs';
 import { handleOperation } from './operation.mjs';
 
-const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos'];
+const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos', 'corrections'];
 const SETTINGS = ['config', 'manpower']; // starting balances, rates and staff costs: changes go to the History Log
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { photos: 400000 };
@@ -72,6 +72,20 @@ export async function handleCage(req, env, path, now, reply, user, role) {
       data = { ...data, by: (old && old.by) || String(user || '') };
       if (data.voided && !(old && old.voided)) data.voidedBy = String(user || '');
       else if (old && old.voidedBy) data.voidedBy = old.voidedBy;
+    }
+    // Correction requests: anyone asks; a manager decides; a change of amount (or removing a record) needs the owner (master).
+    if (coll === 'corrections') {
+      const old = cur && !cur.deleted ? JSON.parse(cur.data) : null;
+      if (op === 'delete') return reply({ error: 'Correction requests are kept.' }, 403);
+      if (!old) { if (data.status !== 'pending') return reply({ error: 'A new request starts as pending.' }, 400); data = { ...data, requestedBy: String(user || '') }; }
+      else {
+        if (old.status !== 'pending') return reply({ error: 'This request was already decided.' }, 409);
+        if (['approved', 'rejected'].includes(data.status)) {
+          if (role === 'staff') return reply({ error: 'Only a manager can approve or reject a correction.' }, 403);
+          if (data.status === 'approved' && old.money && role !== 'master') return reply({ error: 'This correction changes an amount: only the owner can approve it.' }, 403);
+          data = { ...old, status: data.status, note: String(data.note || '').slice(0, 300), newEntry: data.newEntry || null, decidedBy: String(user || ''), decidedAt: new Date(now * 1000).toISOString() };
+        } else data = { ...old };
+      }
     }
     const text = data ? JSON.stringify(data) : null;
     if (text && text.length > (MAX[coll] || 120000)) return reply({ error: 'Too large' }, 413);
