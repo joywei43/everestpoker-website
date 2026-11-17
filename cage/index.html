@@ -1017,7 +1017,7 @@ function vCorrForm(e){const f=S.corrF||{};const canM=CORR_M[e.type]&&e.method!==
  return `<div class="card" style="margin:4px 0"><b>Request a correction 更正申請</b> <span class="sub">${esc(e.summary||'')}</span>
   <label style="display:flex;gap:8px;align-items:center;color:var(--ink);margin-top:6px"><input type="checkbox" id="cr-rm" style="width:auto" ${f.remove?'checked':''}> Remove this record (entered by mistake) 刪除這筆（記錯）</label>
   ${f.remove?'':`<div class="form2"><div><label>Amount 金額 (₱)</label><input id="cr-amt" inputmode="decimal" value="${esc(f.amount??e.amount)}"></div>
-  ${canP?`<div><label>Player 人名</label><select id="cr-pl">${PL.map(p=>`<option value="${p.id}" ${(f.player??e.player)===p.id?'selected':''}>${esc(pLabel(p))}</option>`).join('')}</select></div>`:''}</div>
+  ${canP?`<div style="position:relative"><label>Player 人名 <span class="sub">now: ${esc(playerName(e.player))}</span></label><input id="cr-plq" autocomplete="off" value="${esc(f.plLabel||'')}" placeholder="Leave empty to keep · type to search 留空不改，輸入搜尋"><div id="cr-sugg"></div>${f.player&&f.player!==e.player?`<div class="sub" style="margin-top:4px">→ change to <b>${esc(f.plLabel||playerName(f.player))}</b></div>`:''}</div>`:''}</div>
   ${canM?`<label>${e.type==='buyin'?'Buy-in':'Cash-out'} method 方式</label>${seg('crm',CORR_M[e.type],f.method??(e.method==='credit'?'account':e.method))}`:''}`}
   <label>Reason 理由 (required 必填)</label><input id="cr-why" value="${esc(f.reason||'')}">
   <div class="sub" style="margin-top:4px">A change of amount, or removing the record, needs the owner. Other changes need a manager. 金額異動、刪除需 Owner 批准；其他由 Manager 批准。</div>
@@ -1040,7 +1040,13 @@ function bindCorr(){const q=$;
  if(q('cr-x'))q('cr-x').onclick=()=>{S.creq=null;render()};
  if(q('cr-rm'))q('cr-rm').onchange=()=>{S.corrF.remove=q('cr-rm').checked;render()};
  if(q('cr-amt'))q('cr-amt').oninput=()=>{S.corrF.amount=q('cr-amt').value};
- if(q('cr-pl'))q('cr-pl').onchange=()=>{S.corrF.player=q('cr-pl').value};
+ if(q('cr-plq')){const el=q('cr-plq'),box=q('cr-sugg');const pickP=(id,label)=>{S.corrF.player=id;S.corrF.plLabel=label;render()};
+  const show=(loc,mem)=>{box.innerHTML=`<div class="flex" style="flex-wrap:wrap;gap:6px;margin-top:6px">${loc.map(p=>`<button type="button" data-crp="${p.id}">${esc(pLabel(p))}</button>`).join('')}${mem.map(m=>`<button type="button" data-crm="${esc(m.member_no)}" data-crn="${esc(m.nickname||m.name)}">${esc(m.nickname||m.name)} #${esc(m.member_no)}</button>`).join('')}</div>`;
+   box.querySelectorAll('[data-crp]').forEach(b=>b.onclick=()=>pickP(b.dataset.crp,b.textContent));
+   box.querySelectorAll('[data-crm]').forEach(b=>b.onclick=async()=>{const no=b.dataset.crm,ex=S.players.find(x=>x.no&&normNo(x.no)===normNo(no));if(ex){pickP(ex.id,pLabel(ex));return}const id=await savePlayer({name:b.dataset.crn,no,note:'',openDep:0,openLoan:0,account:false,createdAt:new Date().toISOString()});pickP(id,b.dataset.crn+' #'+no)})};
+  el.oninput=()=>{const t=el.value.trim();S.corrF.plLabel=el.value;if(!t){S.corrF.player=null;box.innerHTML='';return}const k=nkey(t),n=t.replace(/\D/g,'');
+   const loc=S.players.filter(p=>(p.no||isAcct(p)||acctOf(p))&&(nkey(p.name).includes(k)||(n&&p.no&&normNo(p.no).includes(n)))).slice(0,8);show(loc,[]);
+   memberSearch(t,list=>{if(el.value.trim()!==t)return;show(loc,(list||[]).filter(m=>!loc.some(p=>p.no&&normNo(p.no)===normNo(m.member_no))).slice(0,6))})}}
  if(q('cr-why'))q('cr-why').oninput=()=>{S.corrF.reason=q('cr-why').value};
  document.querySelectorAll('[data-field=crm] button').forEach(b=>b.onclick=()=>{S.corrF.method=b.dataset.v;render()});
  if(q('cr-send'))q('cr-send').onclick=async()=>{const e=S.entries.find(x=>x.id===S.creq),f=S.corrF,err=q('cr-err');if(!(f.reason||'').trim()){err.textContent='Write the reason. 請寫理由。';return}
