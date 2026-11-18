@@ -157,19 +157,26 @@ function balances(upTo){
   }}
  const il=insLive();if(il)for(const [d,x] of Object.entries(il.days)){if(d<st.openDate||d<INS_LINK||(upTo&&d>upTo)||(lastClose&&d<=lastClose))continue;b.ins_chips=round2((b.ins_chips||0)+x.net)}
  return b}
-function midoriMonth(m){
+/* Days MIDORI's numbers were not typed at the cage come from the Operation Report (Revenue = rake, BBJ collected). */
+let OPREP={};
+function opReport(m){const c=OPREP[m];if((!c||Date.now()-c.at>60000)&&!(c&&c.loading)&&typeof api==='function'&&!MEM&&typeof TOKEN!=='undefined'&&TOKEN){const [Y,M]=m.split('-').map(Number),to=m+'-'+String(new Date(Y,M,0).getDate()).padStart(2,'0');OPREP[m]={...(c||{days:{}}),loading:true,at:c?c.at:0};
+  api('/report?from='+m+'-01&to='+to).then(r=>{const days={};for(const x of r.days||[])if(x.revenue!=null||x.bbj_amount!=null)days[x.day]={rev:Number(x.revenue||0),bbj:Number(x.bbj_amount||0),hasRev:x.revenue!=null,hasBbj:x.bbj_amount!=null};const changed=JSON.stringify(days)!==JSON.stringify(c&&c.days);OPREP[m]={days,at:Date.now()};if(changed&&canRender())render()}).catch(e=>{OPREP[m]={days:(c&&c.days)||{},err:errMsg(e),at:Date.now()}})}
+ return (OPREP[m]&&OPREP[m].days)||{}}
+function midoriMonth(m,cageOnly){
  const st=settings();const days=Object.entries(S.midori).filter(([d])=>monthOf(d)===m).sort();
- const tbl={};let R=0,B=0;
+ const tbl={};let R=0,B=0,repR=0,repB=0,repDays=0;
  for(const [d,v] of days){for(const t of TABLES){const r=Number((v.rake||{})[t]||0),bb=Number((v.bbj||{})[t]||0);R+=r;B+=bb;tbl[t]=tbl[t]||{r:0,b:0};tbl[t].r+=r;tbl[t].b+=bb}}
+ for(const [d,o] of Object.entries(opReport(m))){if(cageOnly&&d<st.openDate)continue;const v=S.midori[d],hr=v&&TABLES.some(t=>Number((v.rake||{})[t]||0)),hb=v&&TABLES.some(t=>Number((v.bbj||{})[t]||0));let used=false;
+  if(!hr&&o.hasRev&&o.rev){R+=o.rev;repR+=o.rev;used=true}if(!hb&&o.hasBbj&&o.bbj){B+=o.bbj;repB+=o.bbj;used=true}if(used)repDays++}
  const pag=R*st.pagcorRate,short=Math.max(0,st.pagcorMin-pag);
  const rakeNet=R*st.everestRakeRate-st.rent-short;const bbj21=B*st.bbjEverestRate;
  const settled=liveEntries().filter(e=>e.type==='midori_pay'&&e.forMonth===m);
  const paidRake=settled.reduce((s,e)=>s+Number(e.rakePart||0),0),paidBbj=settled.reduce((s,e)=>s+Number(e.bbjPart||0),0);
- return{days,R,B,pag,short,cdc:R*st.cdcRate,rakeNet,bbj21,paidRake,paidBbj,dueRake:rakeNet-paidRake,dueBbj:bbj21-paidBbj,tbl}}
+ return{days,repR,repB,repDays,R,B,pag,short,cdc:R*st.cdcRate,rakeNet,bbj21,paidRake,paidBbj,dueRake:rakeNet-paidRake,dueBbj:bbj21-paidBbj,tbl}}
 function allMonths(){const s=new Set([monthOf(bizDay())]);for(const d of Object.keys(S.midori))s.add(monthOf(d));for(const e of S.entries)s.add(monthOf(e.date));return[...s].filter(Boolean).sort().reverse()}
 function receivables(){
  const st=settings();let rake=0,bbj=0;const rows=[];
- for(const m of allMonths().slice().reverse()){const x=midoriMonth(m);if(!x.days.length&&!x.paidRake&&!x.paidBbj)continue;rows.push([m,x]);rake+=x.dueRake;bbj+=x.dueBbj}
+ for(const m of allMonths().slice().reverse()){const x=midoriMonth(m,true);if(!x.days.length&&!x.paidRake&&!x.paidBbj)continue;rows.push([m,x]);rake+=x.dueRake;bbj+=x.dueBbj}
  return{rows,rake:rake+Number(st.open.arCarry||0),bbj,carry:Number(st.open.arCarry||0)}}
 
 /* ---------- build legs for each entry type ---------- */
@@ -1207,6 +1214,7 @@ function vMidoriGap(m){const st=settings(),x=midoriMonth(m);const pag=Math.max(s
  const need=Math.max(0,be-x.R);
  return `<div class="grid g2"><div class="card"><b>${m} · what MIDORI takes</b>
  <div class="row"><span>Rake so far</span><b class="num">${peso(x.R)}</b></div>
+ ${x.repDays?`<div class="row"><span class="sub">incl. ${x.repDays} day${x.repDays>1?'s':''} from the Operation Report (Revenue) not typed here: rake ${peso(x.repR)}${x.repB?` · BBJ ${peso(x.repB)}`:''} · 含營運報表營收</span><span></span></div>`:''}
  <div class="row"><span>Rent (base)</span><span class="num">${peso(st.rent)}</span></div>
  <div class="row"><span>PAGCOR · 25% or minimum ${peso(st.pagcorMin)}</span><span class="num">${peso(pag)}</span></div>
  <div class="row"><span class="sub">of which 25% of rake ${peso(x.pag)} · we top up ${peso(x.short)}</span><span></span></div>
