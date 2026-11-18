@@ -210,10 +210,10 @@ async function saveMidoriDay(d,v){if(MEM){S.midori[d]=v;render();return}await DB
 async function saveSettings(s){if(MEM){S.settings=s;render();return}await DB.doc('config/settings').set(s)}
 
 /* ---------- views ---------- */
-const TABS=[['counts','Cage'],['overview','Overview'],['entry','Record'],['players','Players'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
+const TABS=[['counts','Cage'],['overview','Overview'],['entry','Record'],['players','Players'],['flow','Daily flow'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
 function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{if(b.dataset.tab==='counts'&&S.cnt&&S.cnt.step==='report')S.cnt=null;if(b.dataset.tab==='counts')S.cw=null;S.tab=b.dataset.tab;S.pending=null;render()})}
-function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
+function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
  const dc=$('day-clear');if(dc)dc.onclick=()=>{S.dayOverride=null;try{sessionStorage.removeItem('cage-day')}catch(e){}render()}}
 
 function pouchCard(b,p){if(p.held){const v=b.pd_cash||0;return `<div class="card"><div class="row" style="padding-top:0"><b>${p.l}</b><span class="big num ${v<0?'neg':''}">${pesoE(v)}</span></div><div class="sub">Players' money · not usable cash</div></div>`}const parts=p.media.map(m=>[m,b[p.k+'_'+m]||0]);const tot=parts.reduce((s,x)=>s+x[1],0);
@@ -352,6 +352,27 @@ function vMidori(){
  <tr><td><b>Total</b></td>${TABLES.map(t=>`<td class="r num">${(x.tbl[t]||{r:0}).r.toLocaleString('en-US')}</td>`).join('')}<td class="r num"><b>${x.R.toLocaleString('en-US')}</b></td><td class="r num"><b>${x.B.toLocaleString('en-US')}</b></td><td></td></tr></table></div>`}
 
 /* ledger */
+/* Daily flow: for one business day, each pouch's start, where money came in from and went out to, and the end. */
+const FLOW_P=[['cf_cash','cf','cash','Cash float 現金流'],['day_cash','day','cash','On-day cash 當日現金'],['pd_cash','pd','cash','Player deposits held 玩家存款現金'],['chip_chips','chip','chips','Chip float 籌碼'],['mass_chips','mass','chips','Mass chips'],['ins_cash','ins','cash','Insurance cash 保險現金'],['ins_chips','ins','chips','Insurance chips 保險籌碼']];
+function flowLabel(e){let l=typeLabel(e.type);if(e.cat)l+=' · '+e.cat;if((e.type==='buyin'||e.type==='cashout')&&e.method&&e.method!=='cash')l+=' · '+({account:e.type==='buyin'?'Credit IN':'Credit OUT',credit:'Credit IN',fx:'Foreign cash',mass:'Mass chip'}[e.method]||e.method);return l}
+function vFlow(){const day=S.flowDay||bizDay(),st=settings();const [y,m,d]=day.split('-').map(Number);const pv=new Date(Date.UTC(y,m-1,d-1)).toISOString().slice(0,10);
+ const b0=balances(pv),b1=balances(day);const ents=liveEntries().filter(e=>e.date===day&&e.date>=st.openDate);
+ const sec=FLOW_P.map(([key,a,med,name])=>{const g=new Map();let sum=0;
+  for(const e of ents){if(e.type==='ins'&&e.date>=INS_LINK)continue;for(const l of e.legs||[]){if(l.a!==a||(l.m||'cash')!==med||!l.v)continue;const k=flowLabel(e),x=g.get(k)||{in:0,out:0,n:0,list:[]};if(l.v>0)x.in+=l.v;else x.out-=l.v;x.n++;x.list.push(e);g.set(k,x);sum+=l.v}}
+  const s0=Number(b0[key]||0),s1=Number(b1[key]||0),other=round2(s1-s0-sum);
+  if(!g.size&&!s0&&!s1)return '';
+  const rows=[...g.entries()].sort((x,y)=>(y[1].in+y[1].out)-(x[1].in+x[1].out));const tin=rows.reduce((t,[,x])=>t+x.in,0),tout=rows.reduce((t,[,x])=>t+x.out,0);
+  return `<div class="card"><div class="row" style="padding-top:0"><b style="font-size:16px">${name}</b><span class="sub">${med==='chips'?'Chips':'Cash'}</span></div>
+  <table><tr><th>Where from / to 來源 / 去向</th><th class="r">In 進</th><th class="r">Out 出</th><th class="r">#</th></tr>
+  <tr><td><b>Start of day 開始</b></td><td class="r num" colspan="2"><b>${peso(s0)}</b></td><td></td></tr>
+  ${rows.map(([k,x])=>`<tr><td>${esc(k)}<div class="sub">${x.list.slice(0,6).map(e=>esc((e.time||'')+' '+(e.summary||''))).join('<br>')}${x.list.length>6?`<br>… ${x.list.length-6} more`:''}</div></td><td class="r num pos">${x.in?'+'+peso(x.in):''}</td><td class="r num neg">${x.out?'−'+peso(x.out):''}</td><td class="r num">${x.n}</td></tr>`).join('')}
+  ${Math.abs(other)>.004?`<tr><td>Automatic (insurance page / close reset) 自動帶入</td><td class="r num pos">${other>0?'+'+peso(other):''}</td><td class="r num neg">${other<0?'−'+peso(-other):''}</td><td></td></tr>`:''}
+  <tr><td><b>Total in / out</b></td><td class="r num pos"><b>+${peso(tin+Math.max(0,other))}</b></td><td class="r num neg"><b>−${peso(tout+Math.max(0,-other))}</b></td><td></td></tr>
+  <tr><td><b>End of day 結束</b></td><td class="r num" colspan="2"><b>${peso(s1)}</b></td><td></td></tr></table></div>`}).filter(Boolean);
+ return `<h2>Daily flow 每日資金流向</h2><div class="flex"><button id="fl-prev">‹ Previous day</button><input type="date" id="fl-day" value="${esc(day)}" style="max-width:200px"><button id="fl-next">Next day ›</button><button id="fl-today">Today</button><span class="sub">Business day ${esc(day)} 12:00 – next day 11:59 · ${ents.length} records</span></div>
+ ${day<st.openDate?`<div class="note warn">Before the cage start date (${esc(st.openDate)}). Nothing was recorded in the cage then.</div>`:''}
+ <div class="sub" style="margin:6px 0 10px">Each pouch: start of the day, every kind of money in and out (grouped, with the records under it), and the end of the day. 每個錢袋：開始、各項進出（含明細）、結束。</div>
+ <div class="grid g2">${sec.join('')||'<div class="sub">No money moved this day.</div>'}</div>`}
 function vLedger(){const f=S.ledgerFilter;
  let list=S.entries.slice().sort(byNewest);
  if(f.month)list=list.filter(e=>monthOf(e.date)===f.month);if(f.type)list=list.filter(e=>e.type===f.type);if(f.pouch)list=list.filter(e=>(e.legs||[]).some(g=>g.a===f.pouch));
@@ -1279,6 +1300,7 @@ function bind(){
   if(bad){q('md-err').textContent='Amounts must be 0 or more.';return}
   try{await saveMidoriDay(d,v);S.month=monthOf(d);flash('Saved '+d)}catch(err){q('md-err').textContent=errMsg(err)}};
  ['month','pouch','type'].forEach(k=>{const el=q('lf-'+k);if(el)el.onchange=()=>{S.ledgerFilter[k]=el.value;render()}});
+ if(q('fl-day')){const go=n=>{const [y,m,d]=(S.flowDay||bizDay()).split('-').map(Number);S.flowDay=new Date(Date.UTC(y,m-1,d+n)).toISOString().slice(0,10);render()};q('fl-day').onchange=e=>{S.flowDay=e.target.value||null;render()};q('fl-prev').onclick=()=>go(-1);q('fl-next').onclick=()=>go(1);q('fl-today').onclick=()=>{S.flowDay=null;render()}}
  if(q('lf-csv'))q('lf-csv').onclick=async()=>{const rows=[['Business day','Time','Type','Details','Cash float','Insurance cash','Insurance chips','On-day cash','Chip float','Note','Voided']];
   for(const e of S.entries.slice().sort(byNewest).reverse()){const v=k=>(e.legs||[]).filter(g=>g.a+'_'+g.m===k).reduce((s,g)=>s+g.v,0);
    rows.push([e.date,e.time,typeLabel(e.type),e.summary,v('cf_cash'),v('ins_cash'),v('ins_chips'),v('day_cash'),v('chip_chips'),e.note,e.voided?'yes':''])}
