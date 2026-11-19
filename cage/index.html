@@ -988,7 +988,7 @@ function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (�
   <label>How it leaves</label>${seg('qadir',[['return','Returned to guest (guest pays back pesos)'],['exchange','Exchanged at a money changer']],q.dir)}
   <label>Foreign amount (${q.cur})</label><input id="qa-fv" inputmode="decimal" value="${esc(q.fv)}" placeholder="0">
   <div class="row" style="margin-top:6px"><span class="sub">Value at the locked rate</span><span class="num" id="qa-lock">${pesoE(lock)}</span></div>
-  ${q.dir==='return'?`<label>Guest</label><input id="qa-player" value="${esc(q.player)}" placeholder="Name">`:''}
+  ${q.dir==='return'?`<div class="note warn" style="margin-top:8px">For a guest who changed money with us, use <b>Guest buys back foreign cash 客人換回外幣</b>: pick the guest and their lock is cleared. 換匯客人換回請用這個按鈕。<br><button class="primary" data-qa="fx_back" style="margin-top:6px">Go to Guest buys back foreign cash</button></div><label>Guest</label><input id="qa-player" value="${esc(q.player)}" placeholder="Name">`:''}
   <label>Pesos received into cash float</label><input id="qa-amt" inputmode="decimal" value="${esc(q.amount)}" placeholder="${lock||0}"><div class="sub">Any difference from the locked value is recorded as FX gain or loss.</div>${apprField(q)}`}
  const m=S.qaMsg;
  const ng=S.newGuest?`<div id="ng-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"><div style="max-width:560px;width:100%;background:var(--card,#222);border-radius:14px;padding:22px;border:2px solid #E8A317">
