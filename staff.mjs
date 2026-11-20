@@ -10,7 +10,7 @@ export const newSalt = () => hex(crypto.getRandomValues(new Uint8Array(16)));
 
 const bad = (reply, msg, status = 400) => reply({ error: msg }, status);
 const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
-const ROLES = ['admin', 'staff'];
+const ROLES = ['admin', 'staff', 'senior', 'dealer']; // senior = Senior Dealer (read only + insurance), dealer = insurance only
 
 export async function handleStaff(req, env, path, now, reply, user, role, isMaster = () => false) {
   // Only the master account manages staff accounts.

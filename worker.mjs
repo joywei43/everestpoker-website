@@ -4,6 +4,7 @@ import { handleStaff } from './staff.mjs';
 import { handleOperation, recordTableRuns, handleTableRuns, handleAnnounce, handleLineupPublic } from './operation.mjs';
 import { handleReport } from './report.mjs';
 import { handleInsurance } from './insurance.mjs';
+import { handleCage } from './cage.mjs';
 import { auditStmt, ppmChanges, handleAudit } from './audit.mjs';
 const enc = new TextEncoder();
 // Master accounts are fixed in wrangler.toml (MASTER_USERS) so nobody can grant themselves master from the console.
@@ -50,7 +51,7 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(scheduledSync(env))
   // Staff accounts live in D1. admin01 + ADMIN_PASSWORD keeps working only until an admin01 staff row exists.
   const staff=await env.DB.prepare('SELECT username,display_name,pw_hash,salt,iterations,active,role FROM staff WHERE username=?').bind(username).first();
   let user=null,role='admin';
-  if(staff){if(staff.active&&await equal(await pbkdf2(input.password,staff.salt,staff.iterations),staff.pw_hash)){user=staff.display_name;role=isMaster(env,staff.username)?'master':staff.role==='staff'?'staff':'admin';}}
+  if(staff){if(staff.active&&await equal(await pbkdf2(input.password,staff.salt,staff.iterations),staff.pw_hash)){user=staff.display_name;role=isMaster(env,staff.username)?'master':['staff','senior','dealer'].includes(staff.role)?staff.role:'admin';}}
   else if(username.toLowerCase()==='admin01'&&env.ADMIN_PASSWORD&&await equal(input.password,env.ADMIN_PASSWORD)){user='admin01';role=isMaster(env,'admin01')?'master':'admin';}
   if(!user){try{await auditStmt(env,now,username.slice(0,60),'staff.login_failed','Wrong password or disabled account').run();}catch(e){}return reply({error:'帳號或密碼不正確'},401);}
   const bytes=crypto.getRandomValues(new Uint8Array(32));const token=Array.from(bytes).map(x=>x.toString(16).padStart(2,'0')).join('');const hashed=await digest(token);
@@ -71,17 +72,26 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(scheduledSync(env))
  if(path==='/state'&&req.method==='GET'){
   const row=await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();return reply({version:row.version,state:JSON.parse(row.data)});
  }
- if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||path==='/me'||path==='/promotions'||path.startsWith('/promotions/')||path==='/staff'||path.startsWith('/staff/')||path==='/operation'||path.startsWith('/operation/')||path==='/report'||path.startsWith('/report/')||path==='/audit'||path==='/announce'||path==='/insurance'||path.startsWith('/insurance/')||isMemberApi(path)){
+ if((path==='/state'&&req.method==='PUT')||(path==='/logout'&&req.method==='POST')||(path==='/ppm'&&['GET','PUT'].includes(req.method))||path==='/me'||path==='/promotions'||path.startsWith('/promotions/')||path==='/staff'||path.startsWith('/staff/')||path==='/operation'||path.startsWith('/operation/')||path==='/report'||path.startsWith('/report/')||path==='/audit'||path==='/announce'||path==='/insurance'||path.startsWith('/insurance/')||path==='/cage'||path.startsWith('/cage/')||isMemberApi(path)){
   const bearer=req.headers.get('Authorization')||'';if(!/^Bearer [a-f0-9]{64}$/.test(bearer))return reply({error:'Login required'},401);
   const hashed=await digest(bearer.slice(7));const session=await env.DB.prepare('SELECT expires FROM sessions WHERE token=?').bind(hashed).first();if(!session||session.expires<=now)return reply({error:'Session expired'},401);
   if(path==='/logout'){await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(hashed),env.DB.prepare('DELETE FROM session_users WHERE token=?').bind(hashed)]);return reply({ok:true});}
-  const owner=await env.DB.prepare('SELECT username,role FROM session_users WHERE token=?').bind(hashed).first();const user=owner?owner.username:null,role=isMaster(env,user)?'master':owner?owner.role:'admin';
+  const owner=await env.DB.prepare('SELECT username,role FROM session_users WHERE token=?').bind(hashed).first();const user=owner?owner.username:null;let role=isMaster(env,user)?'master':owner?owner.role:'admin';
   if(path==='/me')return reply({user,role});
+  // Dealer: the insurance app only. Senior Dealer: sees everything, changes nothing except selling and settling insurance at the table.
+  const realRole=role,insPath=path==='/insurance'||path.startsWith('/insurance/');
+  if(realRole==='dealer'&&!insPath)return reply({error:'Dealer accounts can only use the insurance app.'},403);
+  if(realRole==='senior'||realRole==='dealer'){
+   const insWrite=insPath&&req.method==='POST'&&(path==='/insurance'||/^\/insurance\/\d+\/settle$/.test(path));
+   if(req.method!=='GET'&&!insWrite)return reply({error:'This account is read only.'},403);
+   role='staff';
+  }
   if(path==='/operation'&&req.method==='GET')return handleOperation(req,env,now,reply,role);
   if(path==='/announce'&&['GET','POST'].includes(req.method))return handleAnnounce(req,env,now,reply,user);
   if(path==='/audit'&&req.method==='GET')return handleAudit(req,env,now,reply,role);
   if(path.startsWith('/operation/')){const res=await handleTableRuns(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
   if(path==='/insurance'||path.startsWith('/insurance/')){const res=await handleInsurance(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
+  if(path==='/cage'||path.startsWith('/cage/')){const res=await handleCage(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
   if(path==='/report'||path.startsWith('/report/')){const res=await handleReport(req,env,path,now,reply,user,role);return res||reply({error:'Not found'},404);}
   if(path==='/staff'||path.startsWith('/staff/')){const res=await handleStaff(req,env,path,now,reply,user,role,u=>isMaster(env,u));return res||reply({error:'Not found'},404);}
   if(path==='/promotions'||path.startsWith('/promotions/')){const res=await handlePromotions(req,env,path,now,reply,role!=='staff',user);return res||reply({error:'Not found'},404);}
