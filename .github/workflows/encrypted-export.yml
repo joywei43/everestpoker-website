@@ -40,6 +40,8 @@ jobs:
             echo ',"ppm":'; q "SELECT version, data FROM ppm WHERE id=1"
             echo ',"runs":'; q "SELECT * FROM table_runs WHERE opened_at >= $SINCE OR closed_at IS NULL ORDER BY opened_at"
             echo ',"insurance":'; q "SELECT id, day, created_at, created_by, table_name, blinds, street, pot, outs, odds, amount, payout, result, result_card FROM insurance_tickets WHERE created_at >= $SINCE ORDER BY id"
+            echo ',"staff_roles":'; q "SELECT role, active, COUNT(*) n FROM staff GROUP BY role, active"
+            echo ',"tables":'; q "SELECT name, sql FROM sqlite_master WHERE name IN ('staff','staff_new')"
             echo ',"groups":'; q "SELECT g.id, g.name, g.kind, g.owner, g.sort, g.active, l.label FROM member_groups g LEFT JOIN group_labels l ON l.group_id=g.id ORDER BY g.sort"
             echo ',"table_revenue":'; q "SELECT day, table_name, revenue FROM table_revenue ORDER BY day"
             echo ',"daily_reports":'; q "SELECT day, revenue FROM daily_reports ORDER BY day"

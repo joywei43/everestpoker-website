@@ -219,7 +219,7 @@ async function saveSettings(s){if(MEM){S.settings=s;render();return}await DB.doc
 const TABS=[['counts','Cage'],['overview','Overview'],['entry','Record'],['players','Players'],['flow','Daily flow'],['tips','Tips'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
 function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{if(b.dataset.tab==='counts'&&S.cnt&&S.cnt.step==='report')S.cnt=null;if(b.dataset.tab==='counts')S.cw=null;S.tab=b.dataset.tab;S.pending=null;render()})}
-function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,tips:vTips,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
+function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,tips:vTips,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.role==='senior'?`<div class="hl"><b class="t">Senior Dealer · read only 唯讀</b>You can look at everything here; changes are not saved. 可以查看，無法修改。</div>`:'')+(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
  const dc=$('day-clear');if(dc)dc.onclick=()=>{S.dayOverride=null;try{sessionStorage.removeItem('cage-day')}catch(e){}render()}}
 
 function pouchCard(b,p){if(p.held){const v=b.pd_cash||0;return `<div class="card"><div class="row" style="padding-top:0"><b>${p.l}</b><span class="big num ${v<0?'neg':''}">${pesoE(v)}</span></div><div class="sub">Players' money · not usable cash</div></div>`}const parts=p.media.map(m=>[m,b[p.k+'_'+m]||0]);const tot=parts.reduce((s,x)=>s+x[1],0);
@@ -293,7 +293,7 @@ function ledgerTable(list,withVoid=true){
  if(!list.length)return '<div class="sub">No entries yet.</div>';
  return `<table><tr><th>Business day</th><th>Type</th><th>Details</th><th>Pouch change</th>${withVoid?'<th></th>':''}</tr>${list.map(e=>`<tr class="${e.voided?'muted':''}"><td class="num">${esc(e.date)}<div class="sub">${esc(e.time||'')}</div></td><td>${esc(typeLabel(e.type))}</td>
  <td>${esc(e.summary)}${e.note?`<div class="sub">${esc(e.note)}</div>`:''}${e.by?`<div class="sub">Recorded by ${esc(e.by)}</div>`:''}${e.voided?`<div class="sub">Voided${e.voidedBy?' by '+esc(e.voidedBy):''}: ${esc(e.voidReason||'')}</div>`:''}${!e.voided&&e.date<settings().openDate&&e.type!=='midori_pay'?'<div class="sub">Before the start date, not counted</div>':''}</td><td>${legText(e)}</td>
- ${withVoid?`<td>${e.voided||S.role==='staff'?'':`<button class="link" data-void="${e.id}">Void</button>`}</td>`:''}</tr>`).join('')}</table>`}
+ ${withVoid?`<td>${e.voided||S.role==='staff'||S.role==='senior'?'':`<button class="link" data-void="${e.id}">Void</button>`}</td>`:''}</tr>`).join('')}</table>`}
 
 /* players */
 function vPlayers(){

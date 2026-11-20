@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS staff(
  pw_hash TEXT NOT NULL,
  salt TEXT NOT NULL,
  iterations INTEGER NOT NULL,
- role TEXT NOT NULL DEFAULT 'admin' CHECK(role IN ('admin','staff')), -- admin = manager, staff = floor/counter
+ role TEXT NOT NULL DEFAULT 'admin' CHECK(role IN ('admin','staff','senior','dealer')), -- admin = manager, staff = floor/counter, senior = Senior Dealer (read only + insurance), dealer = insurance only
  active INTEGER NOT NULL DEFAULT 1,
  created_at INTEGER NOT NULL
 );

@@ -10,7 +10,7 @@ export async function staffSql(pairs, now = Math.floor(Date.now() / 1000)) {
   const lines = [];
   for (const pair of pairs) {
     let rest = pair, role = 'admin';
-    const m = /:(admin|staff)$/.exec(pair);
+    const m = /:(admin|staff|senior|dealer)$/.exec(pair);
     if (m && pair.indexOf(':') < m.index) { role = m[1]; rest = pair.slice(0, m.index); }
     const i = rest.indexOf(':');
     const name = rest.slice(0, i).trim(), password = rest.slice(i + 1);

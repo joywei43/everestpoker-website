@@ -118,7 +118,8 @@ const root = document.getElementById('root');
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
 let staff = sessionStorage.getItem(USER_KEY) || '';
 let role = sessionStorage.getItem(ROLE_KEY) || 'admin';
-const isManager = () => role !== 'staff';
+const isManager = () => role === 'admin' || role === 'master';
+const isReadOnly = () => role === 'senior'; // Senior Dealer: sees everything, changes nothing
 const isMaster = () => role === 'master';
 let groupsCache = null;
 
@@ -138,6 +139,7 @@ const statusChip = (s) => `<span class="chip ${s === 'active' ? 'green' : s === 
 const groupChip = (name) => name ? `<span class="chip blue">${esc(name)}</span>` : '<span class="chip amber">No group</span>';
 
 async function api(path, method = 'GET', body) {
+  if (method !== 'GET' && isReadOnly() && path !== '/logout') throw new Error('Read-only account (Senior Dealer): you can view but not change anything here.');
   const res = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   let data = {}; try { data = await res.json(); } catch (e) {}
   if (res.status === 401) { token = ''; sessionStorage.removeItem(TOKEN_KEY); render(); throw new Error('Please sign in again.'); }
@@ -160,11 +162,13 @@ function parseHash() { const h = location.hash.replace(/^#\/?/, '').split('?')[0
 // ---------- shell ----------
 function render() {
   if (!token) return renderLogin();
+  if (role === 'dealer') { const tk = token; token = ''; sessionStorage.removeItem(TOKEN_KEY); fetch(API + '/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + tk } }).catch(() => {}); renderLogin(); flash(document.getElementById('lm'), 'Dealer accounts can only use the insurance app (everestpokerroom.com/insurance).', 'err'); return; }
   const { page } = parseHash();
   const link = (p, label, extra = '') => `<a href="#/${p}" ${page === p || (p === 'members' && page === 'member') || (p === 'operationreport' && page === 'tablereport') ? 'aria-current="page"' : ''}>${label}${extra}</a>`;
   root.innerHTML = `<div class="app">
     <nav class="side" aria-label="Main">
       <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Admin console</small></div></div>
+      ${isReadOnly() ? '<div class="small" style="margin:0 12px 8px;padding:6px 8px;border-radius:6px;background:#fff4d6;color:#7a5a12">Senior Dealer · read only</div>' : ''}
       <div class="navlinks">
         ${link('liveoperation', 'Live Operation')}
         ${link('operationreport', 'Operation Report')}
@@ -1376,16 +1380,16 @@ async function viewRewards(view) {
 // ---------- Staff accounts (managers) ----------
 async function viewStaff(view) {
   const { staff: list } = await api('/staff');
-  view.innerHTML = `<div><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account to the console, PPM and the waiting list. <b>Master</b>: everything, including group changes, voids, imports, suspensions and these accounts. <b>Manager</b>: approve rewards and edit promotions. <b>Staff</b>: look up, add members, record rewards.</p></div>
+  view.innerHTML = `<div><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account to the console, PPM and the waiting list. <b>Master</b>: everything, including group changes, voids, imports, suspensions and these accounts. <b>Manager</b>: approve rewards and edit promotions. <b>Staff</b>: look up, add members, record rewards <b>Senior Dealer</b>: views the console, PPM, cage and waiting list without changing anything, and sells insurance at the table. <b>Dealer</b>: the insurance app only. Neither can void.</p></div>
     <div id="sm"></div>
     <section class="card"><h2 style="margin-bottom:10px">New account</h2>
       <form id="nf2" class="form"><label class="f">Username<input type="text" name="username" required maxlength="60" autocomplete="off"></label>
         <label class="f">Password<input type="text" name="password" required minlength="6" maxlength="200" autocomplete="new-password"></label>
-        <label class="f">Role<select name="role"><option value="staff">Staff</option><option value="admin">Manager</option></select></label>
+        <label class="f">Role<select name="role"><option value="staff">Staff</option><option value="admin">Manager</option><option value="senior">Senior Dealer</option><option value="dealer">Dealer</option></select></label>
         <div style="align-self:end"><button class="btn primary">Create account</button></div></form></section>
     <section class="card"><div class="tbl"><table><thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>
     ${list.map((a, i) => `<tr><td><b>${esc(a.display_name)}</b>${a.display_name.toLowerCase() === staff.toLowerCase() ? ' <span class="small muted">(you)</span>' : ''}</td>
-      <td>${a.role === 'master' ? '<span class="chip" style="background:var(--gold);color:#1B1406">Master</span>' : `<select data-role="${i}"><option value="staff" ${a.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Manager</option></select>`}</td>
+      <td>${a.role === 'master' ? '<span class="chip" style="background:var(--gold);color:#1B1406">Master</span>' : `<select data-role="${i}"><option value="staff" ${a.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${a.role === 'admin' ? 'selected' : ''}>Manager</option><option value="senior" ${a.role === 'senior' ? 'selected' : ''}>Senior Dealer</option><option value="dealer" ${a.role === 'dealer' ? 'selected' : ''}>Dealer</option></select>`}</td>
       <td>${a.active ? '<span class="chip green">Active</span>' : '<span class="chip red">Disabled</span>'}</td><td class="muted">${day(a.created_at)}</td>
       <td class="row" style="flex-wrap:nowrap"><button class="btn sm" data-pw="${i}">Reset password</button>${a.role === 'master' ? '' : `<button class="btn sm ${a.active ? 'danger' : ''}" data-act="${i}">${a.active ? 'Disable' : 'Enable'}</button><button class="btn sm danger" data-del="${i}">Delete</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No accounts yet.</td></tr>'}
     </tbody></table></div></section>`;
