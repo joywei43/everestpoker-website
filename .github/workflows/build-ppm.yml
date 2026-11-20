@@ -1,6 +1,6 @@
 # Builds PPM (joywei43/everwin-ppm-system, main branch) and publishes it to /ppm/ on this site.
 # Runs when this file changes, or by hand: Actions → Build PPM → Run workflow.
-# Last requested: 2026-11-20T17:27Z waiting list rules
+# Last requested: 2026-11-20T18:42Z senior dealer read only
 name: Build PPM
 
 on:
