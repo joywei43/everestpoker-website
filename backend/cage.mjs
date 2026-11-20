@@ -4,7 +4,7 @@
 import { auditStmt } from './audit.mjs';
 import { handleOperation } from './operation.mjs';
 
-const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos', 'corrections'];
+const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos', 'corrections', 'shifts'];
 const SETTINGS = ['config', 'manpower']; // starting balances, rates and staff costs: changes go to the History Log
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { photos: 400000 };
