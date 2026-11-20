@@ -1307,7 +1307,9 @@ async function viewRewards(view) {
   for (const r of live) { const k = TYPES[r.type] + (r.type === 'transportation' && /^(Airfare|Taxi):/.test(r.detail) ? ' · ' + r.detail.split(':')[0] : ''); byType[k] = (byType[k] || 0) + r.amount; }
   view.innerHTML = `<div><h1>Rewards</h1><p class="sub">Record a comp given to a member. This is the reward record only. If the cage pays cash or chips for it, the cage records that itself (Operation → Player comps).</p></div>
     <section class="card"><h2 style="margin-bottom:10px">Issue comp</h2><form id="rwForm" class="form" style="background:#F6F7F9;border-radius:10px;padding:14px">
-      <label class="f" style="position:relative">Member<input type="text" id="rwMember" placeholder="Member number or name" required></label>
+      <label class="f" style="position:relative">Member<input type="text" id="rwMember" placeholder="Member number or name"></label>
+      <div class="f" style="align-self:end"><button type="button" class="btn sm" id="rwAdd" title="Give the same comp to several members">+ Add member</button></div>
+      <div class="small" id="rwList" style="grid-column:1/-1" hidden></div>
       <label class="f">Type<select id="rwType">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
       <label class="f" id="rwSubWrap" hidden>Transportation<select id="rwSub"><option value="">Choose…</option><option>Airfare</option><option>Taxi</option></select></label>
       <label class="f">Value (₱)<input type="number" min="1" step="1" id="rwAmt" required></label>
@@ -1324,17 +1326,46 @@ async function viewRewards(view) {
       <td>${isMaster() && !r.voided ? `<button class="btn sm" data-void="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No rewards in these dates.</td></tr>'}
     </tbody></table></div></section>`;
   const $ = (id) => view.querySelector('#' + id), type = $('rwType');
-  memberPicker($('rwMember'));
+  // Several members: the same comp (type, value, date, detail) is issued to each of them.
+  const picked = [];
+  const drawList = () => {
+    const el = $('rwList'); el.hidden = !picked.length;
+    el.innerHTML = `<b>${picked.length} members</b> get this comp: ` + picked.map((n, i) => `<span class="chip" style="margin:2px">${esc(n)} <button type="button" class="link" data-rm="${i}" title="Remove">✕</button></span>`).join('');
+    el.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { picked.splice(Number(b.dataset.rm), 1); drawList(); });
+    view.querySelector('#rwForm .btn.primary').textContent = picked.length > 1 ? `Issue comp to ${picked.length} members` : 'Issue comp';
+  };
+  const addMember = () => { const v = $('rwMember').value.trim(); if (!v) return; if (!picked.some((n) => n.toLowerCase() === v.toLowerCase())) picked.push(v); $('rwMember').value = ''; drawList(); $('rwMember').focus(); };
+  $('rwAdd').onclick = addMember;
+  memberPicker($('rwMember'), addMember);
   const sync = () => { $('rwSubWrap').hidden = type.value !== 'transportation'; };
   type.onchange = sync; sync();
   $('rwGo').onclick = () => { location.hash = '#/rewards?' + new URLSearchParams({ from: $('rwFrom').value, to: $('rwTo').value }); };
   $('rwForm').onsubmit = async (e) => {
     e.preventDefault(); const msg = $('rwMsg');
-    try {
-      const r = await api('/rewards/issue', 'POST', { member_no: $('rwMember').value.trim(), type: type.value, sub: type.value === 'transportation' ? $('rwSub').value : '', amount: Number(String($('rwAmt').value).replace(/,/g, '')),
-        date: $('rwDate').value, detail: $('rwDetail').value.trim(), approved_by: $('rwAppr') ? $('rwAppr').value.trim() : '' });
-      await viewRewards(view); flash(view.querySelector('#rwMsg'), 'Comp issued' + (r.cage ? ' and recorded in the cage (' + (r.cage === 'cash' ? 'cash from the cash float' : 'chips from the chip float') + ')' : '') + (r.approved ? '.' : '. Waiting for a manager.'), 'ok');
-    } catch (err) { flash(msg, err.message, 'err'); }
+    const typed = $('rwMember').value.trim(), members = [...picked];
+    if (typed && !members.some((n) => n.toLowerCase() === typed.toLowerCase())) members.push(typed);
+    if (!members.length) return flash(msg, 'Choose a member.', 'err');
+    const body = { type: type.value, sub: type.value === 'transportation' ? $('rwSub').value : '', amount: Number(String($('rwAmt').value).replace(/,/g, '')),
+      date: $('rwDate').value, detail: $('rwDetail').value.trim(), approved_by: $('rwAppr') ? $('rwAppr').value.trim() : '' };
+    if (members.length > 1 && !confirm(`Issue ${TYPES[body.type]} ${peso(body.amount)} to each of these ${members.length} members?\n\n${members.join(', ')}\n\nTotal ${peso(body.amount * members.length)}`)) return;
+    const btn = view.querySelector('#rwForm .btn.primary'); btn.disabled = true;
+    const done = [], failed = []; let last = null;
+    for (const m of members) {
+      try { last = await api('/rewards/issue', 'POST', { ...body, member_no: m }); done.push(m); } catch (err) { failed.push(m + ': ' + err.message); }
+    }
+    btn.disabled = false;
+    if (!done.length) return flash(msg, failed.join(' · '), 'err');
+    // Keep the form for the members that failed so they can be fixed and sent again.
+    const keep = failed.map((f) => f.split(': ')[0]);
+    const form = { type: body.type, sub: $('rwSub').value, amt: $('rwAmt').value, date: $('rwDate').value, detail: $('rwDetail').value };
+    await viewRewards(view);
+    const text = (done.length > 1 ? `Comp issued to ${done.length} members` : 'Comp issued') + (last.cage ? ' and recorded in the cage (' + (last.cage === 'cash' ? 'cash from the cash float' : 'chips from the chip float') + ')' : '') + (last.approved ? '.' : '. Waiting for a manager.');
+    if (failed.length) {
+      const v = (id) => view.querySelector('#' + id);
+      v('rwType').value = form.type; v('rwType').dispatchEvent(new Event('change')); v('rwSub').value = form.sub; v('rwAmt').value = form.amt; v('rwDate').value = form.date; v('rwDetail').value = form.detail;
+      for (const k of keep) { v('rwMember').value = k; v('rwAdd').click(); }
+      flash(view.querySelector('#rwMsg'), text + ' Not issued: ' + failed.join(' · ') + ' (still in the list above).', 'err');
+    } else flash(view.querySelector('#rwMsg'), text, 'ok');
   };
   view.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => {
     const reason = (prompt('Why is this reward being voided? A cage payment is voided too.') || '').trim(); if (!reason) return;
