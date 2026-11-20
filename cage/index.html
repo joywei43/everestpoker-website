@@ -159,20 +159,26 @@ function balances(upTo){
  return b}
 /* Days MIDORI's numbers were not typed at the cage come from the Operation Report (Revenue = rake, BBJ collected). */
 let OPREP={};
+/* Operation Report revenue per table (T1, T2 …) as cage tables (PO1, PO2 …); anything not split by table goes to ALL. */
+function repTables(x){const o={};let sum=0;for(const [k,v] of Object.entries(x.table_revenue||{})){const t='PO'+String(k).replace(/^T/i,'');const n=Number(v||0);if(!n)continue;o[TABLES.includes(t)?t:'ALL']=(o[TABLES.includes(t)?t:'ALL']||0)+n;sum+=n}const rest=Number(x.revenue||0)-sum;if(rest)o.ALL=(o.ALL||0)+rest;return o}
+/* One business day as MIDORI numbers taken from the Operation Report. */
+function repDay(o){return {rake:o.hasRev?{...(o.tbl||{ALL:o.rev})}:{},bbj:o.hasBbj&&o.bbj?{ALL:o.bbj}:{},fromReport:true}}
 function opReport(m){const c=OPREP[m];if((!c||Date.now()-c.at>60000)&&!(c&&c.loading)&&typeof api==='function'&&!MEM&&typeof TOKEN!=='undefined'&&TOKEN){const [Y,M]=m.split('-').map(Number),to=m+'-'+String(new Date(Y,M,0).getDate()).padStart(2,'0');OPREP[m]={...(c||{days:{}}),loading:true,at:c?c.at:0};
-  api('/report?from='+m+'-01&to='+to).then(r=>{const days={};for(const x of r.days||[])if(x.revenue!=null||x.bbj_amount!=null)days[x.day]={rev:Number(x.revenue||0),bbj:Number(x.bbj_amount||0),hasRev:x.revenue!=null,hasBbj:x.bbj_amount!=null};const changed=JSON.stringify(days)!==JSON.stringify(c&&c.days);OPREP[m]={days,at:Date.now()};if(changed&&(canRender()||(S.cnt&&S.cnt.kind==='open'&&S.cnt.step==='result'&&!S.cnt.ppmFilled)))render()}).catch(e=>{OPREP[m]={days:(c&&c.days)||{},err:errMsg(e),at:Date.now()}})}
+  api('/report?from='+m+'-01&to='+to).then(r=>{const days={};for(const x of r.days||[])if(x.revenue!=null||x.bbj_amount!=null)days[x.day]={rev:Number(x.revenue||0),bbj:Number(x.bbj_amount||0),hasRev:x.revenue!=null,hasBbj:x.bbj_amount!=null,tbl:repTables(x)};const changed=JSON.stringify(days)!==JSON.stringify(c&&c.days);OPREP[m]={days,at:Date.now()};if(changed&&(canRender()||(S.cnt&&S.cnt.kind==='open'&&S.cnt.step==='result'&&!S.cnt.ppmFilled)))render()}).catch(e=>{OPREP[m]={days:(c&&c.days)||{},err:errMsg(e),at:Date.now()}})}
  return (OPREP[m]&&OPREP[m].days)||{}}
 function midoriMonth(m,cageOnly){
  const st=settings();const days=Object.entries(S.midori).filter(([d])=>monthOf(d)===m).sort();
  const tbl={};let R=0,B=0,repR=0,repB=0,repDays=0;
  for(const [d,v] of days){for(const t of TABLES){const r=Number((v.rake||{})[t]||0),bb=Number((v.bbj||{})[t]||0);R+=r;B+=bb;tbl[t]=tbl[t]||{r:0,b:0};tbl[t].r+=r;tbl[t].b+=bb}}
  for(const [d,o] of Object.entries(opReport(m))){if(cageOnly&&d<st.openDate)continue;const v=S.midori[d],hr=v&&TABLES.some(t=>Number((v.rake||{})[t]||0)),hb=v&&TABLES.some(t=>Number((v.bbj||{})[t]||0));let used=false;
-  if(!hr&&o.hasRev&&o.rev){R+=o.rev;repR+=o.rev;used=true}if(!hb&&o.hasBbj&&o.bbj){B+=o.bbj;repB+=o.bbj;used=true}if(used)repDays++}
+  if(!hr&&o.hasRev&&o.rev){R+=o.rev;repR+=o.rev;used=true;for(const [t,n] of Object.entries(o.tbl||{ALL:o.rev})){tbl[t]=tbl[t]||{r:0,b:0};tbl[t].r+=n}}if(!hb&&o.hasBbj&&o.bbj){B+=o.bbj;repB+=o.bbj;used=true;tbl.ALL=tbl.ALL||{r:0,b:0};tbl.ALL.b+=o.bbj}if(used)repDays++}
  const pag=R*st.pagcorRate,short=Math.max(0,st.pagcorMin-pag);
  const rakeNet=R*st.everestRakeRate-st.rent-short;const bbj21=B*st.bbjEverestRate;
  const settled=liveEntries().filter(e=>e.type==='midori_pay'&&e.forMonth===m);
  const paidRake=settled.reduce((s,e)=>s+Number(e.rakePart||0),0),paidBbj=settled.reduce((s,e)=>s+Number(e.bbjPart||0),0);
  return{days,repR,repB,repDays,R,B,pag,short,cdc:R*st.cdcRate,rakeNet,bbj21,paidRake,paidBbj,dueRake:rakeNet-paidRake,dueBbj:bbj21-paidBbj,tbl}}
+/* By-day rows: days typed at the cage, plus days only in the Operation Report (shown grey, counted in the totals). */
+function midoriRows(m,x){const rep=opReport(m),st=settings(),out=new Map(x.days.map(([d,v])=>[d,[d,v,rep[d]]]));for(const [d,o] of Object.entries(rep)){if(out.has(d)||!(o.hasRev&&o.rev||o.hasBbj&&o.bbj))continue;out.set(d,[d,repDay(o),o])}return [...out.values()].sort((a,b)=>a[0].localeCompare(b[0]))}
 function allMonths(){const s=new Set([monthOf(bizDay())]);for(const d of Object.keys(S.midori))s.add(monthOf(d));for(const e of S.entries)s.add(monthOf(e.date));return[...s].filter(Boolean).sort().reverse()}
 function receivables(){
  const st=settings();let rake=0,bbj=0;const rows=[];
@@ -329,7 +335,7 @@ async function mergePlayers(src,dst){const sp=S.players.find(x=>x.id===src),dp=S
  if(MEM)S.players=S.players.filter(x=>x.id!==src);else await DB.doc('players/'+src).delete()}
 /* MIDORI */
 function vMidori(){
- const m=S.month||monthOf(bizDay()),x=midoriMonth(m),st=settings();const d=S.form.mday||bizDay(),cur=S.midori[d]||{rake:{},bbj:{}};
+ const m=S.month||monthOf(bizDay()),x=midoriMonth(m),st=settings();const d=S.form.mday||bizDay(),rd=opReport(monthOf(d))[d],cur=S.midori[d]||(rd?repDay(rd):{rake:{},bbj:{}});
  return `<h2>MIDORI <select id="mi-month" style="width:auto;margin-left:8px">${allMonths().map(y=>`<option ${y===m?'selected':''}>${y}</option>`).join('')}</select></h2>${vMidoriGap(m)}<h2>What MIDORI owes us</h2>
  <div class="grid g2"><div class="card"><b>${m} rake</b>
  <div class="row"><span>Total rake</span><span class="num">${peso(x.R)}</span></div>
@@ -344,12 +350,12 @@ function vMidori(){
  <div class="row"><span class="sub">Main pot 49% · reserve 21%</span><span class="num">${peso(x.B*.49)} · ${peso(x.B*.21)}</span></div>
  <div class="row"><b>Everest 21% due</b><b class="num">${peso(x.bbj21)}</b></div>
  <div class="row"><span class="sub">Received</span><span class="num">${peso(x.paidBbj)}</span></div><div class="row"><b>Still to receive</b><b class="num">${peso(x.dueBbj)}</b></div></div></div>
- <h2>Enter MIDORI daily numbers</h2><div class="card" style="max-width:720px"><div class="sub">Enter by table from MIDORI's sheet. Saving the same day again replaces it.</div>
+ <h2>Enter MIDORI daily numbers</h2><div class="card" style="max-width:720px"><div class="sub">Days not typed here are taken from the admin Operation Report (rake by table, BBJ collected) automatically. Type a day only to override it with MIDORI's sheet; saving the same day again replaces it. 沒輸入的日子自動帶入營運報表。</div>${!S.midori[d]&&rd?'<div class="note">Filled from the Operation Report for this day. 已帶入營運報表數字。</div>':''}
  <label>Business day</label><input type="date" id="md-day" value="${esc(d)}" style="max-width:220px">
  <table style="margin-top:8px"><tr><th>Table</th><th>Rake</th><th>BBJ</th></tr>${TABLES.map(t=>`<tr><td>${TBL_L(t)}</td><td><input data-md="rake" data-t="${t}" inputmode="decimal" value="${(cur.rake||{})[t]??''}"></td><td><input data-md="bbj" data-t="${t}" inputmode="decimal" value="${(cur.bbj||{})[t]??''}"></td></tr>`).join('')}</table>
  <div class="err" id="md-err"></div><button class="primary" id="md-save" style="margin-top:10px">${S.midori[d]?'Update this day':'Save'}</button></div>
  <h2>${m} by day</h2><div class="card"><table><tr><th>Business day</th>${TABLES.map(t=>`<th class="r">${t==='ALL'?'PPM total':t} rake</th>`).join('')}<th class="r">Total rake</th><th class="r">Total BBJ</th><th></th></tr>
- ${x.days.map(([dd,v])=>{const r=TABLES.reduce((s,t)=>s+Number((v.rake||{})[t]||0),0),bb=TABLES.reduce((s,t)=>s+Number((v.bbj||{})[t]||0),0);return `<tr><td class="num">${dd}</td>${TABLES.map(t=>`<td class="r num">${Number((v.rake||{})[t]||0).toLocaleString('en-US')}</td>`).join('')}<td class="r num"><b>${r.toLocaleString('en-US')}</b></td><td class="r num">${bb.toLocaleString('en-US')}</td><td><button class="link" data-mdedit="${dd}">Edit</button></td></tr>`}).join('')||'<tr><td colspan="8" class="sub">No numbers for this month yet</td></tr>'}
+ ${midoriRows(m,x).map(([dd,v,o])=>{const r=TABLES.reduce((s,t)=>s+Number((v.rake||{})[t]||0),0),bb=TABLES.reduce((s,t)=>s+Number((v.bbj||{})[t]||0),0);const diffR=!v.fromReport&&o&&o.hasRev&&Math.round(o.rev)!==Math.round(r),diffB=!v.fromReport&&o&&o.hasBbj&&Math.round(o.bbj)!==Math.round(bb);return `<tr${v.fromReport?' style="color:var(--muted,#8a8f98)"':''}><td class="num">${dd}${v.fromReport?'<div class="sub">Operation Report 營運報表</div>':''}</td>${TABLES.map(t=>`<td class="r num">${Number((v.rake||{})[t]||0).toLocaleString('en-US')}</td>`).join('')}<td class="r num"><b>${r.toLocaleString('en-US')}</b>${diffR?`<div class="sub neg">Report ${Math.round(o.rev).toLocaleString('en-US')}</div>`:''}</td><td class="r num">${bb.toLocaleString('en-US')}${diffB?`<div class="sub neg">Report ${Math.round(o.bbj).toLocaleString('en-US')}</div>`:''}</td><td><button class="link" data-mdedit="${dd}">${v.fromReport?'Copy in':'Edit'}</button></td></tr>`}).join('')||'<tr><td colspan="8" class="sub">No numbers for this month yet</td></tr>'}
  <tr><td><b>Total</b></td>${TABLES.map(t=>`<td class="r num">${(x.tbl[t]||{r:0}).r.toLocaleString('en-US')}</td>`).join('')}<td class="r num"><b>${x.R.toLocaleString('en-US')}</b></td><td class="r num"><b>${x.B.toLocaleString('en-US')}</b></td><td></td></tr></table></div>`}
 
 /* ledger */
