@@ -216,10 +216,10 @@ async function saveMidoriDay(d,v){if(MEM){S.midori[d]=v;render();return}await DB
 async function saveSettings(s){if(MEM){S.settings=s;render();return}await DB.doc('config/settings').set(s)}
 
 /* ---------- views ---------- */
-const TABS=[['counts','Cage'],['overview','Overview'],['entry','Record'],['players','Players'],['flow','Daily flow'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
+const TABS=[['counts','Cage'],['overview','Overview'],['entry','Record'],['players','Players'],['flow','Daily flow'],['tips','Tips'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
 function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{if(b.dataset.tab==='counts'&&S.cnt&&S.cnt.step==='report')S.cnt=null;if(b.dataset.tab==='counts')S.cw=null;S.tab=b.dataset.tab;S.pending=null;render()})}
-function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
+function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,tips:vTips,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
  const dc=$('day-clear');if(dc)dc.onclick=()=>{S.dayOverride=null;try{sessionStorage.removeItem('cage-day')}catch(e){}render()}}
 
 function pouchCard(b,p){if(p.held){const v=b.pd_cash||0;return `<div class="card"><div class="row" style="padding-top:0"><b>${p.l}</b><span class="big num ${v<0?'neg':''}">${pesoE(v)}</span></div><div class="sub">Players' money · not usable cash</div></div>`}const parts=p.media.map(m=>[m,b[p.k+'_'+m]||0]);const tot=parts.reduce((s,x)=>s+x[1],0);
@@ -447,7 +447,7 @@ function vSignIn(){const st=staffList(),f=S.flow;
  :`<label>Name</label><input id="si-name" placeholder="Mary Anne"><div class="sub" style="margin-top:6px">No staff PINs are set yet. Add them in Settings.</div>`}
  <div class="err" id="si-err"></div><div class="flex" style="margin-top:12px"><button class="primary" id="si-go">Sign in</button><button class="link" id="flow-cancel">Cancel</button></div></div>`}
 /* flows */
-function startFlow(kind){S.flow={kind,step:S.user?(kind==='open'?'count':'chips'):'signin',d:{players:false,insCount:'',insReason:'',tipPool:'',dealers:(tipPeople()[dealerRole()]||[]).map(n=>({n,a:''})),personal:PERSONAL_TIPS.map(n=>({n,a:''})),mass:'',pb:{},supervisor:'',insOk:false,dayCount:'',dayReason:'',acctOk:false}};S.cnt=null;S.qa=null;
+function startFlow(kind){S.flow={kind,step:S.user?(kind==='open'?'count':'chips'):'signin',d:{players:false,insCount:'',insReason:'',tipPool:'',dealers:poolNames().map(n=>({n,a:''})),personal:personalTips().map(n=>({n,a:''})),mass:'',pb:{},supervisor:'',insOk:false,dayCount:'',dayReason:'',acctOk:false}};S.cnt=null;S.qa=null;
  if(S.user&&kind==='open')toCount('open')}
 function toCount(kind){S.cnt={kind,step:'count',cashier:S.user?S.user.name:'',supervisor:S.flow?S.flow.d.supervisor:'',cash:{cf:{},ins:{},day:{},bb:{},pd:{}},chips:{chip:{},ins:{},mass:{}},reasons:{},midori:{rake:{},bbj:{}},midoriSkip:false,fx:{same:true,TWD:'',USD:''}};if(S.flow)S.flow.step='count'}
 function fxMovedToday(){const l=lastCount(),since=l?String(l.at):'';return liveEntries().filter(e=>(e.type==='fx_in'||e.type==='fx_out')&&String(e.createdAt)>since)}
@@ -462,9 +462,42 @@ function flowHead(){const f=S.flow,steps=f.kind==='open'?OPEN_STEPS:CLOSE_STEPS;
  <div class="flex" style="margin-bottom:14px;gap:6px">${steps.map((s,i)=>`<span class="pill ${i<ix?'cash':i===ix?'info':''}" style="${i>ix?'border:1px solid var(--line)':''}">${i+1}. ${s[1]}</span>`).join('')}</div>`}
 function pbToday(day){const by={};for(const e of liveEntries()){if(e.date!==day||e.type!=='behind')continue;const w=e.who||'?';const v=(e.legs.find(g=>g.a==='behind')||{}).v||0;by[w]=by[w]||{out:0,back:0};if(v<0)by[w].out+=-v;else by[w].back+=v}
  return Object.entries(by).map(([who,x])=>({who,...x,net:round2(x.back-x.out)}))}
-function tipPeople(){const t=settings().tipPeople;return t&&typeof t==='object'?t:{'Dealers':['Wilmer','Mhaiy','Lhen'],'MGM':['Owner'],'Consultant':['Geraldine'],'Floor':['Floor supervisor'],'Supervisor':['Phoebe'],'Admin / cashier':['Mary Anne'],'Service':['Shout','Regene','Oliver'],'Employee incentive':['Incentive fund']}}
+function tipPeople(){const t=settings().tipPeople;return t&&typeof t==='object'?t:{'Dealers':['Wilmer','Lhen','Mhaiy','Ysay','Naj','Chei'],'MGM':['Owner'],'Consultant':['Geraldine'],'Floor':['Cey'],'Supervisor':['Phoebe'],'Admin / cashier':['Incentive fund'],'Service':['Shout','Oliver','Regene'],'Employee incentive':['Incentive fund']}}
 function dealerRole(){const r=tipSplit().find(([n])=>/dealer/i.test(n));return r?r[0]:null}
-const PERSONAL_TIPS=['FnB Service','Cage','Admin'];
+/* Tip staff: who puts tips into the contribution pool (dealers) and who keeps personal tips. */
+const DEFAULT_TIP_STAFF={pool:[['Senior Dealer',['Wilmer','Lhen','Mhaiy']],['Dealer',['Ysay','Naj','Chei']]],personal:[['Floor Manager',['Cey']],['Administration Manager',['Phoebe']],['Cage',['Jhianna']],['Service (FnB)',['Shout','Oliver','Regene']]]};
+function tipStaff(){const t=settings().tipStaff;return t&&Array.isArray(t.pool)?t:DEFAULT_TIP_STAFF}
+const poolNames=()=>tipStaff().pool.flatMap(([,n])=>n);
+function personalTips(){const n=tipStaff().personal.flatMap(([,x])=>x);return n.length?n:['FnB Service','Cage','Admin']}
+const roleOf=n=>{const ts=tipStaff();for(const [r,x] of [...ts.pool,...ts.personal])if(x.some(y=>y.toLowerCase()===String(n).toLowerCase()))return r;return ''};
+const parseRoles=t=>String(t||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.indexOf(':');return i<0?null:[l.slice(0,i).trim(),l.slice(i+1).split(',').map(x=>x.trim()).filter(Boolean)]}).filter(x=>x&&x[0]);
+function vTips(){const ts=tipStaff(),tp=tipPeople(),dr=dealerRole(),can=S.role&&S.role!=='staff',b=balances(),by=b.tipsBy||{};
+ const today=bizDay(),from=S.tipFrom||today.slice(0,8)+'01',to=S.tipTo||today;const days=[];{let d=new Date(from+'T00:00:00Z');const e=new Date(to+'T00:00:00Z');while(d<=e&&days.length<62){days.push(d.toISOString().slice(0,10));d=new Date(d.getTime()+864e5)}}
+ const earn={},paid={};for(const e of liveEntries()){if(e.date<from||e.date>to)continue;for(const l of e.legs||[]){if(l.a!=='tipsheld'||!l.p||!l.v)continue;if(l.v>0){earn[l.p]=earn[l.p]||{};earn[l.p][e.date]=round2((earn[l.p][e.date]||0)+l.v)}else paid[l.p]=round2((paid[l.p]||0)-l.v)}}
+ const listed=new Set([...ts.pool,...ts.personal].flatMap(([,n])=>n.map(x=>x.toLowerCase())));
+ const others=[...new Set([...Object.keys(earn),...Object.keys(by).filter(n=>Math.abs(by[n])>.004)])].filter(n=>!listed.has(n.toLowerCase())).sort();
+ const groups=[...ts.pool.map(([r,n])=>[r,n,'Contribution pool 按比例分配']),...ts.personal.map(([r,n])=>[r,n,'Keeps personal tips 個人小費自留']),...(others.length?[['Shares and others 分配份額與其他',others,'']]:[])];
+ const sumE=n=>Object.values(earn[n]||{}).reduce((x,v)=>x+v,0);const showDays=days.filter(d=>Object.values(earn).some(o=>o[d]));
+ const row=n=>`<tr><td>${esc(n)}</td>${showDays.map(d=>`<td class="r num">${earn[n]&&earn[n][d]?peso(earn[n][d]):''}</td>`).join('')}<td class="r num"><b>${peso(sumE(n))}</b></td><td class="r num">${paid[n]?peso(paid[n]):''}</td><td class="r num"><b>${peso(by[n]||0)}</b></td></tr>`;
+ const split=tipSplit();
+ return `<h2>Tips 小費</h2>
+ <div class="grid g2">
+ <div class="card"><b>Staff 員工</b><div class="sub">Dealers put their tips into the contribution pool. The others keep their personal tips in full. 荷官小費按比例分配；其他人的個人小費自己全拿。</div>
+  <table style="margin-top:8px"><tr><th>Group</th><th>Role</th><th>Staff</th></tr>
+  ${ts.pool.map(([r,n],i)=>`<tr><td>${i?'':'<span class="pill info">Contribution pool 按比例</span>'}</td><td>${esc(r)}</td><td>${esc(n.join(', '))}</td></tr>`).join('')}
+  ${ts.personal.map(([r,n],i)=>`<tr><td>${i?'':'<span class="pill cash">Personal tips 自留</span>'}</td><td>${esc(r)}</td><td>${esc(n.join(', '))}</td></tr>`).join('')}</table>
+  ${can?(S.tipEdit?`<label>Contribution pool (one per line — role: name, name)</label><textarea id="tp-pool" rows="3">${esc(ts.pool.map(([r,n])=>r+': '+n.join(', ')).join('\n'))}</textarea>
+  <label>Keep personal tips (one per line — role: name, name)</label><textarea id="tp-pers" rows="5">${esc(ts.personal.map(([r,n])=>r+': '+n.join(', ')).join('\n'))}</textarea>
+  <div class="err" id="tp-err"></div><div class="flex" style="margin-top:8px"><button class="primary" id="tp-save">Save staff</button><button class="link" id="tp-x">Cancel</button></div>`:`<button class="link" id="tp-edit" style="margin-top:8px">Edit staff 編輯員工</button>`):''}</div>
+ <div class="card"><b>How the dealer pool is split 荷官小費分配</b><div class="sub">Each dealer keeps ${(split.find(([n])=>n===dr)||[0,0])[1]}% of their own tips; the rest is shared by role. 每位荷官自留比例，其餘依角色分配。</div>
+  <table style="margin-top:8px"><tr><th>Share</th><th class="r">%</th><th>Goes to</th></tr>${split.map(([r,pc])=>`<tr><td>${esc(r)}</td><td class="r num">${pc}%</td><td>${r===dr?'Each dealer, from their own tips 荷官本人':esc((tp[r]&&tp[r].length?tp[r]:[r]).join(', '))}</td></tr>`).join('')}
+  <tr><td><b>Total</b></td><td class="r num"><b>${split.reduce((x,[,p])=>x+Number(p),0)}%</b></td><td></td></tr></table>
+  ${can?(S.tipShareEdit?`<label>Who gets each share (one per line — share: name, name)</label><textarea id="tp-people" rows="8">${esc(Object.entries(tp).map(([r,n])=>r+': '+n.join(', ')).join('\n'))}</textarea><div class="sub">Percentages are in Settings → Tip split.</div><div class="flex" style="margin-top:8px"><button class="primary" id="tp-psave">Save</button><button class="link" id="tp-px">Cancel</button></div>`:`<button class="link" id="tp-pedit" style="margin-top:8px">Edit who gets each share 編輯分配對象</button>`):''}</div></div>
+ <h2>Tips earned 小費明細</h2><div class="flex"><input type="date" id="tp-from" value="${esc(from)}" style="max-width:180px"><span>–</span><input type="date" id="tp-to" value="${esc(to)}" style="max-width:180px"><span class="sub">Business days. Earned = goes to each person's tip reserve (dealer share, pool shares and personal tips). Held now = not paid yet.</span></div>
+ <div class="card" style="overflow-x:auto"><table><tr><th>Staff</th>${showDays.map(d=>`<th class="r">${d.slice(5)}</th>`).join('')}<th class="r">Earned 應得</th><th class="r">Paid 已發</th><th class="r">Held now 待發</th></tr>
+ ${groups.map(([r,n,k])=>`<tr><td colspan="${showDays.length+4}" style="padding-top:12px"><b>${esc(r)}</b> <span class="sub">${k}</span></td></tr>${n.map(row).join('')}`).join('')}
+ <tr><td><b>Total</b></td>${showDays.map(d=>`<td class="r num"><b>${peso(Object.values(earn).reduce((x,o)=>x+(o[d]||0),0))}</b></td>`).join('')}<td class="r num"><b>${peso(Object.keys(earn).reduce((x,n)=>x+sumE(n),0))}</b></td><td class="r num"><b>${peso(Object.values(paid).reduce((x,v)=>x+v,0))}</b></td><td class="r num"><b>${peso(b.tipsheld||0)}</b></td></tr></table></div>`}
+
 function tipsRecParse(q){const rd=t=>String(t||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const m=/^(.*?)[\s:=]+([\d,.]+)$/.exec(l);return m?{n:m[1].trim(),a:m[2].replace(/,/g,'')}:{n:l,a:''}});const dealers=rd(q.tdeal),personal=rd(q.tpers);const alloc=tipAlloc(dealers,personal);return {dealers,personal,alloc,tipT:round2(Object.values(alloc).reduce((s,v)=>s+v,0))}}
 function tipAlloc(dealers,personal){const out={};const tp=tipPeople(),dr=dealerRole();const rows=(dealers||[]).filter(r=>r.n.trim()&&num(r.a)>0);const pool=round2(rows.reduce((s,r)=>s+num(r.a),0));
  for(const [role,pc] of tipSplit()){if(role===dr){for(const r of rows){const n=r.n.trim();out[n]=round2((out[n]||0)+round2(num(r.a)*pc/100))}continue}const amt=round2(pool*pc/100);const names=(tp[role]&&tp[role].length)?tp[role]:[role];const each=Math.floor(amt/names.length*100)/100;names.forEach((n,i)=>{const v=i===names.length-1?round2(amt-each*(names.length-1)):each;out[n]=round2((out[n]||0)+v)})}
@@ -495,7 +528,7 @@ function vCloseStep(){const f=S.flow,d=f.d,b=balances(),day=bizDay();const nav=(
   <div class="sub">Each dealer's tips today. The dealer keeps ${(tipSplit().find(([n])=>n===dealerRole())||[0,0])[1]}% of their own; the rest goes to the other roles.</div>
   ${(d.dealers||[]).map((r,i)=>`<div class="flex" style="margin:6px 0"><input data-dt="${i}|n" value="${esc(r.n)}" placeholder="Dealer" style="max-width:200px"><input data-dt="${i}|a" inputmode="decimal" value="${esc(r.a)}" placeholder="₱" style="max-width:140px"><button class="link" data-dtdel="${i}">Remove</button></div>`).join('')}<button class="link" id="cw-adddt">+ Add dealer</button>
   <div class="row" style="max-width:420px"><span>Dealer tips total</span><b class="num" id="tip-pool">${pesoE(X.pool)}</b></div>
-  <label style="margin-top:12px">FnB Service / Cage / Admin tips (kept in full) 個人小費 · enter 0 if none</label>${d.personal.map((r,i)=>`<div class="flex" style="margin:6px 0"><input data-pt="${i}|n" value="${esc(r.n)}" placeholder="Name" style="max-width:200px" ${PERSONAL_TIPS.includes(r.n)?'readonly':''}><input data-pt="${i}|a" inputmode="decimal" value="${esc(r.a)}" placeholder="₱" style="max-width:140px">${PERSONAL_TIPS.includes(r.n)?'':`<button class="link" data-ptdel="${i}">Remove</button>`}</div>`).join('')}<button class="link" id="cw-addpt">+ Add another</button>
+  <label style="margin-top:12px">Personal tips (kept in full) 個人小費 · ${esc(personalTips().join(', '))} · enter 0 if none</label>${d.personal.map((r,i)=>`<div class="flex" style="margin:6px 0"><input data-pt="${i}|n" value="${esc(r.n)}" placeholder="Name" style="max-width:200px" ${personalTips().includes(r.n)?'readonly':''}><input data-pt="${i}|a" inputmode="decimal" value="${esc(r.a)}" placeholder="₱" style="max-width:140px">${personalTips().includes(r.n)?'':`<button class="link" data-ptdel="${i}">Remove</button>`}</div>`).join('')}<button class="link" id="cw-addpt">+ Add another</button>
   <div id="tip-alloc">${allocTable(X)}</div>
   ${massB>0.001?`<h3 style="margin:16px 0 4px">Mass chips 公關碼 · ${pesoE(massB)}</h3>${f.massOpen?`<div class="hl"><b class="t">Mass chip buy-in 公關碼兌現</b>Please ask a colleague to change the mass chips into cash at MIDORI and hand the cash in. It goes into <b>on-day buy-in</b>. 請其他同事協助到 MIDORI 兌換成現金繳回，存入當日現金。
    <label>Cash handed in 繳回現金 (₱)</label><input id="cs-mass" inputmode="decimal" value="${esc(d.mass===''?String(massB):d.mass)}" style="max-width:220px"><div class="err" id="cs-merr"></div>
@@ -784,8 +817,8 @@ function bindCounts(){const q=$;
    if(d.insCount!==''&&!Number.isFinite(num(d.insCount))){err.textContent='Enter the insurance chips counted.';return}
    if(Math.abs(X.insCnt-X.insBook)>0.001&&!d.insReason.trim()){err.textContent='Write why the insurance chips are different.';return}
    if((d.dealers||[]).some(r=>(r.a!==''&&!(num(r.a)>=0))||(num(r.a)>0&&!r.n.trim()))){err.textContent='Each dealer amount needs a name and a number.';return}
-   if(d.personal.some(r=>PERSONAL_TIPS.includes(r.n)&&(r.a===''||!(num(r.a)>=0)))){err.textContent='Enter FnB Service, Cage and Admin tips (0 if none). 請填 FnB Service、Cage、Admin 小費（沒有填 0）。';return}
-   if(d.personal.some(r=>!PERSONAL_TIPS.includes(r.n)&&(r.n.trim()||r.a)&&(!r.n.trim()||!(num(r.a)>0)))){err.textContent='Each other tip needs a name and an amount.';return}
+   if(d.personal.some(r=>personalTips().includes(r.n)&&(r.a===''||!(num(r.a)>=0)))){err.textContent=`Enter personal tips for ${personalTips().join(', ')} (0 if none). 請填個人小費（沒有填 0）。`;return}
+   if(d.personal.some(r=>!personalTips().includes(r.n)&&(r.n.trim()||r.a)&&(!r.n.trim()||!(num(r.a)>0)))){err.textContent='Each other tip needs a name and an amount.';return}
    if(!d.insOk&&d.insCount===''){err.textContent='Tick “Insurance chips match the record”, or enter what was counted. 請確認保險籌碼。';return}
    if(d.dayCount===''||d.dayCount==null||!Number.isFinite(num(d.dayCount))){err.textContent='Count the on-day cash drawer and enter the total. 請點當日現金並填入。';return}
    if(Math.abs(num(d.dayCount)-(b.day_cash||0))>0.001&&!(d.dayReason||'').trim()){err.textContent='Write why the on-day cash is different. 請寫當日現金差額原因。';return}
@@ -966,7 +999,7 @@ function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (�
  if(q.k==='pb')f=`<label>Who</label><input id="qa-player" value="${esc(q.player)}" placeholder="Sir Hee"><label>Out or back</label>${seg('qadir',[['out','Out (money given)'],['back','Back (money returned)']],q.dir)}<label>Cash from / to</label>${seg('qapouch',[['cf','Cash float'],['day','On-day cash']],q.pouch==='day'?'day':'cf')}${amt}<label>Details</label><input id="qa-note" value="${esc(q.note)}">`;
  if(q.k==='tips_rec'){const P=tipsRecParse(q);f=`<label>Business day of the tips 小費日期</label><input id="qa-tday" type="date" value="${esc(q.tday||prevBizDay())}" style="max-width:200px">
   <label>Dealers · one per line: name amount 荷官（每行：名字 金額）</label><textarea id="qa-tdeal" rows="4" placeholder="Oliver 2400">${esc(q.tdeal||'')}</textarea>
-  <label>FnB Service / Cage / Admin and others (kept in full) 個人小費</label><textarea id="qa-tpers" rows="3">${esc(q.tpers??PERSONAL_TIPS.map(n=>n+' ').join('\n'))}</textarea>
+  <label>Personal tips (kept in full) 個人小費</label><textarea id="qa-tpers" rows="3">${esc(q.tpers??personalTips().map(n=>n+' ').join('\n'))}</textarea>
   <label>Where is the cash? 現金在哪裡</label>${seg('qadir',[['kept','Already in the cash float 已在現金流'],['day','Move it from on-day cash now 現在從當日現金放入現金流']],q.dir||'kept')}
   <div id="qa-tprev">${allocTable(P)}</div>`}
  if(q.k==='tip_pay'){const tb=balances().tipsBy||{};const ppl=Object.entries(tb).filter(([,v])=>v>0.001);f=`<label>Pay to</label>${ppl.length?seg('qadir',ppl.map(([n,v])=>[n,`${n} · ${pesoE(v)}`]),q.dir):'<div class="sub">No tips held.</div>'}${amt}<div class="sub" style="margin-top:4px">Paid from the cash float (company owes tips to staff). 從現金流支付待付小費。</div>`}
@@ -1347,6 +1380,11 @@ function bind(){
   if(bad){q('md-err').textContent='Amounts must be 0 or more.';return}
   try{await saveMidoriDay(d,v);S.month=monthOf(d);flash('Saved '+d)}catch(err){q('md-err').textContent=errMsg(err)}};
  ['month','pouch','type'].forEach(k=>{const el=q('lf-'+k);if(el)el.onchange=()=>{S.ledgerFilter[k]=el.value;render()}});
+ if(q('tp-from')){q('tp-from').onchange=e=>{S.tipFrom=e.target.value||null;render()};q('tp-to').onchange=e=>{S.tipTo=e.target.value||null;render()}}
+ if(q('tp-edit'))q('tp-edit').onclick=()=>{S.tipEdit=true;render()};if(q('tp-x'))q('tp-x').onclick=()=>{S.tipEdit=false;render()};
+ if(q('tp-pedit'))q('tp-pedit').onclick=()=>{S.tipShareEdit=true;render()};if(q('tp-px'))q('tp-px').onclick=()=>{S.tipShareEdit=false;render()};
+ if(q('tp-save'))q('tp-save').onclick=async()=>{const pool=parseRoles(q('tp-pool').value),personal=parseRoles(q('tp-pers').value);if(!pool.length){q('tp-err').textContent='Add at least one dealer line, e.g. Dealer: Ysay, Naj';return}try{await saveSettings({...settings(),tipStaff:{pool,personal},tipPeople:{...tipPeople(),[dealerRole()||'Dealers']:pool.flatMap(([,n])=>n)}});S.tipEdit=false;render();flash('Tip staff saved')}catch(e){q('tp-err').textContent=errMsg(e)}};
+ if(q('tp-psave'))q('tp-psave').onclick=async()=>{const r=parseRoles(q('tp-people').value);try{await saveSettings({...settings(),tipPeople:Object.fromEntries(r)});S.tipShareEdit=false;render();flash('Saved')}catch(e){flash(errMsg(e))}};
  if(q('fl-day')){const go=n=>{const [y,m,d]=(S.flowDay||bizDay()).split('-').map(Number);S.flowDay=new Date(Date.UTC(y,m-1,d+n)).toISOString().slice(0,10);render()};q('fl-day').onchange=e=>{S.flowDay=e.target.value||null;render()};q('fl-prev').onclick=()=>go(-1);q('fl-next').onclick=()=>go(1);q('fl-today').onclick=()=>{S.flowDay=null;render()}}
  if(q('lf-csv'))q('lf-csv').onclick=async()=>{const rows=[['Business day','Time','Type','Details','Cash float','Insurance cash','Insurance chips','On-day cash','Chip float','Note','Voided']];
   for(const e of S.entries.slice().sort(byNewest).reverse()){const v=k=>(e.legs||[]).filter(g=>g.a+'_'+g.m===k).reduce((s,g)=>s+g.v,0);
