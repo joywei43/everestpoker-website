@@ -176,7 +176,7 @@ function render() {
   const link = (p, label, extra = '') => `<a href="#/${p}" ${page === p || (p === 'members' && page === 'member') || (p === 'operationreport' && page === 'tablereport') ? 'aria-current="page"' : ''}>${label}${extra}</a>`;
   root.innerHTML = `<div class="app">
     <nav class="side" aria-label="Main">
-      <div class="brand"><img src="logo.png" alt="Everest Poker Room"><div><b>EVEREST</b><small>Admin console</small></div></div>
+      <div class="brand"><div><b>EVEREST</b><small>Admin console</small></div></div>
       ${isReadOnly() ? '<div class="small" style="margin:0 12px 8px;padding:6px 8px;border-radius:6px;background:#fff4d6;color:#7a5a12">Senior Dealer · read only</div>' : ''}
       <div class="navlinks">
         ${link('liveoperation', 'Live Operation')}
@@ -212,7 +212,7 @@ function renderStaff() {
   box.querySelector('#logout').onclick = async () => { try { await api('/logout', 'POST', {}); } catch (e) {} token = ''; staff = ''; sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USER_KEY); sessionStorage.removeItem(ROLE_KEY); render(); };
 }
 function renderLogin() {
-  root.innerHTML = `<div class="card login"><div style="background:#121212;border-radius:12px;padding:18px;margin:-8px -8px 18px;text-align:center"><img src="logo.png" alt="Everest Poker Room" style="width:160px;height:auto"></div><h1>Everest members</h1><p class="sub">Staff sign in</p>
+  root.innerHTML = `<div class="card login"><div style="background:#121212;border-radius:12px;padding:18px;margin:-8px -8px 18px;text-align:center"><div style="color:#d9b25e;font-weight:800;letter-spacing:.14em;font-size:18px">EVEREST POKER ROOM</div></div><h1>Everest members</h1><p class="sub">Staff sign in</p>
     <form id="lf" style="margin-top:16px;display:flex;flex-direction:column;gap:12px"><label class="f">Username<input type="text" id="un" autocomplete="username" required maxlength="60" autocapitalize="off" spellcheck="false"></label>
     <label class="f">Password<input type="password" id="pw" autocomplete="current-password" required maxlength="200"></label>
     <button class="btn primary">Sign in</button></form><div id="lm" style="margin-top:12px"></div></div>`;
@@ -960,7 +960,7 @@ tr{break-inside:avoid}.num{text-align:right;font-variant-numeric:tabular-nums;wh
 .bar{height:7px;background:#eee;border-radius:4px;width:120px}.bar span{display:block;height:100%;background:#b8902f;border-radius:4px}tfoot td{font-weight:700;border-top:1.5px solid #1d1d1f;border-bottom:none}.note{font-size:8.5pt;color:#666;line-height:1.5;margin-top:10px}
 .foot{position:absolute;left:16mm;right:16mm;bottom:9mm;font-size:7.5pt;color:#999;display:flex;justify-content:space-between}
 </style></head><body><section class="page"><div class="top"></div>
-<div class="head"><img src="${location.origin}/admin/logo.png" alt=""><div><div class="brand">EVEREST POKER ROOM</div><div class="sub">Midori Clark Hotel and Casino</div></div><div class="doc">Table Report<br>As of ${esc(asOf)}</div></div>
+<div class="head"><div><div class="brand">EVEREST POKER ROOM</div><div class="sub">Midori Clark Hotel and Casino</div></div><div class="doc">Table Report<br>As of ${esc(asOf)}</div></div>
 <h1>${esc(r.table)}${r.levels.length ? ' · ' + r.levels.map((l) => esc(l.name)).join(' · ') : ''}</h1><p class="period">${esc(period)} · ${esc(opened)}</p>
 <div class="tiles"><div class="tile"><div class="k">Table hours</div><div class="v">${hm(r.table_seconds)}</div><div class="s">${r.first_open && r.from === r.to ? time(r.first_open) + ' → ' + (r.still_open ? 'now' : time(r.last_close)) : r.days_open + (r.days_open === 1 ? ' day open' : ' days open')}</div></div>
 <div class="tile"><div class="k">Players</div><div class="v">${T.players}</div><div class="s">${r.groups.length} player groups</div></div>

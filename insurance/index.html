@@ -227,7 +227,7 @@ const mini = (c) => `<span class="mini ${isRed(c) ? 'red' : ''}">${face(c)}${SUI
 function render() {
   const app = document.getElementById('app');
   if (!token) return renderLogin(app);
-  app.innerHTML = `<header><div class="wrap"><img src="/admin/logo.png" alt=""><h1>${t('title')}</h1>
+  app.innerHTML = `<header><div class="wrap"><h1>${t('title')}</h1>
     <div class="tabs"><button data-tab="calc" class="${tab === 'calc' ? 'on' : ''}">${t('calc')}</button><button data-tab="today" class="${tab === 'today' ? 'on' : ''}">${t('today')}</button></div>
     <button class="lang" id="lang">${lang === 'zh' ? 'EN' : '中文'}</button></div></header><main class="wrap" id="main"></main>`;
   app.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; render(); });
@@ -236,7 +236,7 @@ function render() {
 }
 
 function renderLogin(app) {
-  app.innerHTML = `<form class="login" id="lf"><img src="/admin/logo.png" alt="" style="width:56px"><h2>Everest ${t('title')}</h2>
+  app.innerHTML = `<form class="login" id="lf"><h2>Everest ${t('title')}</h2>
     <input id="un" type="text" placeholder="${t('user')}" autocomplete="username" required><input id="pw" type="password" placeholder="${t('pass')}" autocomplete="current-password" required>
     <button class="btn gold" style="width:100%;margin-top:12px">${t('signin')}</button><div class="err" id="err"></div></form>`;
   app.querySelector('#lf').onsubmit = async (e) => {
@@ -439,7 +439,7 @@ function openSummary(S, onClose) {
   const ov = document.createElement('div');
   ov.className = 'sum-ov';
   ov.innerHTML = `<div class="sum" role="dialog" aria-modal="true" aria-label="Insurance summary">
-    <div class="shead"><img src="/admin/logo.png" alt=""><div><div class="sbrand">EVEREST POKER · INSURANCE</div><div class="muted">${esc(S.table)} · ${esc(S.blinds)}</div></div></div>
+    <div class="shead"><div><div class="sbrand">EVEREST POKER · INSURANCE</div><div class="muted">${esc(S.table)} · ${esc(S.blinds)}</div></div></div>
     <div class="sl"><span>Time:</span> <b>${tm}</b></div><div class="sl"><span>Date:</span> <b>${dt}</b></div>
     <div class="scards">${players}</div>
     <div class="sboard"><div class="spn">Board</div>${board.map(big).join('')}</div>
