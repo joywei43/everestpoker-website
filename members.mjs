@@ -5,7 +5,9 @@ import { businessDay, runsAround, dayOpenFromRuns } from './operation.mjs';
 
 const TZ_OFFSET = 8 * 3600; // Philippines, UTC+8. PPM writes local wall-clock times.
 const DAY = 86400;
-const REWARD_TYPES = ['free_chip', 'promo_cash', 'promo_chip', 'hotel', 'transportation', 'tournament_ticket'];
+// Types that can be given now. free_chip and transportation are old types kept only for past records.
+const REWARD_TYPES = ['promo_cash', 'promo_chip', 'rakeback', 'hotel', 'transport_air', 'transport_grab', 'tournament_ticket'];
+const REWARD_LABEL = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', rakeback: 'Rakeback', hotel: 'Hotel Stay', transportation: 'Transportation', transport_air: 'Transportation-Air', transport_grab: 'Transportation-Grab', tournament_ticket: 'Tournament Tickets' };
 const STATUSES = ['active', 'suspended', 'banned'];
 const PROFILE_FIELDS = ['surname', 'middle_name', 'family_name', 'nickname', 'nationality', 'birthday', 'passport_id',
   'email', 'phone', 'whatsapp', 'telegram', 'line', 'referral_id', 'language'];
@@ -878,7 +880,6 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (!m) return bad(reply, 'Member not found. Pick the member from the list.');
     const type = str(b.type, 20), amount = Number(b.amount), sub = str(b.sub, 20), detail = str(b.detail, 180), pay = str(b.pay, 10);
     if (!REWARD_TYPES.includes(type)) return bad(reply, 'Unknown reward type.');
-    if (type === 'transportation' && !['Airfare', 'Taxi'].includes(sub)) return bad(reply, 'Choose Airfare or Taxi.');
     if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 100000000) return bad(reply, 'Amount must be a whole number of pesos.');
     if (!detail) return bad(reply, 'Write the detail.');
     if (!['', 'cash', 'chips'].includes(pay)) return bad(reply, 'Unknown payment.');
@@ -895,7 +896,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (pay) {
       // The cage business day turns at noon (Manila).
       const cageDay = date && date !== localDate(now) ? date : localDate(now - 12 * 3600);
-      const label = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', hotel: 'Hotel Stay', transportation: 'Transportation', tournament_ticket: 'Tournament Tickets' }[type] + (sub ? ' · ' + sub : '');
+      const label = REWARD_LABEL[type] + (sub ? ' · ' + sub : '');
       const nick = m.nickname || displayName(m);
       const data = { type: pay === 'cash' ? 'op_out' : 'comp_chips', date: cageDay, time: new Date((now + 8 * 3600) * 1000).toISOString().slice(11, 16), createdAt: new Date(now * 1000).toISOString(), voided: false,
         player: null, medium: pay === 'cash' ? 'cash' : 'chips', method: null, amount, cat: 'Player comps · ' + label, note: detail, approver: approver || null, rewardId: row.id, compPaid: pay, memberNo: m.member_no,

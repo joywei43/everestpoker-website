@@ -176,7 +176,7 @@ assert.equal((await call(`/rewards/${pend[0].id}/approve`, 'POST', {}, boss.toke
 chen = (await call('/members/EV-000001', 'GET', null, boss.token)).body;
 assert.equal(chen.stats.all.rewards, before + 4000); assert.equal(chen.stats.all.rewards_pending, 0);
 assert.equal(chen.rewards.find((x) => x.id === pend[0].id).approved_by, 'ADMIN01');
-r = await call('/members/EV-000001/rewards', 'POST', { type: 'free_chip', amount: 1000, recorded_by: 'ADMIN01' }, boss.token);
+r = await call('/members/EV-000001/rewards', 'POST', { type: 'promo_chip', amount: 1000, recorded_by: 'ADMIN01' }, boss.token);
 assert.equal(r.body.approved, true, 'manager entries are approved at once');
 
 // Photos: staff upload a small image, it shows on the profile and in the member's own app.
@@ -418,7 +418,7 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   const pt = structuredClone((await call('/ppm', 'GET', null, boss.token)).body);
   pt.tables[3].sessions = [{ seatId: 1, memberId: '100000', startTime: '2026-10-29 20:00:00', endTime: '2026-10-29 21:00:00', activeSeconds: 3600, restSeconds: 0, buyInAmount: 1000 }];
   assert.equal((await call('/ppm', 'PUT', { version: pt.version, tables: pt.tables }, boss.token)).status, 200);
-  await call('/members/100000/rewards', 'POST', { type: 'free_chip', amount: 500, staff: 'Boss' }, boss.token);
+  await call('/members/100000/rewards', 'POST', { type: 'promo_chip', amount: 500, staff: 'Boss' }, boss.token);
   assert.equal((await call('/members/100000/merge', 'POST', { into: '333333' }, maria.token)).status, 403, 'master only');
   const mg = await call('/members/100000/merge', 'POST', { into: '333333', staff: 'Boss' }, boss.token);
   assert.equal(mg.status, 200, JSON.stringify(mg.body));
@@ -590,19 +590,21 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.deepEqual(p2.members.map((m) => m.member_no), all.slice(2, 4).map((m) => m.member_no), 'pages line up');
 }
 { // Rewards page: issue a comp; the cage records it when it pays
-  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', amount: 1200, detail: 'airport' }, token)).status, 400, 'airfare or taxi');
-  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', sub: 'Taxi', amount: 1200, detail: '' }, token)).status, 400, 'detail');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', amount: 1200, detail: 'airport' }, token)).status, 400, 'old type no longer given');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'free_chip', amount: 1200, detail: 'x' }, token)).status, 400, 'free chip no longer given');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'rakeback', amount: 3000, detail: 'Week 46' }, token)).status, 200, 'rakeback');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transport_grab', amount: 1200, detail: '' }, token)).status, 400, 'detail');
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'NOPE', type: 'hotel', amount: 1, detail: 'x' }, token)).status, 400, 'member');
-  const r1 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', sub: 'Taxi', amount: 1200, detail: 'Hotel to club', pay: 'cash', date: '2026-11-17' }, token)).body;
+  const r1 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transport_grab', amount: 1200, detail: 'Hotel to club', pay: 'cash', date: '2026-11-17' }, token)).body;
   assert.ok(r1.ok && r1.cage === 'cash');
-  const r2 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'free_chip', amount: 2000, detail: 'Birthday', pay: 'chips', date: '2026-11-17' }, token)).body;
+  const r2 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'promo_chip', amount: 2000, detail: 'Birthday', pay: 'chips', date: '2026-11-17' }, token)).body;
   const c1 = sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r1.id);
   const d1 = JSON.parse(c1.data);
-  assert.equal(d1.type, 'op_out'); assert.deepEqual(d1.legs, [{ a: 'cf', m: 'cash', v: -1200 }]); assert.equal(d1.cat, 'Player comps · Transportation · Taxi'); assert.equal(d1.date, '2026-11-17');
+  assert.equal(d1.type, 'op_out'); assert.deepEqual(d1.legs, [{ a: 'cf', m: 'cash', v: -1200 }]); assert.equal(d1.cat, 'Player comps · Transportation-Grab'); assert.equal(d1.date, '2026-11-17');
   assert.deepEqual(JSON.parse(sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r2.id).data).legs, [{ a: 'chip', m: 'chips', v: -2000 }]);
   const list = (await call('/rewards/list?from=2026-11-17&to=2026-11-17', 'GET', null, token)).body.rewards;
   const t = list.find((x) => x.id === r1.id);
-  assert.equal(t.detail, 'Taxi: Hotel to club'); assert.equal(t.cage.how, 'cash');
+  assert.equal(t.detail, 'Hotel to club'); assert.equal(t.cage.how, 'cash');
   assert.equal((await call(`/rewards/${r1.id}/void`, 'POST', { staff: 'K. Lim', reason: 'Wrong player' }, token)).status, 200);
   assert.equal(JSON.parse(sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r1.id).data).voided, true);
 }
