@@ -1,3 +1,4 @@
+import { supervisorApproval } from './cardauth.mjs';
 import { businessDay, runsAround, dayOpenFromRuns } from './operation.mjs';
 // Everest member system — staff API (phase 1).
 // Members, player groups, group history, PPM play time and rewards.
@@ -889,10 +890,14 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (givenAt > now + DAY) return bad(reply, 'Date is in the future.');
     const groupId = await groupAt(env, m.id, givenAt);
     const fullDetail = (sub ? sub + ': ' : '') + detail;
-    const approver = manager ? (str(b.approved_by, 60) || who(b)) : '';
+    // At the cage a supervisor approves with their cage PIN; in Admin a manager account approves by itself.
+    const cageApprover = !manager && b.cage_approver ? await supervisorApproval(env, str(b.cage_approver, 60), str(b.cage_pin, 20)) : null;
+    if (b.cage_approver && !manager && !cageApprover) return bad(reply, 'Wrong supervisor PIN.', 403);
+    const approved = manager || !!cageApprover;
+    const approver = manager ? (str(b.approved_by, 60) || who(b)) : cageApprover || '';
     const row = await env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id')
-      .bind(m.id, groupId, type, fullDetail, amount, givenAt, who(b) || 'staff', approver, manager ? now : null, now).first();
-    const stmts = [audit(env, now, who(b) || 'staff', 'reward.add', m.id, `${type} ₱${amount} ${fullDetail}${pay ? ' · paid by the cage in ' + pay : ''}${manager ? '' : ' · waiting for approval'}`)];
+      .bind(m.id, groupId, type, fullDetail, amount, givenAt, who(b) || 'staff', approver, approved ? now : null, now).first();
+    const stmts = [audit(env, now, who(b) || 'staff', 'reward.add', m.id, `${type} ₱${amount} ${fullDetail}${pay ? ' · paid by the cage in ' + pay : ''}${cageApprover ? ' · approved at the cage by ' + cageApprover : manager ? '' : ' · waiting for approval'}`)];
     if (pay) {
       // The cage business day turns at noon (Manila).
       const cageDay = date && date !== localDate(now) ? date : localDate(now - 12 * 3600);
@@ -906,7 +911,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         env.DB.prepare("INSERT INTO cage_docs(coll,id,data,deleted,version,rev,updated,updated_by) VALUES('entries',?,?,0,1,(SELECT rev FROM cage_meta WHERE id=1),?,?)").bind('rw-' + row.id, JSON.stringify(data), now, who(b) || 'staff'));
     }
     await env.DB.batch(stmts);
-    return reply({ ok: true, id: row.id, approved: manager, cage: pay || null });
+    return reply({ ok: true, id: row.id, approved, approved_by: approver || null, cage: pay || null });
   }
   if (parts[0] === 'rewards' && parts[1] === 'pending' && method === 'GET') {
     const rows = await all(env.DB.prepare(`SELECT rw.id,rw.type,rw.detail,rw.amount,rw.given_at,rw.recorded_by,rw.group_id,m.member_no,m.surname,m.middle_name,m.family_name,m.nickname,m.member_no
