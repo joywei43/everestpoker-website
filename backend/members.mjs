@@ -118,7 +118,7 @@ async function groupAt(env, memberId, t) {
 }
 
 // Match names typed in PPM to members: member number (or six digits), an old number, then a nickname used by only one member.
-async function matchRefs(env, list) {
+export async function matchRefs(env, list) {
   const refs = [...new Set(list.flatMap((r) => [r.toLowerCase(), normNo(r).toLowerCase()]))];
   const byNo = new Map(), byNick = new Map();
   for (const part of chunks(refs, 45)) {
