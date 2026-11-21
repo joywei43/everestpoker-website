@@ -43,6 +43,7 @@ jobs:
             echo ',"staff_roles":'; q "SELECT role, active, COUNT(*) n FROM staff GROUP BY role, active"
             echo ',"tables":'; q "SELECT name, sql FROM sqlite_master WHERE tbl_name IN ('staff','rewards')"
             echo ',"rewards":'; q "SELECT id, type, detail, amount, given_at, voided FROM rewards ORDER BY id"
+            echo ',"cage_player":'; q "SELECT coll, id, data, deleted FROM cage_docs WHERE coll IN ('players','entries','corrections') AND (upper(data) LIKE '%ROLAN%' OR data LIKE '%' || COALESCE((SELECT id FROM cage_docs WHERE coll='players' AND upper(json_extract(data,'\$.name'))='ROLAN' LIMIT 1),'~none~') || '%')"
             echo ',"groups":'; q "SELECT g.id, g.name, g.kind, g.owner, g.sort, g.active, l.label FROM member_groups g LEFT JOIN group_labels l ON l.group_id=g.id ORDER BY g.sort"
             echo ',"table_revenue":'; q "SELECT day, table_name, revenue FROM table_revenue ORDER BY day"
             echo ',"daily_reports":'; q "SELECT day, revenue FROM daily_reports ORDER BY day"
