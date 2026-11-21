@@ -81,8 +81,8 @@ button.link{border:none;background:none;color:var(--accent);padding:2px 4px}
 .crow{display:grid;grid-template-columns:70px 96px 1fr;align-items:center;gap:8px;padding:3px 0}
 .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 @media (max-width:700px){.form2{grid-template-columns:1fr}.g2{grid-template-columns:1fr}}
-.mc-tap{display:flex;justify-content:space-between;align-items:center;gap:12px;border:2px dashed #3FB37F;border-radius:12px;padding:14px 16px;margin:10px 0;max-width:760px;flex-wrap:wrap}.mc-tap.warn{border-color:#E0A100;border-style:solid;background:rgba(224,161,0,.10)}.mc-tap.bad{border-color:#C2372F;border-style:solid;background:rgba(194,55,47,.14)}
-.mc-card{display:flex;gap:16px;border:2px solid var(--accent);border-radius:12px;padding:14px;max-width:760px;margin:10px 0;background:var(--card)}
+.mc-tap{display:flex;justify-content:space-between;align-items:center;gap:12px;border:2px dashed #3FB37F;border-radius:12px;padding:14px 16px;margin:10px 0;max-width:680px;flex-wrap:wrap}.mc-tap.warn{border-color:#E0A100;border-style:solid;background:rgba(224,161,0,.10)}.mc-tap.bad{border-color:#C2372F;border-style:solid;background:rgba(194,55,47,.14)}
+.mc-card{display:flex;gap:16px;border:2px solid var(--accent);border-radius:12px;padding:14px;max-width:680px;margin:10px 0;background:var(--card)}
 .mc-photo{border-radius:12px;background:#33332f;border:1px solid var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center;flex:none;font-weight:700;color:#d8d6cf}.mc-photo img{width:100%;height:100%;object-fit:cover;display:block}
 .mc-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;z-index:50;overflow:auto}.mc-dialog{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;width:100%;max-width:460px}
 .mc-file{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
@@ -739,11 +739,11 @@ function vCountHistory(){return `<div class="card"><table><tr><th>Business day</
  return `<tr><td class="num">${esc(c.day)}</td><td>${c.kind==='open'?'Opening':'Closing'}</td><td class="num">${esc(c.time)}</td><td>${esc(c.cashier)} / ${esc(c.supervisor)}</td><td class="r">${d?`<span class="pill bad">${d} line${d>1?'s':''}</span>`:'<span class="pill cash">None</span>'}</td>
  <td class="r num">${c.kind==='close'?pesoE(c.short||0):''}</td><td>${c.photo?'<span class="pill cash">Filed</span>':'<span class="pill warn">Missing</span>'}</td><td><button class="link" data-viewcnt="${c.id}">Report</button></td></tr>`}).join('')||'<tr><td colspan="8" class="sub">No counts yet.</td></tr>'}</table></div>`}
 function vCountHome(){const op=cageOpen(),l=lastCount(),b=balances();if(op)return vDesk(op);const rec=!S.counts.some(c=>c.kind==='close'&&c.day===bizDay());
- return `<div class="desk-grid"><div class="desk-main"><h2 style="margin-top:6px">Cage</h2><div class="card" style="max-width:760px"><div class="row" style="padding-top:0"><div><b>${op&&op.first?'Not started yet':op?'Cage is open':'Cage is closed'}</b><div class="sub">${l?`Last ${l.kind==='open'?'opened':'closed'}: business day ${esc(l.day)}, ${esc(l.time)} by ${esc(l.cashier)}`:'No count yet.'}</div></div>
+ return `<div class="desk-grid"><div class="desk-main"><h2 style="margin-top:6px">Cage</h2><div class="card" style="max-width:680px"><div class="row" style="padding-top:0"><div><b>${op&&op.first?'Not started yet':op?'Cage is open':'Cage is closed'}</b><div class="sub">${l?`Last ${l.kind==='open'?'opened':'closed'}: business day ${esc(l.day)}, ${esc(l.time)} by ${esc(l.cashier)}`:'No count yet.'}</div></div>
  <span class="pill ${op&&!op.first?'cash':'info'}">${op&&op.first?'New':op?'Open':'Closed'}</span></div>
  ${op&&op.first?'<div class="note info" style="margin-top:10px">First day in the system. Start with whichever comes next at the cage: the opening, or tonight\'s closing.</div>':''}<div class="flex" style="margin-top:10px">${op&&op.first?'<button class="primary" data-flow="open">Open the cage</button><button class="primary" data-flow="close">Close the cage</button>':`<button class="primary" data-flow="${op?'close':'open'}">${op?'Close the cage':'Open the cage'}</button>${rec?`<button class="primary" data-flow="close">Close business day ${esc(bizDay())} 關帳</button>`:''}`}${S.user?`<span class="sub">Signed in: ${esc(S.user.name)}</span><button class="link" id="sign-out">Sign out</button>`:''}</div></div>
  ${op&&(b.box||0)>0.001?`<div class="card" style="max-width:760px;margin-top:12px"><div class="row" style="padding-top:0"><b>BBJ / Rake to settle with MIDORI</b><span class="pill warn">To do</span></div><div class="row"><span>Chips short at the last close</span><b class="num">${pesoE(b.box)}</b></div><button id="ot-buy" style="margin-top:6px">Record payment</button></div>`:''}
- ${rec?'':`<div class="note info" style="max-width:760px;margin-top:12px"><b>View only · cage not open 未開帳，只能查看</b><br>Tap a member card to look the player up. Cards are given in the Member Card tab. Open the cage to record.</div>`}
+ ${rec?'':`<div class="note info" style="max-width:680px;margin-top:12px"><b>View only · cage not open 未開帳，只能查看</b><br>Tap a member card to look the player up. Cards are given in the Member Card tab. Open the cage to record.</div>`}
  ${vCardPanel(!rec)}
  ${rec?`<h2>Record 記帳</h2>${vQuickBar()}${vInsFloat()}`:''}</div><aside class="desk-side">${vRecords(true)}</aside></div>
  <h2>Count history</h2><div class="card"><table><tr><th>Business day</th><th>Count</th><th>Time</th><th>Cashier / Supervisor</th><th class="r">Differences</th><th class="r">Chips short</th><th>Signed copy</th><th></th></tr>
@@ -1571,14 +1571,18 @@ function apprBlock(st,prefix){if(isManagerLogin())return `<div class="sub" style
 const apprBody=st=>isManagerLogin()?{}:{approver_user:(st.approver||'').trim(),approver_password:st.pin||''};
 
 /* ----- Rewards at the cage: promo chip or promo cash, approved by a supervisor ----- */
-function openRewards(m){S.rw={m,type:'promo_chip',amount:'',detail:'',approver:'',pin:'',err:'',q:'',busy:false};drawRewards()}
+/* Same reward types as Admin → Rewards (backend REWARD_TYPES); the cage pays some of them from the float. */
+const RW_TYPES=[['promo_cash','Promotion-Cash'],['promo_chip','Promotion-Chip'],['rakeback','Rakeback'],['hotel','Hotel Stay'],['transport_air','Transportation-Air'],['transport_grab','Transportation-Grab'],['tournament_ticket','Tournament Tickets']];
+const RW_PAY={promo_cash:'cash',promo_chip:'chips',rakeback:'chips',hotel:'',transport_air:'',transport_grab:'cash',tournament_ticket:''};
+function openRewards(m){S.rw={m,type:'promo_chip',pay:'chips',amount:'',detail:'',approver:'',pin:'',err:'',q:'',busy:false};drawRewards()}
 function closeRewards(){S.rw=null;const el=$('rw-modal');if(el)el.remove()}
 function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el=document.createElement('div');el.id='rw-modal';el.className='mc-modal';document.body.appendChild(el)}
  el.innerHTML=`<div class="mc-dialog" role="dialog" aria-label="Rewards"><div class="flex" style="justify-content:space-between"><b style="font-size:18px">Rewards 獎勵</b><button class="link" data-rw-x>✕</button></div>
  ${r.m?`<div class="flex" style="margin-top:10px;gap:12px">${photoBox(r.m,56)}<div><b>${esc(r.m.nickname||r.m.name)}</b> <span class="sub">#${esc(r.m.member_no)}</span><br><button class="link" data-rw-change>Change member</button></div></div>`
   :`<label>Member</label><input id="rw-q" autocomplete="off" placeholder="Member number or name" value="${esc(r.q)}"><div class="sugg" id="rw-sugg"></div>`}
- <label>Type</label>${mseg('rwtype',[['promo_chip','Promo chip 籌碼'],['promo_cash','Promo cash 現金']],r.type)}
- <div class="sub" style="margin-top:4px">${r.type==='promo_cash'?'Cash from the cash float.':'Chips from the chip float.'} Approved by a manager. Hotel, transport and tournament tickets: Admin → Rewards.</div>
+ <label>Type</label><select id="rw-type">${RW_TYPES.map(([k,l])=>`<option value="${k}" ${r.type===k?'selected':''}>${l}</option>`).join('')}</select>
+ <label>Paid at the cage?</label>${mseg('rwpay',[['chips','Chips 籌碼'],['cash','Cash 現金'],['','Not paid here']],r.pay)}
+ <div class="sub" style="margin-top:4px">${r.pay==='chips'?'Chips from the chip float.':r.pay==='cash'?'Cash from the cash float.':'Only saved in Admin → Rewards; nothing leaves the cage.'} Same list as Admin → Rewards; it shows there too. Approved by a manager.</div>
  <label>Reason</label><input id="rw-detail" value="${esc(r.detail)}" placeholder="e.g. High hand · Quad Kings">
  <label>Amount (₱)</label><input id="rw-amt" inputmode="numeric" value="${esc(r.amount)}" placeholder="0">
  ${apprBlock(r,'rw')}
@@ -1586,7 +1590,8 @@ function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el
  <div class="flex" style="margin-top:12px"><button class="primary" id="rw-go" ${r.busy?'disabled':''}>Give reward</button><button class="link" data-rw-x>Cancel</button></div></div>`;
  el.querySelectorAll('[data-rw-x]').forEach(b=>b.onclick=closeRewards);
  const ch=el.querySelector('[data-rw-change]');if(ch)ch.onclick=()=>{r.m=null;drawRewards();const i=$('rw-q');i&&i.focus()};
- el.querySelectorAll('[data-mfield="rwtype"] button').forEach(b=>b.onclick=()=>{r.type=b.dataset.v;keep();drawRewards()});
+ $('rw-type').onchange=()=>{keep();r.type=$('rw-type').value;r.pay=RW_PAY[r.type]??'';drawRewards()};
+ el.querySelectorAll('[data-mfield="rwpay"] button').forEach(b=>b.onclick=()=>{keep();r.pay=b.dataset.v;drawRewards()});
  function keep(){const d=$('rw-detail'),a=$('rw-amt'),u=$('rw-au'),p=$('rw-ap');if(d)r.detail=d.value;if(a)r.amount=a.value;if(u)r.approver=u.value;if(p)r.pin=p.value}
  const qi=$('rw-q');if(qi)qi.oninput=()=>{r.q=qi.value;memberSearch(qi.value,list=>{const box=$('rw-sugg');if(!box)return;box.innerHTML=list.map((m,i)=>`<button type="button" data-rwm="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}</button>`).join('');
   box.querySelectorAll('[data-rwm]').forEach(b=>b.onclick=()=>{keep();r.m=list[Number(b.dataset.rwm)];drawRewards()})})};
@@ -1594,8 +1599,8 @@ function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el
   if(!r.m)r.err='Choose the member.';else if(!r.detail.trim())r.err='Write the reason.';else if(!Number.isSafeInteger(amt)||amt<=0)r.err='Enter the amount in whole pesos.';else if(!isManagerLogin()&&(!r.approver.trim()||!r.pin))r.err='A manager types their Admin username and password.';
   if(r.err){drawRewards();return}
   r.busy=true;drawRewards();
-  if(TESTMODE){const cash=r.type==='promo_cash',label=cash?'Promo cash':'Promo chip',nick=r.m.nickname||r.m.name;try{await saveEntry({type:cash?'op_out':'comp_chips',date:bizDay(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:new Date().toISOString(),voided:false,player:null,medium:cash?'cash':'chips',method:null,amount:amt,cat:'Player comps · '+label,note:r.detail.trim(),approver:(isManagerLogin()?S.user&&S.user.name:r.approver)||null,compPaid:cash?'cash':'chips',memberNo:r.m.member_no,legs:cash?[{a:'cf',m:'cash',v:-amt}]:[{a:'chip',m:'chips',v:-amt}],pl:{cat:'Player comps · '+label,v:-amt},summary:`Comp · ${label} · ${nick} #${r.m.member_no} · ${r.detail.trim()} (TEST)`});closeRewards();flash('Test reward recorded (not saved)')}catch(e){r.busy=false;r.err=errMsg(e);drawRewards()}return}
-  try{const res=await api('/rewards/issue','POST',{member_no:r.m.member_no,type:r.type,amount:amt,detail:r.detail.trim(),pay:r.type==='promo_cash'?'cash':'chips',...apprBody(r)});
+  if(TESTMODE){if(!r.pay){closeRewards();flash('Test: not paid at the cage, nothing recorded');return}const cash=r.pay==='cash',label=(RW_TYPES.find(t=>t[0]===r.type)||['',r.type])[1],nick=r.m.nickname||r.m.name;try{await saveEntry({type:cash?'op_out':'comp_chips',date:bizDay(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:new Date().toISOString(),voided:false,player:null,medium:cash?'cash':'chips',method:null,amount:amt,cat:'Player comps · '+label,note:r.detail.trim(),approver:(isManagerLogin()?S.user&&S.user.name:r.approver)||null,compPaid:cash?'cash':'chips',memberNo:r.m.member_no,legs:cash?[{a:'cf',m:'cash',v:-amt}]:[{a:'chip',m:'chips',v:-amt}],pl:{cat:'Player comps · '+label,v:-amt},summary:`Comp · ${label} · ${nick} #${r.m.member_no} · ${r.detail.trim()} (TEST)`});closeRewards();flash('Test reward recorded (not saved)')}catch(e){r.busy=false;r.err=errMsg(e);drawRewards()}return}
+  try{const res=await api('/rewards/issue','POST',{member_no:r.m.member_no,type:r.type,amount:amt,detail:r.detail.trim(),pay:r.pay,...apprBody(r)});
    closeRewards();flash(`Reward ${peso(amt)} for ${r.m.nickname||r.m.name} recorded${res.approved_by?' · approved by '+res.approved_by:''}`);if(DB&&DB.pull)DB.pull(true).catch(()=>{})}
   catch(e){r.busy=false;r.pin='';r.err=errMsg(e);drawRewards()}}}
 
