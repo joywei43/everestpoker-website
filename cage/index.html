@@ -978,6 +978,8 @@ function vQuickGrid(keys){const list=keys?QA.filter(a=>keys.includes(a.k)):QA;re
 function vQuickBar(){return `${vQuickGroups()}${S.qa?`<div id="form-here" style="margin-top:12px">${vQuickForm()}</div>`:''}`}
 function apprField(q){return `<label>Approved by</label>${seg('qaappr',approvers().map(n=>[n,n]),q.approver)}`}
 function playerField(q,acctOnly){const p=findPlayer(q.player);
+ if(!acctOnly&&q.member&&S.cardM&&S.cardM.state==='ok'&&S.cardM.m&&normNo(S.cardM.m.member_no)===normNo(q.member.member_no)&&q.player.trim())
+  return `<input type="hidden" id="qa-player" value="${esc(q.player)}"><div class="sub" style="margin-top:2px">Player: <b style="color:var(--ink)">${esc(q.player)}</b> · from the member card above <button class="link" data-card-x>Change player 換人</button></div>${memberNote(q,p).includes('note warn')?memberNote(q,p):''}${p?playerCard2(q.player,true):''}`;
  return `<label>Player${acctOnly?' (account holders only)':''}</label><input id="qa-player" autocomplete="off" value="${esc(q.player)}" placeholder="Member number or name" data-acct="${acctOnly?1:''}"><div class="sugg" id="qa-sugg">${p||q.member?'':suggHTML(q.player,acctOnly)}</div><div class="sugg" id="qa-msugg"></div>${p&&!p.no&&!q.member?`<div class="sugg" id="qa-mlink" data-pid="${p.id}"><span class="sub">Looking for ${esc(p.name)} in Everest members…</span></div>`:''}${memberNote(q,p)}${q.player.trim()&&!(q.member&&!p)?playerCard2(q.player):''}`}
 function memberNote(q,p){const m=q.member;if(!m)return p&&p.no?'':'';const mn=m.nickname||m.name||'';const diff=p&&((p.no&&normNo(p.no)!==normNo(m.member_no))||(lname(p.name)!==lname(mn)&&lname(p.name)!==lname(m.name||'')));
  return `<div class="sub" style="margin-top:4px">Member <b>${esc(mn)}</b> #${esc(m.member_no)}${m.group_name?' · '+esc(m.group_name):''}</div>${diff?`<div class="note warn" style="margin-top:6px">Different from Operation System: there it is <b>${esc(mn)} #${esc(m.member_no)}</b>, here <b>${esc(pLabel(p))}</b>. Saved as it is here; check with Marketing.</div>`:''}`}
@@ -995,13 +997,12 @@ function suggList(text,acctOnly){const t=lname(text).replace(/^#/,''),day=bizDay
  return list.slice(0,8)}
 function suggHTML(text,acctOnly){const l=suggList(text,acctOnly);if(!l.length)return text.trim()?`<span class="sub">New name: ${esc(text.trim())}</span>`:'';
  return `${text.trim()?'':'<span class="sub">Today and accounts:</span>'}${l.map(p=>`<button type="button" data-pick="${esc(p.no?pLabel(p):p.name)}">${esc(pLabel(p))}${isAcct(p)?` <span class="num ${pBal(p.id)<0?'neg':''}" style="font-size:12px">${pesoE(pBal(p.id))}</span>`:''}</button>`).join('')}`}
-function playerCard2(name){const p=findPlayer(name),day=bizDay(),pp=ppmFor(day,name);
+function playerCard2(name,short){const p=findPlayer(name),day=bizDay(),pp=ppmFor(day,name);
  if(!p)return `<div class="note info">New name: <b>${esc(name)}</b> (no player account).${pp?` PPM today: buy-in ${pesoE(pp.buyin)} · cash-out ${pesoE(pp.cashout)}`:''}</div>`;
  const bal=isAcct(p)?pBal(p.id):0,cd=cageDay(day,p.id);
  return `<div class="card" style="margin-top:10px;border:2px solid var(--accent)"><div class="row" style="padding-top:0"><b>Player card · ${esc(pLabel(p))}</b>${isAcct(p)?'<span class="pill info">Player account</span>':acctOf(p)?`<span class="pill info">Under ${esc(acctOf(p).name)}</span>`:'<span class="pill warn">No account</span>'}</div>
  ${isAcct(p)?`<div class="row"><span>Account balance</span><b class="num ${bal<0?'neg':''}">${pesoE(bal)}${bal<0?' (owes)':''}</b></div>${subsOf(p).length?`<div class="sub">Players under this account: ${subsOf(p).map(x=>esc(pLabel(x))).join(', ')}</div>`:''}`:acctOf(p)?(()=>{const h=acctOf(p),hb=pBal(h.id);return `<div class="row"><span>Uses <b>${esc(pLabel(h))}</b>'s account 帳卡</span><b class="num ${hb<0?'neg':''}">${pesoE(hb)}${hb<0?' (owes)':''}</b></div>`})():''}
- <div class="row"><span class="sub">This business day at cage: buy-in / cash-out</span><span class="num">${pesoE(cd.buyin)} / ${pesoE(cd.cashout)}${cd.credit?' <span class="pill bad">Credit buy-in today</span>':''}</span></div>
- <div class="row"><span class="sub">This business day in PPM: buy-in / cash-out</span><span class="num">${pp?`${pesoE(pp.buyin)} / ${pesoE(pp.cashout)}`:'No record'}</span></div></div>`}
+ ${short?'':`<div class="row"><span class="sub">This business day at cage: buy-in / cash-out</span><span class="num">${pesoE(cd.buyin)} / ${pesoE(cd.cashout)}${cd.credit?' <span class="pill bad">Credit buy-in today</span>':''}</span></div>`}</div>`}
 function vQuickForm(){const q=S.qa,a=QA.find(x=>x.k===q.k),amt=`<label>Amount (₱)</label><input id="qa-amt" inputmode="decimal" value="${esc(q.amount)}" placeholder="0">`;let f='';
  const p=findPlayer(q.player);
  if(q.k==='buyin'){const ap0=findPlayer(q.player),ah0=ap0?acctOf(ap0):null,ab0=ah0?pBal(ah0.id):0;f=`${playerField(q)}${!q.credit&&ab0>0.001?`<div class="note info" style="margin-top:8px"><b>${esc(ah0.name)} has ${pesoE(ab0)} in the account.</b> Use the account first? 帳卡有餘額，優先使用帳卡？ <button type="button" class="c-ins" data-desk="credit_in" data-keep="1" style="margin-left:6px">Use account 用帳卡</button></div>`:''}${q.method==='fx'?'':amt}${q.credit?'':`<label>Buy-in method</label>${seg('qamethod',[['cash','Cash 現金'],['fx','Foreign cash 外幣'],['mass','Mass chip']],q.method)}`}
@@ -1600,8 +1601,8 @@ const apprBody=st=>isManagerLogin()?{}:{approver_user:(st.approver||'').trim(),a
 
 /* ----- Rewards at the cage: promo chip or promo cash, approved by a supervisor ----- */
 /* Same reward types as Admin → Rewards (backend REWARD_TYPES); the cage pays some of them from the float. */
-const RW_TYPES=[['promo_cash','Promotion-Cash'],['promo_chip','Promotion-Chip'],['rakeback','Rakeback'],['hotel','Hotel Stay'],['transport_air','Transportation-Air'],['transport_grab','Transportation-Grab'],['tournament_ticket','Tournament Tickets']];
-const RW_PAY={promo_cash:'cash',promo_chip:'chips',rakeback:'chips',hotel:'',transport_air:'',transport_grab:'cash',tournament_ticket:''};
+const RW_TYPES=[['promo_cash','Promotion-Cash'],['promo_chip','Promotion-Chip'],['rakeback','Rakeback'],['hotel','Hotel Stay'],['transport_air','Transportation-Air'],['transport_grab','Transportation-Grab'],['tournament_ticket','Tournament Tickets'],['other','Other']];
+const RW_PAY={promo_cash:'cash',promo_chip:'chips',rakeback:'chips',hotel:'',transport_air:'',transport_grab:'cash',tournament_ticket:'',other:''};
 function openRewards(m){S.rw={m,type:'promo_chip',pay:'chips',amount:'',detail:'',approver:'',pin:'',err:'',q:'',busy:false};drawRewards()}
 function closeRewards(){S.rw=null;const el=$('rw-modal');if(el)el.remove()}
 function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el=document.createElement('div');el.id='rw-modal';el.className='mc-modal';document.body.appendChild(el)}

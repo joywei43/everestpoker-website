@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS rewards(
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  member_id INTEGER NOT NULL REFERENCES members(id),
  group_id TEXT,
- type TEXT NOT NULL CHECK(type IN ('free_chip','promo_cash','promo_chip','rakeback','hotel','transportation','transport_air','transport_grab','tournament_ticket')), -- free_chip, transportation: old records only
+ type TEXT NOT NULL CHECK(type IN ('free_chip','promo_cash','promo_chip','rakeback','hotel','transportation','transport_air','transport_grab','tournament_ticket','other')), -- free_chip, transportation: old records only
  detail TEXT NOT NULL DEFAULT '',
  amount INTEGER NOT NULL CHECK(amount>=0),
  given_at INTEGER NOT NULL,
