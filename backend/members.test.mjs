@@ -594,6 +594,7 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'free_chip', amount: 1200, detail: 'x' }, token)).status, 400, 'free chip no longer given');
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'rakeback', amount: 3000, detail: 'Week 46' }, token)).status, 200, 'rakeback');
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transport_grab', amount: 1200, detail: '' }, token)).status, 400, 'detail');
+  { const o = await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'other', amount: 500, detail: '' }, token); assert.equal(o.status, 400); assert.match(o.body.error, /detail/, 'Other is a known type; it needs the detail'); }
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'NOPE', type: 'hotel', amount: 1, detail: 'x' }, token)).status, 400, 'member');
   const r1 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transport_grab', amount: 1200, detail: 'Hotel to club', pay: 'cash', date: '2026-11-17' }, token)).body;
   assert.ok(r1.ok && r1.cage === 'cash');

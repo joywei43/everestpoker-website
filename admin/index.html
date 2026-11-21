@@ -112,9 +112,9 @@ dialog form{padding:20px;display:flex;flex-direction:column;gap:14px}
 'use strict';
 const API = (window.EVEREST_API_URL || 'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/, '');
 const TOKEN_KEY = 'ppm-session', USER_KEY = 'ppm-user', ROLE_KEY = 'ppm-role';
-const TYPES = { promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', rakeback: 'Rakeback', hotel: 'Hotel Stay', transport_air: 'Transportation-Air', transport_grab: 'Transportation-Grab', tournament_ticket: 'Tournament Tickets', free_chip: 'Free Chip', transportation: 'Transportation' };
-const ISSUE_TYPES = ['promo_cash', 'promo_chip', 'rakeback', 'hotel', 'transport_air', 'transport_grab', 'tournament_ticket']; // free_chip and transportation: old records only
-const TYPE_CHIP = { free_chip: 'blue', promo_cash: 'green', promo_chip: 'amber', rakeback: 'blue', hotel: '', transportation: '', transport_air: '', transport_grab: '', tournament_ticket: 'dark' };
+const TYPES = { promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', rakeback: 'Rakeback', hotel: 'Hotel Stay', transport_air: 'Transportation-Air', transport_grab: 'Transportation-Grab', tournament_ticket: 'Tournament Tickets', other: 'Other', free_chip: 'Free Chip', transportation: 'Transportation' };
+const ISSUE_TYPES = ['promo_cash', 'promo_chip', 'rakeback', 'hotel', 'transport_air', 'transport_grab', 'tournament_ticket', 'other']; // free_chip and transportation: old records only
+const TYPE_CHIP = { free_chip: 'blue', promo_cash: 'green', promo_chip: 'amber', rakeback: 'blue', hotel: '', transportation: '', transport_air: '', transport_grab: '', tournament_ticket: 'dark', other: '' };
 const root = document.getElementById('root');
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
 let staff = sessionStorage.getItem(USER_KEY) || '';

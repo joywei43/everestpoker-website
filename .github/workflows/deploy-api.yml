@@ -40,6 +40,11 @@ jobs:
         run: node test.mjs && node ppm.test.mjs && node members.test.mjs && node member-app.test.mjs && node operation.test.mjs && node cage.test.mjs && node ppmlink.test.mjs
       - name: Point wrangler.toml at the live database
         run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Allow the Other reward type (one time; the copy keeps every reward)
+        run: |
+          if npx --yes wrangler@4 d1 execute everest-waiting --remote --json --command "SELECT sql FROM sqlite_master WHERE type='table' AND name='rewards'" > /tmp/rw.json && grep -q "rewards" /tmp/rw.json; then
+            if grep -q "'other'" /tmp/rw.json; then echo "Already allows Other"; else npx --yes wrangler@4 d1 execute everest-waiting --remote --file=migrations/rewards-other.sql; fi
+          else echo "No rewards table yet (schema.sql creates it)"; fi
       - name: Update database tables (safe to repeat; existing data is kept)
         run: npx --yes wrangler@4 d1 execute everest-waiting --remote --file=schema.sql
       - name: Deploy Worker
