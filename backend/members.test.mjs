@@ -593,6 +593,7 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', amount: 1200, detail: 'airport' }, token)).status, 400, 'old type no longer given');
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'free_chip', amount: 1200, detail: 'x' }, token)).status, 400, 'free chip no longer given');
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'rakeback', amount: 3000, detail: 'Week 46' }, token)).status, 200, 'rakeback');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'fnb', amount: 800, detail: 'Dinner' }, token)).status, 200, 'food and beverage');
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transport_grab', amount: 1200, detail: '' }, token)).status, 400, 'detail');
   { const o = await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'other', amount: 500, detail: '' }, token); assert.equal(o.status, 400); assert.match(o.body.error, /detail/, 'Other is a known type; it needs the detail'); }
   assert.equal((await call('/rewards/issue', 'POST', { member_no: 'NOPE', type: 'hotel', amount: 1, detail: 'x' }, token)).status, 400, 'member');

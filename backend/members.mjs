@@ -7,8 +7,8 @@ import { businessDay, runsAround, dayOpenFromRuns } from './operation.mjs';
 const TZ_OFFSET = 8 * 3600; // Philippines, UTC+8. PPM writes local wall-clock times.
 const DAY = 86400;
 // Types that can be given now. free_chip and transportation are old types kept only for past records.
-const REWARD_TYPES = ['promo_cash', 'promo_chip', 'rakeback', 'hotel', 'transport_air', 'transport_grab', 'tournament_ticket', 'other'];
-const REWARD_LABEL = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', rakeback: 'Rakeback', hotel: 'Hotel Stay', transportation: 'Transportation', transport_air: 'Transportation-Air', transport_grab: 'Transportation-Grab', tournament_ticket: 'Tournament Tickets', other: 'Other' };
+const REWARD_TYPES = ['promo_cash', 'promo_chip', 'rakeback', 'hotel', 'fnb', 'transport_air', 'transport_grab', 'tournament_ticket', 'other'];
+const REWARD_LABEL = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', rakeback: 'Rakeback', hotel: 'Hotel Stay', fnb: 'Food and Beverage', transportation: 'Transportation', transport_air: 'Transportation-Air', transport_grab: 'Transportation-Grab', tournament_ticket: 'Tournament Tickets', other: 'Other' };
 const STATUSES = ['active', 'suspended', 'banned'];
 const PROFILE_FIELDS = ['surname', 'middle_name', 'family_name', 'nickname', 'nationality', 'birthday', 'passport_id',
   'email', 'phone', 'whatsapp', 'telegram', 'line', 'referral_id', 'language'];

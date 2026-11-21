@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS rewards(
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  member_id INTEGER NOT NULL REFERENCES members(id),
  group_id TEXT,
- type TEXT NOT NULL CHECK(type IN ('free_chip','promo_cash','promo_chip','rakeback','hotel','transportation','transport_air','transport_grab','tournament_ticket')), -- free_chip, transportation: old records only
+ type TEXT NOT NULL, -- checked by the API (REWARD_TYPES in members.mjs); free_chip, transportation: old records only
  detail TEXT NOT NULL DEFAULT '',
  amount INTEGER NOT NULL CHECK(amount>=0),
  given_at INTEGER NOT NULL,
@@ -245,3 +245,14 @@ CREATE TABLE IF NOT EXISTS cage_docs(coll TEXT NOT NULL, id TEXT NOT NULL, data 
 CREATE INDEX IF NOT EXISTS cage_docs_rev ON cage_docs(rev);
 CREATE TABLE IF NOT EXISTS cage_meta(id INTEGER PRIMARY KEY CHECK(id=1), rev INTEGER NOT NULL);
 INSERT OR IGNORE INTO cage_meta(id,rev) VALUES(1,0);
+
+-- Member cards (NFC). The card holds nothing but its own number (uid); it points to one member. Replaced or lost cards stay with active=0.
+CREATE TABLE IF NOT EXISTS member_cards(uid TEXT PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES members(id), active INTEGER NOT NULL DEFAULT 1, linked_at INTEGER NOT NULL, linked_by TEXT NOT NULL DEFAULT '', approved_by TEXT NOT NULL DEFAULT '', replaced_at INTEGER, replaced_by TEXT);
+CREATE INDEX IF NOT EXISTS member_cards_member ON member_cards(member_id,active);
+
+-- Cage ↔ PPM. Players who bought in at the cage and are not seated yet (PPM shows a pop-up; the cage desk can seat them too).
+CREATE TABLE IF NOT EXISTS ppm_waiting(id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL REFERENCES members(id), member_no TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'waiting', created_at INTEGER NOT NULL, created_by TEXT NOT NULL DEFAULT '', seated_at INTEGER, seated_by TEXT, table_name TEXT, seat INTEGER);
+CREATE INDEX IF NOT EXISTS ppm_waiting_status ON ppm_waiting(status,created_at);
+-- Cage buy-ins / cash-outs already applied to PPM (so a retried request is not applied twice). Kept 7 days.
+CREATE TABLE IF NOT EXISTS ppm_events(key TEXT PRIMARY KEY, at INTEGER NOT NULL, result TEXT NOT NULL DEFAULT '');

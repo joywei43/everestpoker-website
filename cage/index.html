@@ -1608,8 +1608,8 @@ const apprBody=st=>isManagerLogin()?{}:{approver_user:(st.approver||'').trim(),a
 
 /* ----- Rewards at the cage: promo chip or promo cash, approved by a supervisor ----- */
 /* Same reward types as Admin → Rewards (backend REWARD_TYPES); the cage pays some of them from the float. */
-const RW_TYPES=[['promo_cash','Promotion-Cash'],['promo_chip','Promotion-Chip'],['rakeback','Rakeback'],['hotel','Hotel Stay'],['transport_air','Transportation-Air'],['transport_grab','Transportation-Grab'],['tournament_ticket','Tournament Tickets'],['other','Other']];
-const RW_PAY={promo_cash:'cash',promo_chip:'chips',rakeback:'chips',hotel:'',transport_air:'',transport_grab:'cash',tournament_ticket:'',other:''};
+const RW_TYPES=[['promo_cash','Promotion-Cash'],['promo_chip','Promotion-Chip'],['rakeback','Rakeback'],['hotel','Hotel Stay'],['fnb','Food and Beverage'],['transport_air','Transportation-Air'],['transport_grab','Transportation-Grab'],['tournament_ticket','Tournament Tickets'],['other','Other']];
+const RW_PAY={promo_cash:'cash',promo_chip:'chips',rakeback:'chips',hotel:'',fnb:'',transport_air:'',transport_grab:'cash',tournament_ticket:'',other:''};
 function openRewards(m){S.rw={m,type:'promo_chip',pay:'chips',amount:'',detail:'',approver:'',pin:'',err:'',q:'',busy:false};drawRewards()}
 function closeRewards(){S.rw=null;const el=$('rw-modal');if(el)el.remove()}
 function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el=document.createElement('div');el.id='rw-modal';el.className='mc-modal';document.body.appendChild(el)}

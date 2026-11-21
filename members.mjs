@@ -1,3 +1,4 @@
+import { managerApproval } from './cardauth.mjs';
 import { businessDay, runsAround, dayOpenFromRuns } from './operation.mjs';
 // Everest member system — staff API (phase 1).
 // Members, player groups, group history, PPM play time and rewards.
@@ -6,8 +7,8 @@ import { businessDay, runsAround, dayOpenFromRuns } from './operation.mjs';
 const TZ_OFFSET = 8 * 3600; // Philippines, UTC+8. PPM writes local wall-clock times.
 const DAY = 86400;
 // Types that can be given now. free_chip and transportation are old types kept only for past records.
-const REWARD_TYPES = ['promo_cash', 'promo_chip', 'rakeback', 'hotel', 'transport_air', 'transport_grab', 'tournament_ticket'];
-const REWARD_LABEL = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', rakeback: 'Rakeback', hotel: 'Hotel Stay', transportation: 'Transportation', transport_air: 'Transportation-Air', transport_grab: 'Transportation-Grab', tournament_ticket: 'Tournament Tickets' };
+const REWARD_TYPES = ['promo_cash', 'promo_chip', 'rakeback', 'hotel', 'fnb', 'transport_air', 'transport_grab', 'tournament_ticket', 'other'];
+const REWARD_LABEL = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', rakeback: 'Rakeback', hotel: 'Hotel Stay', fnb: 'Food and Beverage', transportation: 'Transportation', transport_air: 'Transportation-Air', transport_grab: 'Transportation-Grab', tournament_ticket: 'Tournament Tickets', other: 'Other' };
 const STATUSES = ['active', 'suspended', 'banned'];
 const PROFILE_FIELDS = ['surname', 'middle_name', 'family_name', 'nickname', 'nationality', 'birthday', 'passport_id',
   'email', 'phone', 'whatsapp', 'telegram', 'line', 'referral_id', 'language'];
@@ -117,7 +118,7 @@ async function groupAt(env, memberId, t) {
 }
 
 // Match names typed in PPM to members: member number (or six digits), an old number, then a nickname used by only one member.
-async function matchRefs(env, list) {
+export async function matchRefs(env, list) {
   const refs = [...new Set(list.flatMap((r) => [r.toLowerCase(), normNo(r).toLowerCase()]))];
   const byNo = new Map(), byNick = new Map();
   for (const part of chunks(refs, 45)) {
@@ -889,10 +890,14 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (givenAt > now + DAY) return bad(reply, 'Date is in the future.');
     const groupId = await groupAt(env, m.id, givenAt);
     const fullDetail = (sub ? sub + ': ' : '') + detail;
-    const approver = manager ? (str(b.approved_by, 60) || who(b)) : '';
+    // At the cage a manager approves by typing their own Admin username + password; a manager account approves by itself.
+    let cageApprover = null;
+    if (!manager && b.approver_user) { const a = await managerApproval(env, b.approver_user, b.approver_password, now); if (a.error) return bad(reply, a.error, a.status); cageApprover = a.name; }
+    const approved = manager || !!cageApprover;
+    const approver = manager ? (str(b.approved_by, 60) || who(b)) : cageApprover || '';
     const row = await env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id')
-      .bind(m.id, groupId, type, fullDetail, amount, givenAt, who(b) || 'staff', approver, manager ? now : null, now).first();
-    const stmts = [audit(env, now, who(b) || 'staff', 'reward.add', m.id, `${type} ₱${amount} ${fullDetail}${pay ? ' · paid by the cage in ' + pay : ''}${manager ? '' : ' · waiting for approval'}`)];
+      .bind(m.id, groupId, type, fullDetail, amount, givenAt, who(b) || 'staff', approver, approved ? now : null, now).first();
+    const stmts = [audit(env, now, who(b) || 'staff', 'reward.add', m.id, `${type} ₱${amount} ${fullDetail}${pay ? ' · paid by the cage in ' + pay : ''}${cageApprover ? ' · approved at the cage by ' + cageApprover : manager ? '' : ' · waiting for approval'}`)];
     if (pay) {
       // The cage business day turns at noon (Manila).
       const cageDay = date && date !== localDate(now) ? date : localDate(now - 12 * 3600);
@@ -906,7 +911,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         env.DB.prepare("INSERT INTO cage_docs(coll,id,data,deleted,version,rev,updated,updated_by) VALUES('entries',?,?,0,1,(SELECT rev FROM cage_meta WHERE id=1),?,?)").bind('rw-' + row.id, JSON.stringify(data), now, who(b) || 'staff'));
     }
     await env.DB.batch(stmts);
-    return reply({ ok: true, id: row.id, approved: manager, cage: pay || null });
+    return reply({ ok: true, id: row.id, approved, approved_by: approver || null, cage: pay || null });
   }
   if (parts[0] === 'rewards' && parts[1] === 'pending' && method === 'GET') {
     const rows = await all(env.DB.prepare(`SELECT rw.id,rw.type,rw.detail,rw.amount,rw.given_at,rw.recorded_by,rw.group_id,m.member_no,m.surname,m.middle_name,m.family_name,m.nickname,m.member_no
