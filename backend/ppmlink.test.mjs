@@ -35,6 +35,13 @@ assert.equal(ppm.tables[0].seats[6].buyInAmount, 15000); assert.equal(ppm.versio
 r = await call('/ppm/cage-event', 'POST', { key: 'e1', kind: 'buyin', member_no: A, amount: 5000 }, mary);
 assert.equal(r.body.repeated, true);
 assert.equal((await call('/ppm', 'GET', null, mary)).body.tables[0].seats[6].buyInAmount, 15000);
+// Cash Out Request (clock stopped), then an add-on: the request is cancelled and the clock runs again.
+{ const cur = (await call('/ppm', 'GET', null, mary)).body; const st = cur.tables[0].seats[6];
+  Object.assign(st, { status: 'rest', lastActiveStart: null, lastRestStart: Date.now() - 60000, activeSeconds: 3600, cashoutAsked: { at: Date.now(), by: 'Phoebe' } });
+  assert.equal((await call('/ppm', 'PUT', { version: cur.version, tables: cur.tables }, mary)).status, 200);
+  r = await call('/ppm/cage-event', 'POST', { key: 'e1b', kind: 'buyin', member_no: A, amount: 1000 }, mary); assert.equal(r.body.result.action, 'addon');
+  const s2 = (await call('/ppm', 'GET', null, mary)).body.tables[0].seats[6];
+  assert.equal(s2.status, 'seated'); assert.equal(s2.cashoutAsked, null); assert.ok(s2.lastActiveStart); assert.ok(s2.restSeconds >= 59); assert.equal(s2.buyInAmount, 16000); }
 // New player: waiting for a seat; a second buy-in before seating adds up.
 r = await call('/ppm/cage-event', 'POST', { key: 'e2', kind: 'buyin', member_no: B, amount: 5000 }, mary);
 assert.equal(r.body.result.action, 'waiting');
@@ -55,9 +62,9 @@ assert.equal(r.body.result.action, 'left'); assert.equal(r.body.result.seat, 7);
 ppm = (await call('/ppm', 'GET', null, mary)).body;
 assert.equal(ppm.tables[0].seats[6].status, 'idle');
 const sess = ppm.tables[0].sessions.find((x) => x.memberId === 'Rolan');
-assert.equal(sess.cashOutAmount, 22000); assert.equal(sess.buyInAmount, 15000); assert.ok(sess.activeSeconds >= 3590);
+assert.equal(sess.cashOutAmount, 22000); assert.equal(sess.buyInAmount, 16000); assert.ok(sess.activeSeconds >= 3590);
 const ps = sql.prepare("SELECT ps.buy_in, sr.cash_out, m.member_no FROM play_sessions ps JOIN members m ON m.id=ps.member_id LEFT JOIN session_results sr ON sr.session_id=ps.id").all();
-assert.equal(ps.length, 1); assert.equal(ps[0].member_no, A); assert.equal(ps[0].cash_out, 22000); assert.equal(ps[0].buy_in, 15000);
+assert.equal(ps.length, 1); assert.equal(ps[0].member_no, A); assert.equal(ps[0].cash_out, 22000); assert.equal(ps[0].buy_in, 16000);
 const pub = (await call('/state')).body.state; assert.equal(pub.occupied[0][6], 0); assert.equal(pub.occupied[0][3], 1);
 // Bought in, never seated, cashed out: off the waiting list.
 await call('/ppm/cage-event', 'POST', { key: 'e5', kind: 'buyin', member_no: C, amount: 3000 }, mary);
