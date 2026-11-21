@@ -1,0 +1,20 @@
+# Temporary, read only: lists everything written since 2026-11-22 06:55 (Taipei). Branch is deleted afterwards.
+name: DB inspect 1122
+on:
+  push:
+    branches: [db-inspect-1122]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - run: |
+          while IFS= read -r q; do [ -z "$q" ] && continue; echo "=== $q" | cut -c1-90; npx --yes wrangler@4 d1 execute everest-waiting --remote --json --command "$q" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s);for(const x of r)for(const row of x.results)console.log("ROW "+JSON.stringify(row))}catch(e){console.log(s)}})'; done < inspect-1122.sql

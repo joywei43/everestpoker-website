@@ -1,0 +1,14 @@
+SELECT 'cage_docs' t, coll, id, deleted, updated, updated_by, substr(data,1,260) d FROM cage_docs WHERE (CASE WHEN updated>100000000000 THEN updated/1000 ELSE updated END)>=1795301700 AND coll<>'photos' ORDER BY rev;
+SELECT 'cage_photos' t, count(*) n FROM cage_docs WHERE coll='photos' AND (CASE WHEN updated>100000000000 THEN updated/1000 ELSE updated END)>=1795301700;
+SELECT 'rewards' t, r.id, m.member_no, r.type, r.amount, r.detail, r.recorded_by, r.approved_by, r.voided, r.created_at FROM rewards r JOIN members m ON m.id=r.member_id WHERE r.created_at>=1795301700;
+SELECT 'play_sessions' t, id, session_key, member_ref, table_name, seat, start_at, end_at, buy_in, created_at FROM play_sessions WHERE created_at>=1795301700 OR end_at>=1795301700;
+SELECT 'session_results' t, sr.* FROM session_results sr JOIN play_sessions ps ON ps.id=sr.session_id WHERE ps.created_at>=1795301700 OR ps.end_at>=1795301700;
+SELECT 'ppm_waiting' t, * FROM ppm_waiting WHERE created_at>=1795301700;
+SELECT 'ppm_events' t, * FROM ppm_events WHERE at>=1795301700 OR at>=1795301700000;
+SELECT 'member_cards' t, * FROM member_cards WHERE linked_at>=1795301700;
+SELECT 'members_new' t, id, member_no, nickname, nationality, created_at FROM members WHERE created_at>=1795301700;
+SELECT 'member_photos' t, member_id FROM member_photos WHERE member_id IN (SELECT id FROM members WHERE created_at>=1795301700);
+SELECT 'table_runs' t, * FROM table_runs WHERE opened_at>=1795301700 OR closed_at>=1795301700;
+SELECT 'ppm_seat_links' t, * FROM ppm_seat_links WHERE created_at>=1795301700;
+SELECT 'audit' t, id, at, actor, action, substr(detail,1,160) detail FROM audit_log WHERE at>=1795301700 ORDER BY id;
+SELECT 'ppm_now' t, version, substr(data,1,4000) d FROM ppm WHERE id=1;
