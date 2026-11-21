@@ -164,7 +164,7 @@ function repTables(x){const o={};let sum=0;for(const [k,v] of Object.entries(x.t
 /* One business day as MIDORI numbers taken from the Operation Report. */
 function repDay(o){return {rake:o.hasRev?{...(o.tbl||{ALL:o.rev})}:{},bbj:o.hasBbj&&o.bbj?{ALL:o.bbj}:{},fromReport:true}}
 function opReport(m){const c=OPREP[m];if((!c||Date.now()-c.at>60000)&&!(c&&c.loading)&&typeof api==='function'&&!MEM&&typeof TOKEN!=='undefined'&&TOKEN){const [Y,M]=m.split('-').map(Number),to=m+'-'+String(new Date(Y,M,0).getDate()).padStart(2,'0');OPREP[m]={...(c||{days:{}}),loading:true,at:c?c.at:0};
-  api('/report?from='+m+'-01&to='+to).then(r=>{const days={};for(const x of r.days||[])if(x.revenue!=null||x.bbj_amount!=null)days[x.day]={rev:Number(x.revenue||0),bbj:Number(x.bbj_amount||0),hasRev:x.revenue!=null,hasBbj:x.bbj_amount!=null,tbl:repTables(x)};const changed=JSON.stringify(days)!==JSON.stringify(c&&c.days);OPREP[m]={days,at:Date.now()};if(changed&&(canRender()||(S.cnt&&S.cnt.kind==='open'&&S.cnt.step==='result'&&!S.cnt.ppmFilled)))render()}).catch(e=>{OPREP[m]={days:(c&&c.days)||{},err:errMsg(e),at:Date.now()}})}
+  api('/report?from='+m+'-01&to='+to).then(r=>{const days={};for(const x of r.days||[])if(x.revenue!=null||x.bbj_amount!=null)days[x.day]={rev:Number(x.revenue||0),bbj:Number(x.bbj_amount||0),hasRev:x.revenue!=null,hasBbj:x.bbj_amount!=null,tbl:repTables(x)};const changed=JSON.stringify(days)!==JSON.stringify(c&&c.days);OPREP[m]={days,at:Date.now()};if(changed&&(canRender()||(S.cnt&&S.cnt.kind==='open'&&S.cnt.step==='result'&&!S.cnt.ppmFilled)||(S.tab!=='counts'&&!S.pending&&!(S.cnt&&['count','result'].includes(S.cnt.step))&&!S.cw&&!(document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)))))render()}).catch(e=>{OPREP[m]={days:(c&&c.days)||{},err:errMsg(e),at:Date.now()-50000};if(S.tab==='midori'&&canRender())render()})}
  return (OPREP[m]&&OPREP[m].days)||{}}
 function midoriMonth(m,cageOnly){
  const st=settings();const days=Object.entries(S.midori).filter(([d])=>monthOf(d)===m).sort();
@@ -336,7 +336,7 @@ async function mergePlayers(src,dst){const sp=S.players.find(x=>x.id===src),dp=S
 /* MIDORI */
 function vMidori(){
  const m=S.month||monthOf(bizDay()),x=midoriMonth(m),st=settings();const d=S.form.mday||bizDay(),rd=opReport(monthOf(d))[d],cur=S.midori[d]||(rd?repDay(rd):{rake:{},bbj:{}});
- return `<h2>MIDORI <select id="mi-month" style="width:auto;margin-left:8px">${allMonths().map(y=>`<option ${y===m?'selected':''}>${y}</option>`).join('')}</select></h2>${vMidoriGap(m)}<h2>What MIDORI owes us</h2>
+ return `<h2>MIDORI <select id="mi-month" style="width:auto;margin-left:8px">${allMonths().map(y=>`<option ${y===m?'selected':''}>${y}</option>`).join('')}</select></h2>${vMidoriGap(m)}${OPREP[m]&&OPREP[m].err?`<div class="note bad">Could not load the Operation Report: ${esc(OPREP[m].err)}. Retrying in a few seconds. 營運報表讀取失敗，稍後自動重試。</div>`:OPREP[m]&&OPREP[m].loading&&!Object.keys(OPREP[m].days||{}).length?'<div class="note info">Loading the Operation Report… 營運報表讀取中…</div>':''}<h2>What MIDORI owes us</h2>
  <div class="grid g2"><div class="card"><b>${m} rake</b>
  <div class="row"><span>Total rake</span><span class="num">${peso(x.R)}</span></div>
  <div class="row"><span class="sub">Everest ${Math.round(st.everestRakeRate*100)}%</span><span class="num">${peso(x.R*st.everestRakeRate)}</span></div>
