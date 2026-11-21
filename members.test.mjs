@@ -349,15 +349,23 @@ await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.to
   await call('/ppm', 'PUT', { version: pp.version, tables: tt }, boss.token);
   let g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
   const inBefore = g2.groups.find((g) => g.id === 'inhouse').seconds, patBefore = g2.groups.find((g) => g.id === 'patrick').seconds;
-  assert.equal((await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', move_past: true }, geraldine.token)).status, 403);
-  await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick' }, boss.token);
+  // A manager asks (a reason is required); nothing moves until the master approves.
+  assert.equal((await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick' }, geraldine.token)).status, 400, 'reason required');
+  const asked = await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', note: 'plays with Patrick now' }, geraldine.token);
+  assert.equal(asked.status, 200); assert.equal(asked.body.requested, true);
   g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
-  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore, 'normal change: past hours stay');
-  assert.ok(g2.groups.find((g) => g.id === 'patrick').players.some((p) => p.member_no === owner && p.seconds === 0), 'current member listed with 0 h');
-  await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', move_past: true, note: 'set up wrong' }, boss.token);
+  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore, 'request alone moves nothing');
+  const reqs = (await call('/change-requests?status=pending', 'GET', null, boss.token)).body.requests.filter((r) => r.kind === 'member.group');
+  assert.equal(reqs.length, 1); assert.match(reqs[0].summary, /In-House → Patrick/);
+  assert.equal((await call(`/change-requests/${reqs[0].id}/approve`, 'POST', {}, geraldine.token)).status, 403, 'only the master approves');
+  assert.equal((await call(`/change-requests/${reqs[0].id}/approve`, 'POST', {}, boss.token)).status, 200);
   g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
-  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore + 7200, 'correction moves past hours');
+  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore + 7200, 'approved: all past hours move to the new group');
   assert.equal(g2.groups.find((g) => g.id === 'inhouse').seconds, inBefore - 7200);
+  // The master changes directly, also taking all past hours along.
+  await call(`/members/${owner}/group`, 'POST', { group_id: 'inhouse' }, boss.token);
+  g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
+  assert.equal(g2.groups.find((g) => g.id === 'inhouse').seconds, inBefore, 'master change moves past hours back');
 }
 
 // Same nickname: the nationality is shown after it.
@@ -578,5 +586,29 @@ assert.equal((await call('/members/EV-444444', 'GET', null, boss.token)).body.me
   assert.ok(act.every((m, i) => i === 0 || act[i - 1].created_at >= m.created_at), 'newest first');
   const p2 = (await call('/members?limit=2&offset=2&sort=new', 'GET', null, token)).body;
   assert.deepEqual(p2.members.map((m) => m.member_no), all.slice(2, 4).map((m) => m.member_no), 'pages line up');
+}
+{ // Rewards page: issue a comp; the cage records it when it pays
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', amount: 1200, detail: 'airport' }, token)).status, 400, 'airfare or taxi');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', sub: 'Taxi', amount: 1200, detail: '' }, token)).status, 400, 'detail');
+  assert.equal((await call('/rewards/issue', 'POST', { member_no: 'NOPE', type: 'hotel', amount: 1, detail: 'x' }, token)).status, 400, 'member');
+  const r1 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'transportation', sub: 'Taxi', amount: 1200, detail: 'Hotel to club', pay: 'cash', date: '2026-11-17' }, token)).body;
+  assert.ok(r1.ok && r1.cage === 'cash');
+  const r2 = (await call('/rewards/issue', 'POST', { member_no: 'EV-000001', type: 'free_chip', amount: 2000, detail: 'Birthday', pay: 'chips', date: '2026-11-17' }, token)).body;
+  const c1 = sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r1.id);
+  const d1 = JSON.parse(c1.data);
+  assert.equal(d1.type, 'op_out'); assert.deepEqual(d1.legs, [{ a: 'cf', m: 'cash', v: -1200 }]); assert.equal(d1.cat, 'Player comps · Transportation · Taxi'); assert.equal(d1.date, '2026-11-17');
+  assert.deepEqual(JSON.parse(sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r2.id).data).legs, [{ a: 'chip', m: 'chips', v: -2000 }]);
+  const list = (await call('/rewards/list?from=2026-11-17&to=2026-11-17', 'GET', null, token)).body.rewards;
+  const t = list.find((x) => x.id === r1.id);
+  assert.equal(t.detail, 'Taxi: Hotel to club'); assert.equal(t.cage.how, 'cash');
+  assert.equal((await call(`/rewards/${r1.id}/void`, 'POST', { staff: 'K. Lim', reason: 'Wrong player' }, token)).status, 200);
+  assert.equal(JSON.parse(sql.prepare("SELECT data FROM cage_docs WHERE coll='entries' AND id=?").get('rw-' + r1.id).data).voided, true);
+}
+{ // member stats for a range of business days
+  const r = (await call('/members/EV-000001?from=2026-10-01&to=2026-11-17', 'GET', null, token)).body.stats.day;
+  assert.equal(r.from, '2026-10-01'); assert.equal(r.to, '2026-11-17'); assert.ok(r.end > r.start);
+  const one = (await call('/members/EV-000001?day=2026-10-05', 'GET', null, token)).body.stats.day;
+  assert.equal(one.from, '2026-10-05'); assert.equal(one.to, '2026-10-05');
+  assert.ok(r.rewards >= one.rewards);
 }
 console.log('PASS members: auth, groups, create, import, PPM play time by number and nickname, no duplicates, group change keeps past hours, rewards by group at time, void, summary, unmatched link, audit, online registration closed, search, staff accounts, staff/manager roles with reward approval, photos, staff account management, master/manager/staff, member number change, six-digit numbers, link players still at the table, nationality, link guards and undo, cash-out and W/L, group members and corrections, nickname + nationality, smallest free number, remark on create, duplicate guard, merge, delete, delete session, edit session, sort by last play, move session, recover from PPM CSV, sync report + scheduled check, busy night (D1 100-parameter limit), retired group hidden, PPM name check, close-table check, manager edits need master approval, junket label, quick add from PPM');

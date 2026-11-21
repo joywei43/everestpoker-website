@@ -349,15 +349,23 @@ await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.to
   await call('/ppm', 'PUT', { version: pp.version, tables: tt }, boss.token);
   let g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
   const inBefore = g2.groups.find((g) => g.id === 'inhouse').seconds, patBefore = g2.groups.find((g) => g.id === 'patrick').seconds;
-  assert.equal((await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', move_past: true }, geraldine.token)).status, 403);
-  await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick' }, boss.token);
+  // A manager asks (a reason is required); nothing moves until the master approves.
+  assert.equal((await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick' }, geraldine.token)).status, 400, 'reason required');
+  const asked = await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', note: 'plays with Patrick now' }, geraldine.token);
+  assert.equal(asked.status, 200); assert.equal(asked.body.requested, true);
   g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
-  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore, 'normal change: past hours stay');
-  assert.ok(g2.groups.find((g) => g.id === 'patrick').players.some((p) => p.member_no === owner && p.seconds === 0), 'current member listed with 0 h');
-  await call(`/members/${owner}/group`, 'POST', { group_id: 'patrick', move_past: true, note: 'set up wrong' }, boss.token);
+  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore, 'request alone moves nothing');
+  const reqs = (await call('/change-requests?status=pending', 'GET', null, boss.token)).body.requests.filter((r) => r.kind === 'member.group');
+  assert.equal(reqs.length, 1); assert.match(reqs[0].summary, /In-House → Patrick/);
+  assert.equal((await call(`/change-requests/${reqs[0].id}/approve`, 'POST', {}, geraldine.token)).status, 403, 'only the master approves');
+  assert.equal((await call(`/change-requests/${reqs[0].id}/approve`, 'POST', {}, boss.token)).status, 200);
   g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
-  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore + 7200, 'correction moves past hours');
+  assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore + 7200, 'approved: all past hours move to the new group');
   assert.equal(g2.groups.find((g) => g.id === 'inhouse').seconds, inBefore - 7200);
+  // The master changes directly, also taking all past hours along.
+  await call(`/members/${owner}/group`, 'POST', { group_id: 'inhouse' }, boss.token);
+  g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
+  assert.equal(g2.groups.find((g) => g.id === 'inhouse').seconds, inBefore, 'master change moves past hours back');
 }
 
 // Same nickname: the nationality is shown after it.

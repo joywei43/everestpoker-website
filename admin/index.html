@@ -362,10 +362,10 @@ async function viewMember(view, no) {
         <div class="small" style="font-weight:600">PLAYER GROUP</div>
         <div><div style="font-size:20px;font-weight:700">${m.group_name ? esc(m.group_name) : '<span style="color:var(--amber)">No group</span>'}</div>
           <div class="small muted">${m.group_owner ? (m.group_id === 'inhouse' ? 'In-House · owner ' : 'Host · ') + esc(m.group_owner) : 'Assign a group so this player has an owner.'}</div></div>
-        ${isMaster() ? `<form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
-          <input type="text" id="gnote" placeholder="Reason (optional)" style="flex:1 1 140px"><button class="btn sm">Change</button>
-          <label class="small" style="display:flex;gap:6px;align-items:flex-start;flex-basis:100%"><input type="checkbox" id="gpast" style="margin-top:2px"> Correction: the group was set wrong — move <b>all past hours and rewards</b> too</label></form>` : '<div class="small" style="color:var(--amber)">Only the master account can change the group.</div>'}
-        <div class="small muted">New hours go to the new group from now on; past hours stay where they were.</div>
+        ${isManager() ? `<form id="gf" class="row"><label class="sr" for="gsel">New group</label><select id="gsel" style="flex:1 1 140px">${groupOptions(gs, m.group_id, '<option value="">No group</option>')}</select>
+          <input type="text" id="gnote" placeholder="${isMaster() ? 'Reason (optional)' : 'Reason (required)'}" style="flex:1 1 140px"><button class="btn sm">${isMaster() ? 'Change' : 'Ask the owner'}</button></form>
+          <div id="gpend"></div>` : '<div class="small" style="color:var(--amber)">A manager can ask to change the group; the owner approves.</div>'}
+        <div class="small muted">${isMaster() ? 'The change takes the player\'s whole history along: all past hours and rewards count for the new group.' : 'The owner approves the change. Then all past hours and rewards move to the new group too.'}</div>
         <div id="gmsg"></div>
       </div>
     </section>
@@ -462,14 +462,17 @@ async function viewMember(view, no) {
     catch (err) { alert(err.message); }
   };
   view.querySelector('#edit').onclick = () => openMemberDialog(view, m, async (d) => { await api('/members/' + encodeURIComponent(no), 'PUT', { ...d, staff: needStaff() }); reload(); });
+  const showPend = async () => { const el = view.querySelector('#gpend'); if (!el) return; try { const p = (await api('/change-requests?status=pending')).requests.find((r) => r.kind === 'member.group' && r.member_no === m.member_no); el.innerHTML = p ? `<div class="small" style="padding:6px 8px;border-radius:6px;background:#fff4d6;color:#7a5a12">Waiting for the owner: ${esc(p.summary)} · asked by ${esc(p.requested_by)}${isMaster() ? ' · <a href="#/approvals">review</a>' : ''}</div>` : ''; } catch (e) {} };
+  showPend();
   if (view.querySelector('#gf')) view.querySelector('#gf').onsubmit = async (e) => {
     e.preventDefault(); const who = needStaff(); if (!who) return;
     const g = view.querySelector('#gsel').value || null;
-    const past = view.querySelector('#gpast').checked;
-    if (g === (m.group_id || null) && !past) return flash(view.querySelector('#gmsg'), 'Already in this group.');
+    const note = view.querySelector('#gnote').value.trim();
+    if (g === (m.group_id || null)) return flash(view.querySelector('#gmsg'), 'Already in this group.');
+    if (!isMaster() && !note) return flash(view.querySelector('#gmsg'), 'Write the reason for the owner.', 'err');
     const gName = g ? gs.find((x) => x.id === g).name : 'no group';
-    if (!confirm(past ? `Correction: move ${m.name} to ${gName} and move ALL past hours and rewards to ${gName}?` : `Move ${m.name} to ${gName}? Hours from now on count for the new group; past hours stay where they were.`)) return;
-    try { await api('/members/' + encodeURIComponent(no) + '/group', 'POST', { group_id: g, note: view.querySelector('#gnote').value, staff: who, move_past: past }); groupsCache = null; reload(); }
+    if (!confirm(isMaster() ? `Move ${m.name} to ${gName}? All past hours and rewards move to ${gName} too.` : `Ask the owner to move ${m.name} to ${gName}? Once approved, all past hours and rewards move too.`)) return;
+    try { const r = await api('/members/' + encodeURIComponent(no) + '/group', 'POST', { group_id: g, note, staff: who }); groupsCache = null; if (r.requested) { flash(view.querySelector('#gmsg'), 'Sent to the owner for approval (Approvals page).', 'ok'); showPend(); } else reload(); }
     catch (err) { flash(view.querySelector('#gmsg'), err.message, 'err'); }
   };
   view.querySelector('#rf').onsubmit = async (e) => {
@@ -1284,7 +1287,7 @@ async function viewApprovals(view) {
     ${data.rewards.map((r) => `<tr><td>${day(r.given_at)}</td><td><a href="#/member/${encodeURIComponent(r.member_no)}"><b>${esc(r.name)}</b></a><div class="small muted mono">${esc(r.member_no)}</div></td><td><span class="chip ${TYPE_CHIP[r.type]}">${TYPES[r.type]}</span></td><td>${esc(r.detail)}</td><td class="num"><b>${peso(r.amount)}</b></td><td>${groupChip(r.group_name)}</td><td class="muted">${esc(r.recorded_by)}</td>
       <td class="row" style="flex-wrap:nowrap">${isManager() ? `<button class="btn sm primary" data-ok="${r.id}">Approve</button>` : ''}${isMaster() ? `<button class="btn sm" data-no="${r.id}">Void</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Nothing waiting.</td></tr>'}
     </tbody></table></div></section>
-    ${isManager() ? `<h1 style="margin-top:28px">Changes waiting for the master</h1><p class="sub">Managers ask to edit, move, unlink or delete a game session; nothing changes until the master account approves.</p>
+    ${isManager() ? `<h1 style="margin-top:28px">Changes waiting for the master</h1><p class="sub">Managers ask to edit, move, unlink or delete a game session, or to change a player's group; nothing changes until the master account approves.</p>
     <section class="card"><div class="tbl"><table><thead><tr><th>#</th><th>Asked</th><th>Member</th><th>Change</th><th>Reason</th><th></th></tr></thead><tbody>
       ${cr.requests.map((r) => `<tr><td class="mono">${r.id}</td><td class="small"><b>${esc(r.requested_by)}</b><div class="muted">${fmt(r.requested_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}</div></td>
         <td>${r.member_no ? `<a class="mono" href="#/member/${encodeURIComponent(r.member_no)}">${esc(r.member_no)}</a> ${esc(r.nickname || '')}` : '—'}</td><td class="small">${esc(r.summary)}</td><td class="small">${esc(r.reason)}</td>

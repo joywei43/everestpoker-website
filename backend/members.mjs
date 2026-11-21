@@ -384,6 +384,18 @@ function pickFields(b) {
   return out;
 }
 
+// Move a member to a group with their whole history: every past session and reward counts for the new group.
+function moveGroup(env, now, m, groupId, actor, note) {
+  return [
+    env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=?').bind(groupId, m.id),
+    env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=?').bind(groupId, m.id),
+    env.DB.prepare('DELETE FROM member_group_history WHERE member_id=?').bind(m.id),
+    env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, 0, actor, ('All past hours moved' + (note ? ' · ' + note : '')).slice(0, 200), now),
+    env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
+    env.DB.prepare('INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,?,?,?)').bind(now, String(actor || '').slice(0, 60), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'} · all past hours and rewards moved${note ? ' · ' + note : ''}`.slice(0, 500))
+  ];
+}
+
 export async function handleMembersApi(req, env, path, now, reply, user, role = 'admin') {
   // master (set in wrangler.toml MASTER_USERS) > admin (manager) > staff.
   const manager = role !== 'staff';
@@ -800,37 +812,29 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     }
 
     if (parts[2] === 'group' && method === 'POST') {
-      if (!master) return masterOnly();
+      // Master: changes the group now. Manager: asks the master, who approves or rejects (Members → group requests).
+      // A change always takes the player's whole history along: all past hours and rewards count for the new group.
+      if (!manager) return managerOnly();
       const b = await readJson(req, 5000);
       const groupId = b.group_id ? str(b.group_id, 30) : null;
       if (groupId && (!groups.has(groupId) || groups.get(groupId).active === 0)) return bad(reply, 'Unknown group.');
       if (!who(b)) return bad(reply, 'Staff name is required.');
-      if (b.move_past) {
-        // Correction of a wrong assignment (master only): all past hours and rewards move to the new group too.
-        await env.DB.batch([
-          env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=?').bind(groupId, m.id),
-          env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=?').bind(groupId, m.id),
-          env.DB.prepare('DELETE FROM member_group_history WHERE member_id=?').bind(m.id),
-          env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, 0, who(b), 'Correction: all past hours moved' + (b.note ? ' · ' + str(b.note, 160) : ''), now),
-          env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
-          audit(env, now, who(b), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'} · correction, all past hours and rewards moved${b.note ? ' · ' + str(b.note, 160) : ''}`)
-        ]);
-        return reply({ ok: true, moved_past: true });
-      }
       if (groupId === m.group_id) return reply({ ok: true, unchanged: true });
-      const firstAssignment = !(await env.DB.prepare('SELECT 1 x FROM member_group_history WHERE member_id=? LIMIT 1').bind(m.id).first());
-      // Effective now: past hours and rewards stay with the old group, new ones go to the new group.
-      // A member's very first group also takes the play and rewards recorded before anyone assigned one.
-      await env.DB.batch([
-        ...(firstAssignment && groupId ? [
-          env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=? AND group_id IS NULL').bind(groupId, m.id),
-          env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=? AND group_id IS NULL').bind(groupId, m.id)
-        ] : []),
-        env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
-        env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, now, who(b), str(b.note, 200), now),
-        audit(env, now, who(b), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'}${b.note ? ' · ' + str(b.note, 200) : ''}`)
-      ]);
-      return reply({ ok: true });
+      const note = str(b.note, 200);
+      if (!master) {
+        if (!note) return bad(reply, 'Write the reason for the change.');
+        const gname = (id) => (id ? (groups.get(id) || {}).name || id : 'No group');
+        const summary = `Group ${gname(m.group_id)} → ${gname(groupId)} (all past hours move too)`;
+        await env.DB.batch([
+          env.DB.prepare("UPDATE change_requests SET status='cancelled',decided_by=?,decided_at=?,decision_note='Replaced by a newer request' WHERE kind='member.group' AND target_id=? AND status='pending'").bind(who(b), now, m.id),
+          env.DB.prepare('INSERT INTO change_requests(kind,target_id,payload,reason,summary,member_id,requested_by,requested_at) VALUES(?,?,?,?,?,?,?,?)').bind('member.group', m.id, JSON.stringify({ group_id: groupId }), note, summary, m.id, who(b), now),
+          audit(env, now, who(b), 'change.request', m.id, summary + ' · ' + note)
+        ]);
+        return reply({ ok: true, requested: true });
+      }
+      await env.DB.batch([...moveGroup(env, now, m, groupId, who(b), note),
+        env.DB.prepare("UPDATE change_requests SET status='cancelled',decided_by=?,decided_at=?,decision_note='The master changed the group directly' WHERE kind='member.group' AND target_id=? AND status='pending'").bind(who(b), now, m.id)]);
+      return reply({ ok: true, moved_past: true });
     }
 
     if (parts[2] === 'rewards' && method === 'POST') {
@@ -1050,6 +1054,16 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (parts[2] === 'reject') {
       await env.DB.batch([env.DB.prepare("UPDATE change_requests SET status='rejected',decided_by=?,decided_at=?,decision_note=? WHERE id=?").bind(who(b), now, note, cr.id),
         audit(env, now, who(b), 'change.reject', cr.member_id, `#${cr.id} rejected (asked by ${cr.requested_by}): ${cr.summary}${note ? ' · ' + note : ''}`)]);
+      return reply({ ok: true });
+    }
+    if (cr.kind === 'member.group') {
+      const mm = await env.DB.prepare('SELECT * FROM members WHERE id=?').bind(cr.target_id).first();
+      const gid = JSON.parse(cr.payload).group_id || null;
+      if (!mm) return bad(reply, 'Member not found.', 404);
+      if (gid && (!groups.has(gid) || groups.get(gid).active === 0)) return bad(reply, 'That group no longer exists.');
+      await env.DB.batch([...moveGroup(env, now, mm, gid, who(b), `asked by ${cr.requested_by}: ${cr.reason}`),
+        env.DB.prepare("UPDATE change_requests SET status='approved',decided_by=?,decided_at=?,decision_note=? WHERE id=?").bind(who(b), now, note, cr.id),
+        audit(env, now, who(b), 'change.approve', cr.member_id, `#${cr.id} approved (asked by ${cr.requested_by}, reason: ${cr.reason}): ${cr.summary}`)]);
       return reply({ ok: true });
     }
     // Approve: run the requested change exactly as the master would.

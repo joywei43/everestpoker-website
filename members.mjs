@@ -384,6 +384,18 @@ function pickFields(b) {
   return out;
 }
 
+// Move a member to a group with their whole history: every past session and reward counts for the new group.
+function moveGroup(env, now, m, groupId, actor, note) {
+  return [
+    env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=?').bind(groupId, m.id),
+    env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=?').bind(groupId, m.id),
+    env.DB.prepare('DELETE FROM member_group_history WHERE member_id=?').bind(m.id),
+    env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, 0, actor, ('All past hours moved' + (note ? ' · ' + note : '')).slice(0, 200), now),
+    env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
+    env.DB.prepare('INSERT INTO audit_log(at,actor,action,member_id,detail) VALUES(?,?,?,?,?)').bind(now, String(actor || '').slice(0, 60), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'} · all past hours and rewards moved${note ? ' · ' + note : ''}`.slice(0, 500))
+  ];
+}
+
 export async function handleMembersApi(req, env, path, now, reply, user, role = 'admin') {
   // master (set in wrangler.toml MASTER_USERS) > admin (manager) > staff.
   const manager = role !== 'staff';
@@ -646,8 +658,15 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id WHERE ps.member_id=? AND ps.start_at>=? AND ps.start_at<?`).bind(m.id, since, until).first();
       const rwSum = (since, until = 1e12) => env.DB.prepare('SELECT COALESCE(SUM(CASE WHEN approved_at IS NOT NULL THEN amount ELSE 0 END),0) amt, COALESCE(SUM(CASE WHEN approved_at IS NULL THEN amount ELSE 0 END),0) pending FROM rewards WHERE member_id=? AND voided=0 AND given_at>=? AND given_at<?').bind(m.id, since, until).first();
       // ?day=YYYY-MM-DD: the same totals for one business day.
-      const dayQ = new URL(req.url).searchParams.get('day');
-      const bdQ = /^\d{4}-\d{2}-\d{2}$/.test(dayQ || '') ? await businessDay(env, now, dayQ) : null;
+      // ?from=&to=: a range of business days (from the start of the first to the end of the last).
+      const sp = new URL(req.url).searchParams, dRe = /^\d{4}-\d{2}-\d{2}$/;
+      const dayQ = sp.get('day'), fromQ = sp.get('from') || dayQ, toQ = sp.get('to') || dayQ;
+      let bdQ = null;
+      if (dRe.test(fromQ || '') && dRe.test(toQ || '')) {
+        const [a, z] = fromQ <= toQ ? [fromQ, toQ] : [toQ, fromQ];
+        const b1 = await businessDay(env, now, a), b2 = a === z ? b1 : await businessDay(env, now, z);
+        bdQ = { day: a === z ? a : a + ' – ' + z, from: a, to: z, start: b1.start, end: b2.end, is_today: b2.is_today };
+      }
       const [s30, sAll, r30, rAll, sDay, rDay] = await Promise.all([stat(t30), stat(0), rwSum(t30), rwSum(0), bdQ ? stat(bdQ.start, bdQ.end) : null, bdQ ? rwSum(bdQ.start, bdQ.end) : null]);
       { // a game still in progress counts too (time and buy-in so far; no cash-out yet)
         const seat = (await liveSeats(env)).find((x) => x.member_id === m.id && x.started != null);
@@ -676,7 +695,7 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
         playing,
         member: publicMember({ ...m, has_photo: !!(await env.DB.prepare('SELECT 1 x FROM member_photos WHERE member_id=?').bind(m.id).first()) }, groups, dupsM),
         stats: { last30: { ...s30, rewards: r30.amt, rewards_pending: r30.pending }, all: { ...sAll, rewards: rAll.amt, rewards_pending: rAll.pending }, group_share: share,
-          ...(sDay ? { day: { ...sDay, rewards: rDay.amt, rewards_pending: rDay.pending, day: bdQ.day, start: bdQ.start, end: bdQ.end, is_today: bdQ.is_today } } : {}) },
+          ...(sDay ? { day: { ...sDay, rewards: rDay.amt, rewards_pending: rDay.pending, day: bdQ.day, from: bdQ.from, to: bdQ.to, start: bdQ.start, end: bdQ.end, is_today: bdQ.is_today } } : {}) },
         sessions: sessions.map((s) => ({ ...s, group_name: gname(s.group_id), pending_change: pendingBySession.get(s.id) || null })),
         rewards: rewards.map((r) => ({ ...r, group_name: gname(r.group_id) })),
         group_history: history.map((h) => ({ ...h, group_name: gname(h.group_id) })),
@@ -793,37 +812,29 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     }
 
     if (parts[2] === 'group' && method === 'POST') {
-      if (!master) return masterOnly();
+      // Master: changes the group now. Manager: asks the master, who approves or rejects (Members → group requests).
+      // A change always takes the player's whole history along: all past hours and rewards count for the new group.
+      if (!manager) return managerOnly();
       const b = await readJson(req, 5000);
       const groupId = b.group_id ? str(b.group_id, 30) : null;
       if (groupId && (!groups.has(groupId) || groups.get(groupId).active === 0)) return bad(reply, 'Unknown group.');
       if (!who(b)) return bad(reply, 'Staff name is required.');
-      if (b.move_past) {
-        // Correction of a wrong assignment (master only): all past hours and rewards move to the new group too.
-        await env.DB.batch([
-          env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=?').bind(groupId, m.id),
-          env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=?').bind(groupId, m.id),
-          env.DB.prepare('DELETE FROM member_group_history WHERE member_id=?').bind(m.id),
-          env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, 0, who(b), 'Correction: all past hours moved' + (b.note ? ' · ' + str(b.note, 160) : ''), now),
-          env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
-          audit(env, now, who(b), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'} · correction, all past hours and rewards moved${b.note ? ' · ' + str(b.note, 160) : ''}`)
-        ]);
-        return reply({ ok: true, moved_past: true });
-      }
       if (groupId === m.group_id) return reply({ ok: true, unchanged: true });
-      const firstAssignment = !(await env.DB.prepare('SELECT 1 x FROM member_group_history WHERE member_id=? LIMIT 1').bind(m.id).first());
-      // Effective now: past hours and rewards stay with the old group, new ones go to the new group.
-      // A member's very first group also takes the play and rewards recorded before anyone assigned one.
-      await env.DB.batch([
-        ...(firstAssignment && groupId ? [
-          env.DB.prepare('UPDATE play_sessions SET group_id=? WHERE member_id=? AND group_id IS NULL').bind(groupId, m.id),
-          env.DB.prepare('UPDATE rewards SET group_id=? WHERE member_id=? AND group_id IS NULL').bind(groupId, m.id)
-        ] : []),
-        env.DB.prepare('UPDATE members SET group_id=?,updated_at=? WHERE id=?').bind(groupId, now, m.id),
-        env.DB.prepare('INSERT INTO member_group_history(member_id,group_id,effective_from,changed_by,note,created_at) VALUES(?,?,?,?,?,?)').bind(m.id, groupId, now, who(b), str(b.note, 200), now),
-        audit(env, now, who(b), 'member.group', m.id, `${m.group_id || 'none'} → ${groupId || 'none'}${b.note ? ' · ' + str(b.note, 200) : ''}`)
-      ]);
-      return reply({ ok: true });
+      const note = str(b.note, 200);
+      if (!master) {
+        if (!note) return bad(reply, 'Write the reason for the change.');
+        const gname = (id) => (id ? (groups.get(id) || {}).name || id : 'No group');
+        const summary = `Group ${gname(m.group_id)} → ${gname(groupId)} (all past hours move too)`;
+        await env.DB.batch([
+          env.DB.prepare("UPDATE change_requests SET status='cancelled',decided_by=?,decided_at=?,decision_note='Replaced by a newer request' WHERE kind='member.group' AND target_id=? AND status='pending'").bind(who(b), now, m.id),
+          env.DB.prepare('INSERT INTO change_requests(kind,target_id,payload,reason,summary,member_id,requested_by,requested_at) VALUES(?,?,?,?,?,?,?,?)').bind('member.group', m.id, JSON.stringify({ group_id: groupId }), note, summary, m.id, who(b), now),
+          audit(env, now, who(b), 'change.request', m.id, summary + ' · ' + note)
+        ]);
+        return reply({ ok: true, requested: true });
+      }
+      await env.DB.batch([...moveGroup(env, now, m, groupId, who(b), note),
+        env.DB.prepare("UPDATE change_requests SET status='cancelled',decided_by=?,decided_at=?,decision_note='The master changed the group directly' WHERE kind='member.group' AND target_id=? AND status='pending'").bind(who(b), now, m.id)]);
+      return reply({ ok: true, moved_past: true });
     }
 
     if (parts[2] === 'rewards' && method === 'POST') {
@@ -849,6 +860,53 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     }
   }
 
+  // Rewards page: issue a comp to a member and, when the cage pays it, record it in the cage at the same time.
+  if (parts[0] === 'rewards' && parts[1] === 'list' && method === 'GET') {
+    const u = new URL(req.url), from = str(u.searchParams.get('from'), 10), to = str(u.searchParams.get('to'), 10);
+    if (!isDate(from) || !isDate(to) || from > to) return bad(reply, 'Give from and to dates.');
+    const rows = await all(env.DB.prepare(`SELECT rw.id,rw.type,rw.detail,rw.amount,rw.given_at,rw.recorded_by,rw.approved_by,rw.approved_at,rw.voided,rw.void_reason,rw.group_id,m.member_no,m.surname,m.middle_name,m.family_name,m.nickname
+      FROM rewards rw JOIN members m ON m.id=rw.member_id WHERE rw.given_at>=? AND rw.given_at<? ORDER BY rw.given_at DESC, rw.id DESC LIMIT 1000`).bind(dayStart(from), dayStart(to) + DAY));
+    const cage = await all(env.DB.prepare("SELECT id,data,deleted FROM cage_docs WHERE coll='entries' AND id LIKE 'rw-%'"));
+    const cmap = new Map(cage.map((c) => { const d = JSON.parse(c.data || 'null') || {}; return [c.id, { voided: !!d.voided || !!c.deleted, how: d.compPaid || '' }]; }));
+    return reply({ from, to, rewards: rows.map((r) => ({ id: r.id, type: r.type, detail: r.detail, amount: r.amount, given_at: r.given_at, recorded_by: r.recorded_by, approved_by: r.approved_by, approved: !!r.approved_at,
+      voided: !!r.voided, void_reason: r.void_reason, group_name: r.group_id ? (groups.get(r.group_id) || { name: r.group_id }).name : null, member_no: r.member_no, name: displayName(r), nickname: r.nickname,
+      cage: cmap.get('rw-' + r.id) || null })) });
+  }
+  if (parts[0] === 'rewards' && parts[1] === 'issue' && method === 'POST') {
+    const b = await readJson(req, 5000);
+    const m = await memberByNo(env, str(b.member_no, 20));
+    if (!m) return bad(reply, 'Member not found. Pick the member from the list.');
+    const type = str(b.type, 20), amount = Number(b.amount), sub = str(b.sub, 20), detail = str(b.detail, 180), pay = str(b.pay, 10);
+    if (!REWARD_TYPES.includes(type)) return bad(reply, 'Unknown reward type.');
+    if (type === 'transportation' && !['Airfare', 'Taxi'].includes(sub)) return bad(reply, 'Choose Airfare or Taxi.');
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 100000000) return bad(reply, 'Amount must be a whole number of pesos.');
+    if (!detail) return bad(reply, 'Write the detail.');
+    if (!['', 'cash', 'chips'].includes(pay)) return bad(reply, 'Unknown payment.');
+    const date = str(b.date, 10);
+    if (date && !isDate(date)) return bad(reply, 'Invalid date.');
+    const givenAt = date && date !== localDate(now) ? dayStart(date) + 12 * 3600 : now;
+    if (givenAt > now + DAY) return bad(reply, 'Date is in the future.');
+    const groupId = await groupAt(env, m.id, givenAt);
+    const fullDetail = (sub ? sub + ': ' : '') + detail;
+    const approver = manager ? (str(b.approved_by, 60) || who(b)) : '';
+    const row = await env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id')
+      .bind(m.id, groupId, type, fullDetail, amount, givenAt, who(b) || 'staff', approver, manager ? now : null, now).first();
+    const stmts = [audit(env, now, who(b) || 'staff', 'reward.add', m.id, `${type} ₱${amount} ${fullDetail}${pay ? ' · paid by the cage in ' + pay : ''}${manager ? '' : ' · waiting for approval'}`)];
+    if (pay) {
+      // The cage business day turns at noon (Manila).
+      const cageDay = date && date !== localDate(now) ? date : localDate(now - 12 * 3600);
+      const label = { free_chip: 'Free Chip', promo_cash: 'Promotion-Cash', promo_chip: 'Promotion-Chip', hotel: 'Hotel Stay', transportation: 'Transportation', tournament_ticket: 'Tournament Tickets' }[type] + (sub ? ' · ' + sub : '');
+      const nick = m.nickname || displayName(m);
+      const data = { type: pay === 'cash' ? 'op_out' : 'comp_chips', date: cageDay, time: new Date((now + 8 * 3600) * 1000).toISOString().slice(11, 16), createdAt: new Date(now * 1000).toISOString(), voided: false,
+        player: null, medium: pay === 'cash' ? 'cash' : 'chips', method: null, amount, cat: 'Player comps · ' + label, note: detail, approver: approver || null, rewardId: row.id, compPaid: pay, memberNo: m.member_no,
+        legs: pay === 'cash' ? [{ a: 'cf', m: 'cash', v: -amount }] : [{ a: 'chip', m: 'chips', v: -amount }], pl: { cat: 'Player comps · ' + label, v: -amount },
+        summary: `Comp · ${label} · ${nick} #${m.member_no} · ${detail} (from Rewards${pay === 'chips' ? ', chips from the chip float' : ', cash from the cash float'})`, by: who(b) || 'staff' };
+      stmts.push(env.DB.prepare('UPDATE cage_meta SET rev=rev+1 WHERE id=1'),
+        env.DB.prepare("INSERT INTO cage_docs(coll,id,data,deleted,version,rev,updated,updated_by) VALUES('entries',?,?,0,1,(SELECT rev FROM cage_meta WHERE id=1),?,?)").bind('rw-' + row.id, JSON.stringify(data), now, who(b) || 'staff'));
+    }
+    await env.DB.batch(stmts);
+    return reply({ ok: true, id: row.id, approved: manager, cage: pay || null });
+  }
   if (parts[0] === 'rewards' && parts[1] === 'pending' && method === 'GET') {
     const rows = await all(env.DB.prepare(`SELECT rw.id,rw.type,rw.detail,rw.amount,rw.given_at,rw.recorded_by,rw.group_id,m.member_no,m.surname,m.middle_name,m.family_name,m.nickname,m.member_no
       FROM rewards rw JOIN members m ON m.id=rw.member_id WHERE rw.voided=0 AND rw.approved_at IS NULL ORDER BY rw.given_at, rw.id LIMIT 300`));
@@ -878,7 +936,11 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (r.voided) return reply({ ok: true, unchanged: true });
     await env.DB.batch([
       env.DB.prepare('UPDATE rewards SET voided=1,void_reason=? WHERE id=?').bind(str(b.reason, 200), id),
-      audit(env, now, who(b), 'reward.void', r.member_id, `${r.type} ₱${r.amount} · ${str(b.reason, 200)}`)
+      audit(env, now, who(b), 'reward.void', r.member_id, `${r.type} ₱${r.amount} · ${str(b.reason, 200)}`),
+      // a comp the cage paid is voided in the cage too
+      env.DB.prepare("UPDATE cage_meta SET rev=rev+1 WHERE id=1"),
+      env.DB.prepare("UPDATE cage_docs SET data=json_set(data,'$.voided',json('true'),'$.voidReason',?,'$.voidedBy',?),version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=?,updated_by=? WHERE coll='entries' AND id=? AND deleted=0")
+        .bind('Reward voided: ' + str(b.reason, 180), who(b), now, who(b), 'rw-' + id)
     ]);
     return reply({ ok: true });
   }
@@ -992,6 +1054,16 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (parts[2] === 'reject') {
       await env.DB.batch([env.DB.prepare("UPDATE change_requests SET status='rejected',decided_by=?,decided_at=?,decision_note=? WHERE id=?").bind(who(b), now, note, cr.id),
         audit(env, now, who(b), 'change.reject', cr.member_id, `#${cr.id} rejected (asked by ${cr.requested_by}): ${cr.summary}${note ? ' · ' + note : ''}`)]);
+      return reply({ ok: true });
+    }
+    if (cr.kind === 'member.group') {
+      const mm = await env.DB.prepare('SELECT * FROM members WHERE id=?').bind(cr.target_id).first();
+      const gid = JSON.parse(cr.payload).group_id || null;
+      if (!mm) return bad(reply, 'Member not found.', 404);
+      if (gid && (!groups.has(gid) || groups.get(gid).active === 0)) return bad(reply, 'That group no longer exists.');
+      await env.DB.batch([...moveGroup(env, now, mm, gid, who(b), `asked by ${cr.requested_by}: ${cr.reason}`),
+        env.DB.prepare("UPDATE change_requests SET status='approved',decided_by=?,decided_at=?,decision_note=? WHERE id=?").bind(who(b), now, note, cr.id),
+        audit(env, now, who(b), 'change.approve', cr.member_id, `#${cr.id} approved (asked by ${cr.requested_by}, reason: ${cr.reason}): ${cr.summary}`)]);
       return reply({ ok: true });
     }
     // Approve: run the requested change exactly as the master would.
