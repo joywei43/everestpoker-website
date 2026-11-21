@@ -84,6 +84,11 @@ export async function handlePpmLink(req, env, path, nowSec, reply, user, role) {
         const at = await findSeat(env, ts, m.id);
         if (!at) return { changed: false, action: 'waiting' };
         at.s.buyInAmount = (Number(at.s.buyInAmount) || 0) + amount;
+        // An add-on after a Cash Out Request means the player keeps playing: cancel the request and restart the clock.
+        if (at.s.cashoutAsked) {
+          if (at.s.status === 'rest') Object.assign(at.s, { status: 'seated', restSeconds: restSecs(at.s, nowMs), lastRestStart: null, lastActiveStart: nowMs });
+          at.s.cashoutAsked = null;
+        }
         return { changed: true, action: 'addon', table: at.t.name, seat: at.s.id };
       });
       if (out.action === 'waiting') {
