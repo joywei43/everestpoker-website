@@ -119,7 +119,7 @@ const DEFAULT_SETTINGS={openDate:'2026-11-01',rent:0,pagcorMin:0,pagcorRate:.25,
 
 /* ---------- state ---------- */
 let DB=null,MEM=false;
-const S={dayOverride:(()=>{try{return sessionStorage.getItem('cage-day')||null}catch(e){return null}})(),tab:'counts',cw:null,manpower:{},mpMonth:null,counts:[],cnt:null,qa:null,qaMsg:null,recDay:null,ppm:{},entries:[],players:[],midori:{},settings:null,month:null,type:'expense',form:{},pending:null,playerSel:null,ledgerFilter:{pouch:'',type:'',month:''},loaded:{e:false,p:false,m:false,s:false,c:false}};
+const S={cardQ:'',dayOverride:(()=>{try{return sessionStorage.getItem('cage-day')||null}catch(e){return null}})(),tab:'counts',cw:null,manpower:{},mpMonth:null,counts:[],cnt:null,qa:null,qaMsg:null,recDay:null,ppm:{},entries:[],players:[],midori:{},settings:null,month:null,type:'expense',form:{},pending:null,playerSel:null,ledgerFilter:{pouch:'',type:'',month:''},loaded:{e:false,p:false,m:false,s:false,c:false}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const round2=n=>Math.round(n*100)/100;
@@ -1515,7 +1515,10 @@ function deskSelect(m){const ex=cagePlayerOf(m),h=ex?acctOf(ex):null,credit=!!h&
  S.deskKind=credit?'credit_in':'buyin';qaNew('buyin');if(credit){S.qa.credit=true;S.qa.method='account'}
  S.qa.member={member_no:m.member_no,name:m.name,nickname:m.nickname,group_name:m.group_name};S.qa.player=ex?pLabel(ex):`${m.nickname||m.name} #${m.member_no}`;S.qa.isDefault=false}
 function vCardPanel(viewOnly){const c=S.cardM,x=`<button class="link" data-card-x>✕ Close</button>`;
- if(!c)return `<div class="mc-tap"><div><b style="font-size:17px">Tap member card</b> <span class="sub">刷會員卡</span><div class="sub">Photo, name and account show here.${viewOnly?'':' No card? Type the member number in the form below.'}</div></div>${viewOnly?'':`<button class="o-chip" data-rw-open style="padding:10px 16px;white-space:nowrap">Rewards 獎勵</button>`}</div>`;
+ const box=`<div class="mc-tap" style="border-style:solid"><div style="flex:1;min-width:260px"><label for="card-q" style="margin-top:0"><b style="font-size:15px;color:var(--ink)">Tap member card, or type member name / number</b> <span class="sub">刷會員卡，或輸入名字／號碼</span></label><input id="card-q" autocomplete="off" placeholder="Tap card here · or type e.g. 128 / Erwin" value="${esc(S.cardQ||'')}" style="font-size:17px"><div class="sugg" id="card-sugg"></div></div>${viewOnly?'':`<button class="o-chip" data-rw-open style="padding:10px 16px;white-space:nowrap;align-self:flex-end">Rewards 獎勵</button>`}</div>`;
+ if(!c)return box;
+ return box+vCardPanel2(c,viewOnly,x)}
+function vCardPanel2(c,viewOnly,x){
  if(c.state==='loading')return `<div class="mc-tap"><span>Reading card <b>${esc(c.uid)}</b>…</span>${x}</div>`;
  if(c.state==='error')return `<div class="mc-tap bad"><span>Card <b>${esc(c.uid)}</b>: ${esc(c.err)}</span>${x}</div>`;
  if(c.state==='unknown')return `<div class="mc-tap warn"><div><b>Card not linked yet 此卡尚未綁定</b><div class="sub">Card ${esc(c.uid)}</div></div><div class="flex">${viewOnly||S.role==='senior'?'':`<button class="primary" data-card-mc>Give this card to a member →</button>`}${x}</div></div>`;
@@ -1523,7 +1526,7 @@ function vCardPanel(viewOnly){const c=S.cardM,x=`<button class="link" data-card-
  const m=c.m,p=cagePlayerOf(m),cd=p?cageDay(bizDay(),p.id):{buyin:0,cashout:0};
  return `<div class="mc-card">${photoBox(m,124)}<div style="flex:1;min-width:0"><div class="flex" style="justify-content:space-between;align-items:flex-start"><div><div style="font-size:26px;font-weight:800;line-height:1.15">${esc(m.nickname||m.name)}</div>
   <div style="color:#FAC775;font-weight:700;margin-top:2px">#${esc(m.member_no)}${m.nationality?` <span class="sub" style="font-weight:400">· ${esc(m.nationality)}</span>`:''}${m.nickname&&m.name&&lname(m.name)!==lname(m.nickname)?` <span class="sub" style="font-weight:400">· ${esc(m.name)}</span>`:''}</div></div>
-  <div class="flex">${viewOnly?'':`<button class="o-chip" data-rw-open style="padding:6px 12px">Rewards</button>`}${x}</div></div>
+  <div class="flex">${x}</div></div>
   <div class="flex" style="margin-top:8px;flex-wrap:wrap;gap:6px">${acctLine(m)}${m.group_name?`<span class="pill">${esc(m.group_name)}</span>`:''}${m.status&&m.status!=='active'?`<span class="pill bad">${esc(m.status)}</span>`:''}</div>
   <div class="sub" style="margin-top:8px">Today at the cage: in <b class="num">${peso(cd.buyin)}</b> · out <b class="num">${peso(cd.cashout)}</b></div>
   <div class="sub">Check the face against the photo. 請核對本人。</div></div></div>`}
@@ -1531,22 +1534,34 @@ function vCardPanel(viewOnly){const c=S.cardM,x=`<button class="link" data-card-
 const KB={buf:'',last:0,start:0,el:null,before:null};
 function kbChar(e){const c=e.code||'';if(/^Digit\d$/.test(c))return c.slice(5);if(/^Numpad\d$/.test(c))return c.slice(6);if(/^Key[A-Z]$/.test(c))return c.slice(3);return e.key&&e.key.length===1?e.key:''}
 document.addEventListener('keydown',e=>{const t=performance.now();
- if(e.key==='Enter'||e.code==='Enter'||e.code==='NumpadEnter'){const fast=KB.buf.length>=6&&t-KB.last<80&&(KB.last-KB.start)/Math.max(1,KB.buf.length-1)<35;
+ if(document.activeElement&&document.activeElement.id==='card-q'){KB.buf='';return}
+ if(e.key==='Enter'||e.code==='Enter'||e.code==='NumpadEnter'){const fast=KB.buf.length>=7&&t-KB.last<150&&(KB.last-KB.start)/Math.max(1,KB.buf.length-1)<60;
   if(fast){e.preventDefault();e.stopPropagation();if(KB.el&&KB.before!==null){KB.el.value=KB.before;KB.el.dispatchEvent(new Event('input',{bubbles:true}))}const code=KB.buf;KB.buf='';KB.el=null;KB.before=null;onCardTap(code);return}
   KB.buf='';return}
  const ch=kbChar(e);if(!ch||e.ctrlKey||e.metaKey||e.altKey)return;
- if(t-KB.last>60||!KB.buf){KB.buf=ch;KB.start=t;const a=document.activeElement;KB.el=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')?a:null;KB.before=KB.el?KB.el.value:null}else{KB.buf+=ch;if(t-KB.last<35)e.stopPropagation()/* reader burst: no keyboard shortcuts */}KB.last=t},true);
+ if(t-KB.last>150||!KB.buf){KB.buf=ch;KB.start=t;const a=document.activeElement;KB.el=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')?a:null;KB.before=KB.el?KB.el.value:null}else{KB.buf+=ch;if(t-KB.last<45)e.stopPropagation()/* reader burst: no keyboard shortcuts */}KB.last=t},true);
 async function onCardTap(raw){const uid=cardUid(raw);if(!uid||!TOKEN)return;
  if($('cam-modal')||$('rw-modal')){flash('Card '+uid+' — close the open window first');return}
  if(S.flow){flash('Card '+uid+' — finish the count first');return}
  if(S.tab==='cards'){mcSetCard(uid);return}
- S.tab='counts';S.cw=null;S.cardM={uid,state:'loading'};render();
+ S.tab='counts';S.cw=null;S.cardQ='';S.cardM={uid,state:'loading'};render();
  try{const r=await api('/cage/card/'+encodeURIComponent(uid));
   if(r.unknown)S.cardM={uid,state:'unknown'};else if(r.inactive)S.cardM={uid,state:'inactive',m:r.member};
   else{S.cardM={uid,state:'ok',m:r.member};if(canRecordToday()&&S.role!=='senior')deskSelect(r.member)}
  }catch(e){S.cardM={uid,state:'error',err:errMsg(e)}}
  render();const a=$('qa-amt');if(a&&S.cardM&&S.cardM.state==='ok')a.focus()}
-function bindCardPanel(){document.querySelectorAll('[data-card-x]').forEach(b=>b.onclick=()=>{const had=S.cardM&&S.cardM.state==='ok';S.cardM=null;if(had&&S.qa&&['buyin','cashout'].includes(S.qa.k)){S.deskKind='buyin';qaNew('buyin');S.qa.isDefault=true}render()});
+function pickDeskMember(m,viewOnly){S.cardQ='';S.cardM={uid:'',state:'ok',m:{member_no:m.member_no,name:m.name,nickname:m.nickname,nationality:m.nationality,group_name:m.group_name,status:m.status}};if(!viewOnly&&canRecordToday()&&S.role!=='senior')deskSelect(S.cardM.m);render();const a=$('qa-amt');a&&a.focus()}
+const looksLikeCard=v=>/^\d{7,}$/.test(v)||(/^[0-9A-Fa-f]{8,}$/.test(v)&&/\d/.test(v));
+function bindCardBox(){const el=$('card-q');if(!el)return;const viewOnly=!canRecordToday();
+ const show=list=>{const box=$('card-sugg');if(!box)return;box.innerHTML=list.map((m,i)=>`<button type="button" data-cq="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}${m.nationality?' <span class="sub">· '+esc(m.nationality)+'</span>':''}</button>`).join('');box.querySelectorAll('[data-cq]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>pickDeskMember(list[Number(b.dataset.cq)],viewOnly)})};
+ let last=[];el.oninput=()=>{S.cardQ=el.value;const v=el.value.trim();if(looksLikeCard(v)){show([]);return}memberSearch(v,list=>{last=list;show(list)})};
+ el.onkeydown=e=>{if(e.key!=='Enter'&&e.code!=='Enter'&&e.code!=='NumpadEnter')return;e.preventDefault();e.stopPropagation();const v=el.value.trim();if(!v)return;
+  /* long numbers are card numbers (member numbers have 6 digits at most) */
+  if(looksLikeCard(v)){S.cardQ='';el.value='';onCardTap(v);return}
+  const n=v.replace(/^#?(EV-?)?/i,'');const hit=last.find(m=>normNo(m.member_no)===normNo(n))||(last.length===1?last[0]:null);if(hit){pickDeskMember(hit,viewOnly);return}
+  memberSearch(v,list=>{last=list;const h=list.find(m=>normNo(m.member_no)===normNo(n))||(list.length===1?list[0]:null);if(h)pickDeskMember(h,viewOnly);else show(list)})};
+ const a=document.activeElement;if(!a||a===document.body)el.focus()}
+function bindCardPanel(){bindCardBox();document.querySelectorAll('[data-card-x]').forEach(b=>b.onclick=()=>{const had=S.cardM&&S.cardM.state==='ok';S.cardM=null;if(had&&S.qa&&['buyin','cashout'].includes(S.qa.k)){S.deskKind='buyin';qaNew('buyin');S.qa.isDefault=true}render();const q0=$('card-q');q0&&q0.focus()});
  document.querySelectorAll('[data-card-mc]').forEach(b=>b.onclick=()=>{const uid=S.cardM&&S.cardM.uid;S.cardM=null;S.tab='cards';mcReset();render();if(uid)mcSetCard(uid)});
  document.querySelectorAll('[data-rw-open]').forEach(b=>b.onclick=()=>openRewards(S.cardM&&S.cardM.state==='ok'?S.cardM.m:(S.qa&&S.qa.member)||null))}
 
