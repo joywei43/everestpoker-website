@@ -81,6 +81,11 @@ button.link{border:none;background:none;color:var(--accent);padding:2px 4px}
 .crow{display:grid;grid-template-columns:70px 96px 1fr;align-items:center;gap:8px;padding:3px 0}
 .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 @media (max-width:700px){.form2{grid-template-columns:1fr}.g2{grid-template-columns:1fr}}
+.mc-tap{display:flex;justify-content:space-between;align-items:center;gap:12px;border:2px dashed #3FB37F;border-radius:12px;padding:14px 16px;margin:10px 0;max-width:760px;flex-wrap:wrap}.mc-tap.warn{border-color:#E0A100;border-style:solid;background:rgba(224,161,0,.10)}.mc-tap.bad{border-color:#C2372F;border-style:solid;background:rgba(194,55,47,.14)}
+.mc-card{display:flex;gap:16px;border:2px solid var(--accent);border-radius:12px;padding:14px;max-width:760px;margin:10px 0;background:var(--card)}
+.mc-photo{border-radius:12px;background:#33332f;border:1px solid var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center;flex:none;font-weight:700;color:#d8d6cf}.mc-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.mc-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;z-index:50;overflow:auto}.mc-dialog{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;width:100%;max-width:460px}
+.mc-file{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -216,10 +221,10 @@ async function saveMidoriDay(d,v){if(MEM){S.midori[d]=v;render();return}await DB
 async function saveSettings(s){if(MEM){S.settings=s;render();return}await DB.doc('config/settings').set(s)}
 
 /* ---------- views ---------- */
-const TABS=[['counts','Cage'],['overview','Overview'],['entry','Record'],['players','Players'],['flow','Daily flow'],['tips','Tips'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
+const TABS=[['counts','Cage'],['cards','Member Card'],['overview','Overview'],['entry','Record'],['players','Players'],['flow','Daily flow'],['tips','Tips'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
 function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{if(b.dataset.tab==='counts'&&S.cnt&&S.cnt.step==='report')S.cnt=null;if(b.dataset.tab==='counts')S.cw=null;S.tab=b.dataset.tab;S.pending=null;render()})}
-function render(){renderNav();const v={manpower:vManpower,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,tips:vTips,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.role==='senior'?`<div class="hl"><b class="t">Senior Dealer · read only 唯讀</b>You can look at everything here; changes are not saved. 可以查看，無法修改。</div>`:'')+(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
+function render(){renderNav();const v={manpower:vManpower,cards:vCards,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,tips:vTips,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.role==='senior'?`<div class="hl"><b class="t">Senior Dealer · read only 唯讀</b>You can look at everything here; changes are not saved. 可以查看，無法修改。</div>`:'')+(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
  const dc=$('day-clear');if(dc)dc.onclick=()=>{S.dayOverride=null;try{sessionStorage.removeItem('cage-day')}catch(e){}render()}}
 
 function pouchCard(b,p){if(p.held){const v=b.pd_cash||0;return `<div class="card"><div class="row" style="padding-top:0"><b>${p.l}</b><span class="big num ${v<0?'neg':''}">${pesoE(v)}</span></div><div class="sub">Players' money · not usable cash</div></div>`}const parts=p.media.map(m=>[m,b[p.k+'_'+m]||0]);const tot=parts.reduce((s,x)=>s+x[1],0);
@@ -718,7 +723,7 @@ function vDesk(op){const b=balances(),l=lastCount();if(!S.qa){const k=S.deskKind
  return `<div class="desk-grid"><div class="desk-main"><div class="flex" style="justify-content:space-between;max-width:680px;margin-top:6px"><div><b style="font-size:18px">${op.first?'Cage · first day':'Cage is open'}</b> <span class="sub">Business day ${esc(bizDay())}${S.user?` · ${esc(S.user.name)}`:''}</span></div>
  <div class="flex">${op.first?'<button data-flow="open">Open the cage</button>':''}<button data-flow="close">Close the cage</button>${S.user?'<button class="link" id="sign-out">Sign out</button>':''}</div></div>
 
- <div style="max-width:680px;margin-top:10px"><div class="flex" style="gap:8px">${big('buyin','Player buy-in<br><small style="font-weight:400">玩家買入</small>','buy')}${big('cashout','Player cash-out<br><small style="font-weight:400">玩家結出</small>','out')}</div>
+ ${vCardPanel(false)}<div style="max-width:680px;margin-top:10px"><div class="flex" style="gap:8px">${big('buyin','Player buy-in<br><small style="font-weight:400">玩家買入</small>','buy')}${big('cashout','Player cash-out<br><small style="font-weight:400">玩家結出</small>','out')}</div>
  <div class="flex" style="gap:8px;margin-top:8px">${big('credit_in','Credit OUT (get chips)<br><small style="font-weight:400">信用取碼（帳卡客人）</small>','ins')}${big('credit_out','Credit Payback (chips back)<br><small style="font-weight:400">信用還碼（籌碼還回，不付現金）</small>','ins')}</div>
  ${op.first?vFirstChecklist():''}${pk?vQuickForm():''}
  <div class="flex" style="margin-top:12px;gap:8px"><button data-qa="chip_pay" style="flex:1;padding:12px" class="${q.k==='chip_pay'?'c-chip':'o-chip'}">Cash out by chip<br><small>籌碼付款兌現（Grab、按摩、FnB、Mistbar）· 用當日現金</small></button></div>${q.k==='chip_pay'?`<div id="form-here">${vQuickForm()}</div>`:''}
@@ -734,7 +739,7 @@ function vCountHistory(){return `<div class="card"><table><tr><th>Business day</
  return `<tr><td class="num">${esc(c.day)}</td><td>${c.kind==='open'?'Opening':'Closing'}</td><td class="num">${esc(c.time)}</td><td>${esc(c.cashier)} / ${esc(c.supervisor)}</td><td class="r">${d?`<span class="pill bad">${d} line${d>1?'s':''}</span>`:'<span class="pill cash">None</span>'}</td>
  <td class="r num">${c.kind==='close'?pesoE(c.short||0):''}</td><td>${c.photo?'<span class="pill cash">Filed</span>':'<span class="pill warn">Missing</span>'}</td><td><button class="link" data-viewcnt="${c.id}">Report</button></td></tr>`}).join('')||'<tr><td colspan="8" class="sub">No counts yet.</td></tr>'}</table></div>`}
 function vCountHome(){const op=cageOpen(),l=lastCount(),b=balances();if(op)return vDesk(op);
- return `<h2>Cage</h2><div class="card" style="max-width:760px"><div class="row" style="padding-top:0"><div><b>${op&&op.first?'Not started yet':op?'Cage is open':'Cage is closed'}</b><div class="sub">${l?`Last ${l.kind==='open'?'opened':'closed'}: business day ${esc(l.day)}, ${esc(l.time)} by ${esc(l.cashier)}`:'No count yet.'}</div></div>
+ return `${S.role==='master'?`<div class="hl" style="border-color:#85B7EB;background:rgba(12,68,124,.25)"><b class="t" style="color:#85B7EB">VIEW ONLY · Master</b>The cage is not open. You can tap a card and look at everything; open the cage to record. 未開帳，可查看。</div>${vCardPanel(true)}`:''}<h2>Cage</h2><div class="card" style="max-width:760px"><div class="row" style="padding-top:0"><div><b>${op&&op.first?'Not started yet':op?'Cage is open':'Cage is closed'}</b><div class="sub">${l?`Last ${l.kind==='open'?'opened':'closed'}: business day ${esc(l.day)}, ${esc(l.time)} by ${esc(l.cashier)}`:'No count yet.'}</div></div>
  <span class="pill ${op&&!op.first?'cash':'info'}">${op&&op.first?'New':op?'Open':'Closed'}</span></div>
  ${op&&op.first?'<div class="note info" style="margin-top:10px">First day in the system. Start with whichever comes next at the cage: the opening, or tonight\'s closing.</div>':''}<div class="flex" style="margin-top:10px">${op&&op.first?'<button class="primary" data-flow="open">Open the cage</button><button class="primary" data-flow="close">Close the cage</button>':`<button class="primary" data-flow="${op?'close':'open'}">${op?'Close the cage':'Open the cage'}</button>${!op&&!S.counts.some(c=>c.kind==='close'&&c.day===bizDay())?`<button class="primary" data-flow="close">Close business day ${esc(bizDay())} 關帳</button>`:''}`}${S.user?`<span class="sub">Signed in: ${esc(S.user.name)}</span><button class="link" id="sign-out">Sign out</button>`:''}</div></div>
  ${op&&(b.box||0)>0.001?`<div class="card" style="max-width:760px;margin-top:12px"><div class="row" style="padding-top:0"><b>BBJ / Rake to settle with MIDORI</b><span class="pill warn">To do</span></div><div class="row"><span>Chips short at the last close</span><b class="num">${pesoE(b.box)}</b></div><button id="ot-buy" style="margin-top:6px">Record payment</button></div>`:''}
@@ -1257,7 +1262,7 @@ function bindQA(){const q=$;
    S.limitModal=null;S.qa=null;render();flash('Recorded: no chips given')}catch(e){q('lim-err').textContent=errMsg(e)}};
  if(q('ng-ok'))q('ng-ok').onclick=()=>{S.newGuest=null;render();const el=q('qa-player');if(el){el.focus();el.select()}};
  document.querySelectorAll('[data-fxrel]').forEach(x=>x.onclick=async()=>{if(x.dataset.sure!=='1'){x.dataset.sure='1';x.textContent='Tap again to release 再按一次確認';return}const g=fxByGuest().find(z=>z.key===x.dataset.fxrel);if(!g)return;try{await fxRelease(g);render();flash('Lock released')}catch(e){flash(errMsg(e))}});
- document.querySelectorAll('[data-desk]').forEach(x=>x.onclick=()=>{const k=x.dataset.desk,keep=S.qa&&x.dataset.keep?{player:S.qa.player,amount:S.qa.amount,member:S.qa.member}:null;S.deskKind=k;qaNew(k==='credit_in'?'buyin':k==='credit_out'?'cashout':k);if(k.startsWith('credit_')){S.qa.credit=true;S.qa.method='account'}if(keep)Object.assign(S.qa,keep);S.qa.isDefault=!keep;render();const f=q('qa-player');f&&!keep&&f.focus()});
+ document.querySelectorAll('[data-desk]').forEach(x=>x.onclick=()=>{const k=x.dataset.desk,keep=S.qa&&(x.dataset.keep||(S.cardM&&S.cardM.state==='ok'&&S.qa.player))?{player:S.qa.player,amount:S.qa.amount,member:S.qa.member}:null;S.deskKind=k;qaNew(k==='credit_in'?'buyin':k==='credit_out'?'cashout':k);if(k.startsWith('credit_')){S.qa.credit=true;S.qa.method='account'}if(keep)Object.assign(S.qa,keep);S.qa.isDefault=!keep;render();const f=q('qa-player');f&&!keep&&f.focus()});
  document.querySelectorAll('[data-qa]').forEach(x=>x.onclick=()=>{qaNew(x.dataset.qa);render();const fh=q('form-here');if(fh)fh.scrollIntoView({block:'nearest',behavior:'smooth'});const f=q('qa-player')||q('qa-amt');f&&f.focus({preventScroll:!!fh})});
  document.querySelectorAll('[data-buyback]').forEach(b=>b.onclick=()=>{qaNew('op_out');S.qa.cat0=BUYBACK;S.qa.cat=BUYBACK;render()});
  document.querySelectorAll('[data-plink]').forEach(b=>b.onclick=async()=>{const [pid,no,name]=b.dataset.plink.split('|');b.disabled=true;try{if(MEM){const p=S.players.find(x=>x.id===pid);p.no=no;p.name=name}else await DB.doc('players/'+pid).update({no,name});render();flash('Linked to member #'+no)}catch(e){b.disabled=false;flash(errMsg(e))}});
@@ -1313,7 +1318,7 @@ function bindQA(){const q=$;
 function bindPPM(){const q=$;if(q('ppm-save'))q('ppm-save').onclick=async()=>{const rows=[];let bad='';q('ppm-text').value.split('\n').map(l=>l.trim()).filter(Boolean).forEach((l,i)=>{const [n,bi,co]=l.split(',').map(x=>x.trim());const B=num(bi||0),C=num(co||0);if(!n||!Number.isFinite(B)||!Number.isFinite(C))bad=`Line ${i+1} needs: name, buy-in, cash-out`;else rows.push({n,buyin:B,cashout:C})});
   if(bad){q('ppm-err').textContent=bad;return}const day=S.recDay||bizDay();try{if(MEM){S.ppm[day]={rows};render()}else await DB.doc('ppm/'+day).set({rows,updatedAt:new Date().toISOString()});flash('PPM numbers saved')}catch(e){q('ppm-err').textContent=errMsg(e)}}}
 document.addEventListener('keydown',e=>{const t=e.target.tagName;if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||e.ctrlKey||e.metaKey||e.altKey)return;if(!['counts','entry'].includes(S.tab)||S.pending||(S.cnt&&S.cnt.step!=='report'))return;
- const a=QA.find(x=>x.key.toLowerCase()===e.key.toLowerCase());if(!a)return;e.preventDefault();if(a.k!=='op_out'&&a.k!=='op_in'&&!cageOpen()&&S.tab==='counts'){}qaNew(a.k);render();const f=$('qa-player')||$('qa-amt');f&&f.focus()});
+ const a=QA.find(x=>x.key&&e.key&&x.key.toLowerCase()===e.key.toLowerCase());if(!a)return;e.preventDefault();if(a.k!=='op_out'&&a.k!=='op_in'&&!cageOpen()&&S.tab==='counts'){}qaNew(a.k);render();const f=$('qa-player')||$('qa-amt');f&&f.focus()});
 
 /* ---------- tips config ---------- */
 const DEFAULT_TIP_SPLIT=[['Dealers',55],['MGM',10],['Consultant',10],['Floor',5],['Supervisor',4],['Admin / cashier',4],['Service',6],['Employee incentive',6]];
@@ -1356,7 +1361,7 @@ function vMidoriGap(m){const st=settings(),x=midoriMonth(m);const pag=Math.max(s
 
 /* ---------- events ---------- */
 function bind(){
- const q=$;bindCounts();bindQA();bindManpower();
+ const q=$;bindCounts();bindQA();bindManpower();setTimeout(bindCards,0);
  document.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{S.type=b.dataset.type;S.typeTouched=true;S.form={date:S.form.date};S.pending=null;render()});
  document.querySelectorAll('[data-field]:not([data-field^=qa]):not([data-field^=cw]) button').forEach(b=>b.onclick=()=>{const k=b.parentNode.dataset.field;S.form[k]=b.dataset.v;
   if(k==='pouch'){const p=POUCHES.find(x=>x.k===b.dataset.v);if(!p.media.includes(S.form.medium))S.form.medium=p.media.length===1?p.media[0]:undefined}
@@ -1442,13 +1447,13 @@ function errMsg(e){const c=e&&e.code;if(c==='quota_exceeded')return 'Storage is 
 let flashT;function flash(t){const s=$('status');s.textContent=t;clearTimeout(flashT);flashT=setTimeout(()=>setStatus(),2500)}
 function setStatus(){$('status').textContent=MEM?'⚠ Not connected. Data stays in this tab only.':(Object.values(S.loaded).every(Boolean)?'Connected · saved automatically':'Loading…')}
 
-const canRender=()=>!S.pending&&!(S.cnt&&['count','result'].includes(S.cnt.step))&&!(S.qa&&!(S.qa.isDefault&&!S.qa.player&&!S.qa.amount&&!S.qaMsg))&&!S.cw;
+const canRender=()=>!S.pending&&!(S.cnt&&['count','result'].includes(S.cnt.step))&&!(S.qa&&!(S.qa.isDefault&&!S.qa.player&&!S.qa.amount&&!S.qaMsg))&&!S.cw&&!(S.tab==='cards'&&document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
 /* ---------- init: Everest API ---------- */
 const API=(window.EVEREST_API_URL||'https://everest-waiting-api.drumsjw47.workers.dev').replace(/\/$/,'');
 let TOKEN=sessionStorage.getItem('cage-token')||'';
 async function api(path,method='GET',body){const res=await fetch(API+path,{method,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{})},...(body?{body:JSON.stringify(body)}:{})});
  const d=await res.json().catch(()=>({}));if(res.status===401){TOKEN='';sessionStorage.removeItem('cage-token');showLogin();const e=new Error('Please sign in again.');throw e}
- if(!res.ok){const e=new Error(d.error||('Error '+res.status));e.status=res.status;throw e}return d}
+ if(!res.ok){const e=new Error(d.error||('Error '+res.status));e.status=res.status;e.body=d;throw e}return d}
 function makeDb(){const store={},subs=[];let rev=0,busy=false;
  const newId=()=>Array.from(crypto.getRandomValues(new Uint8Array(15)),b=>'abcdefghijklmnopqrstuvwxyz0123456789'[b%36]).join('');
  const snapColl=c=>({docs:Object.entries(store[c]||{}).map(([id,d])=>({id,data:()=>d.data})),metadata:{fromCache:false}});
@@ -1480,6 +1485,183 @@ async function start(){if(!TOKEN){showLogin();return}
  db.doc('config/settings').onSnapshot(s=>{S.settings=s.exists?s.data():null;done('s');});
  try{await db.pull()}catch(e){$('status').textContent='Loading failed: '+errMsg(e)}
  setInterval(()=>{if(!document.hidden)db.pull().catch(()=>{})},10000)}
+/* ---------- member cards (NFC): tap a card → the member; Member Card tab; rewards at the cage ---------- */
+const NATIONS=['Taiwan','Philippines','South Korea','Japan','Hong Kong','Macau','China','Singapore','Thailand','Indonesia','Malaysia','Vietnam','India','United States','Canada','Australia','United Kingdom'];
+const cardUid=v=>{const u=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');return u.length>=4&&u.length<=32?u:''};
+const isManagerLogin=()=>S.role==='admin'||S.role==='master';
+/* Button rows for these screens use data-mfield, so the page's other button handlers leave them alone. */
+function mseg(name,opts,val){return `<div class="seg" data-mfield="${name}">${opts.map(([v,l])=>`<button type="button" class="${val===v?'on':''}" data-v="${esc(v)}">${l}</button>`).join('')}</div>`}
+/* The cage may record today (same rule as the Record section): open, or today not closed yet. */
+const canRecordToday=()=>!!cageOpen()||!S.counts.some(c=>c.kind==='close'&&c.day===bizDay());
+/* Photos come from Admin → Members, loaded once per member. */
+const PHOTOS={};
+function fetchPhoto(no){if(!no||no in PHOTOS||MEM)return;PHOTOS[no]=null;
+ api('/members/'+encodeURIComponent(no)+'/photo').then(r=>{PHOTOS[no]=r&&r.data||''}).catch(()=>{PHOTOS[no]=''}).then(()=>{document.querySelectorAll('[data-photo]').forEach(el=>{if(el.dataset.photo===no&&PHOTOS[no])el.innerHTML=`<img src="${esc(PHOTOS[no])}" alt="">`})})}
+function photoBox(m,size,data){const no=m&&m.member_no||'',ph=data||PHOTOS[no]||'',ini=esc(String((m&&(m.nickname||m.name))||'?').trim().slice(0,2).toUpperCase()||'?');if(!data)fetchPhoto(no);
+ return `<div class="mc-photo" ${data?'':`data-photo="${esc(no)}"`} style="width:${size}px;height:${size}px;font-size:${Math.round(size/3.6)}px">${ph?`<img src="${esc(ph)}" alt="">`:`<span>${ini}</span>`}</div>`}
+/* The cage player record that belongs to a member (by member number, else by name). */
+function cagePlayerOf(m){const nick=lname(m.nickname||m.name);return S.players.find(x=>x.no&&normNo(x.no)===normNo(m.member_no))||S.players.filter(x=>!x.no&&(lname(x.name)===nick||lname(x.name)===lname(m.name||''))).sort((a,b)=>(isAcct(b)-isAcct(a))||(!!acctOf(b)-!!acctOf(a)))[0]||null}
+function acctLine(m){const p=cagePlayerOf(m),h=p?acctOf(p):null;if(!h)return '<span class="pill cash">Cash · no account</span>';
+ if(isCashAcct(h))return h.id===p.id?'<span class="pill cash">Cash account</span>':`<span class="pill cash">Cash account · ${esc(h.name)}</span>`;
+ const v=pBal(h.id),L=Number(h.creditLimit||0),left=L?Math.max(0,L+Math.min(0,v)):null;
+ return `<span class="pill info">CREDIT${h.id===p.id?'':' · '+esc(h.name)+'\'s account'}</span>${L?` <span class="pill ${left<=0?'bad':'cash'}">Available ${peso(left)}</span>`:''}`}
+/* Put the tapped member into the buy-in form; credit players go straight to Credit OUT. */
+function deskSelect(m){const ex=cagePlayerOf(m),h=ex?acctOf(ex):null,credit=!!h&&!isCashAcct(h);
+ S.deskKind=credit?'credit_in':'buyin';qaNew('buyin');if(credit){S.qa.credit=true;S.qa.method='account'}
+ S.qa.member={member_no:m.member_no,name:m.name,nickname:m.nickname,group_name:m.group_name};S.qa.player=ex?pLabel(ex):`${m.nickname||m.name} #${m.member_no}`;S.qa.isDefault=false}
+function vCardPanel(viewOnly){const c=S.cardM,x=`<button class="link" data-card-x>✕ Close</button>`;
+ if(!c)return `<div class="mc-tap"><div><b style="font-size:17px">Tap member card</b> <span class="sub">刷會員卡</span><div class="sub">Photo, name and account show here.${viewOnly?'':' No card? Type the member number in the form below.'}</div></div>${viewOnly?'':`<button class="o-chip" data-rw-open style="padding:10px 16px;white-space:nowrap">Rewards 獎勵</button>`}</div>`;
+ if(c.state==='loading')return `<div class="mc-tap"><span>Reading card <b>${esc(c.uid)}</b>…</span>${x}</div>`;
+ if(c.state==='error')return `<div class="mc-tap bad"><span>Card <b>${esc(c.uid)}</b>: ${esc(c.err)}</span>${x}</div>`;
+ if(c.state==='unknown')return `<div class="mc-tap warn"><div><b>Card not linked yet 此卡尚未綁定</b><div class="sub">Card ${esc(c.uid)}</div></div><div class="flex">${viewOnly||S.role==='senior'?'':`<button class="primary" data-card-mc>Give this card to a member →</button>`}${x}</div></div>`;
+ if(c.state==='inactive')return `<div class="mc-tap bad"><div><b>This card was replaced or turned off. Do not accept it. 此卡已停用</b><div class="sub">Card ${esc(c.uid)}${c.m?` · was ${esc(c.m.nickname||c.m.name)} #${esc(c.m.member_no)}`:''}</div></div>${x}</div>`;
+ const m=c.m,p=cagePlayerOf(m),cd=p?cageDay(bizDay(),p.id):{buyin:0,cashout:0};
+ return `<div class="mc-card">${photoBox(m,124)}<div style="flex:1;min-width:0"><div class="flex" style="justify-content:space-between;align-items:flex-start"><div><div style="font-size:26px;font-weight:800;line-height:1.15">${esc(m.nickname||m.name)}</div>
+  <div style="color:#FAC775;font-weight:700;margin-top:2px">#${esc(m.member_no)}${m.nationality?` <span class="sub" style="font-weight:400">· ${esc(m.nationality)}</span>`:''}${m.nickname&&m.name&&lname(m.name)!==lname(m.nickname)?` <span class="sub" style="font-weight:400">· ${esc(m.name)}</span>`:''}</div></div>
+  <div class="flex">${viewOnly?'':`<button class="o-chip" data-rw-open style="padding:6px 12px">Rewards</button>`}${x}</div></div>
+  <div class="flex" style="margin-top:8px;flex-wrap:wrap;gap:6px">${acctLine(m)}${m.group_name?`<span class="pill">${esc(m.group_name)}</span>`:''}${m.status&&m.status!=='active'?`<span class="pill bad">${esc(m.status)}</span>`:''}</div>
+  <div class="sub" style="margin-top:8px">Today at the cage: in <b class="num">${peso(cd.buyin)}</b> · out <b class="num">${peso(cd.cashout)}</b></div>
+  <div class="sub">Check the face against the photo. 請核對本人。</div></div></div>`}
+/* ----- card reader: a USB reader types the card number fast and presses Enter (works with a Chinese input method on, and with Num Lock off) ----- */
+const KB={buf:'',last:0,start:0,el:null,before:null};
+function kbChar(e){const c=e.code||'';if(/^Digit\d$/.test(c))return c.slice(5);if(/^Numpad\d$/.test(c))return c.slice(6);if(/^Key[A-Z]$/.test(c))return c.slice(3);return e.key&&e.key.length===1?e.key:''}
+document.addEventListener('keydown',e=>{const t=performance.now();
+ if(e.key==='Enter'||e.code==='Enter'||e.code==='NumpadEnter'){const fast=KB.buf.length>=6&&t-KB.last<80&&(KB.last-KB.start)/Math.max(1,KB.buf.length-1)<35;
+  if(fast){e.preventDefault();e.stopPropagation();if(KB.el&&KB.before!==null){KB.el.value=KB.before;KB.el.dispatchEvent(new Event('input',{bubbles:true}))}const code=KB.buf;KB.buf='';KB.el=null;KB.before=null;onCardTap(code);return}
+  KB.buf='';return}
+ const ch=kbChar(e);if(!ch||e.ctrlKey||e.metaKey||e.altKey)return;
+ if(t-KB.last>60||!KB.buf){KB.buf=ch;KB.start=t;const a=document.activeElement;KB.el=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')?a:null;KB.before=KB.el?KB.el.value:null}else{KB.buf+=ch;if(t-KB.last<35)e.stopPropagation()/* reader burst: no keyboard shortcuts */}KB.last=t},true);
+async function onCardTap(raw){const uid=cardUid(raw);if(!uid||!TOKEN)return;
+ if($('cam-modal')||$('rw-modal')){flash('Card '+uid+' — close the open window first');return}
+ if(S.flow){flash('Card '+uid+' — finish the count first');return}
+ if(S.tab==='cards'){mcSetCard(uid);return}
+ S.tab='counts';S.cw=null;S.cardM={uid,state:'loading'};render();
+ try{const r=await api('/cage/card/'+encodeURIComponent(uid));
+  if(r.unknown)S.cardM={uid,state:'unknown'};else if(r.inactive)S.cardM={uid,state:'inactive',m:r.member};
+  else{S.cardM={uid,state:'ok',m:r.member};if(canRecordToday()&&S.role!=='senior')deskSelect(r.member)}
+ }catch(e){S.cardM={uid,state:'error',err:errMsg(e)}}
+ render();const a=$('qa-amt');if(a&&S.cardM&&S.cardM.state==='ok')a.focus()}
+function bindCardPanel(){document.querySelectorAll('[data-card-x]').forEach(b=>b.onclick=()=>{const had=S.cardM&&S.cardM.state==='ok';S.cardM=null;if(had&&S.qa&&['buyin','cashout'].includes(S.qa.k)){S.deskKind='buyin';qaNew('buyin');S.qa.isDefault=true}render()});
+ document.querySelectorAll('[data-card-mc]').forEach(b=>b.onclick=()=>{const uid=S.cardM&&S.cardM.uid;S.cardM=null;S.tab='cards';mcReset();render();if(uid)mcSetCard(uid)});
+ document.querySelectorAll('[data-rw-open]').forEach(b=>b.onclick=()=>openRewards(S.cardM&&S.cardM.state==='ok'?S.cardM.m:(S.qa&&S.qa.member)||null))}
+
+/* ----- manager approval: the manager types their own Admin username + password (the cashier stays signed in) ----- */
+function apprBlock(st,prefix){if(isManagerLogin())return `<div class="sub" style="margin-top:10px">Approved by you (${esc(S.user?S.user.name:'manager')}, manager account).</div>`;
+ return `<label>Approved by 主管核准 · manager's Admin login</label><div class="flex" style="gap:8px;flex-wrap:wrap"><input id="${prefix}-au" autocomplete="off" placeholder="Admin username" value="${esc(st.approver||'')}" style="max-width:200px"><input id="${prefix}-ap" type="password" autocomplete="new-password" placeholder="Password" value="${esc(st.pin||'')}" style="max-width:200px"></div><div class="sub" style="margin-top:4px">Manager or Master account. Not saved on this computer.</div>`}
+const apprBody=st=>isManagerLogin()?{}:{approver_user:(st.approver||'').trim(),approver_password:st.pin||''};
+
+/* ----- Rewards at the cage: promo chip or promo cash, approved by a supervisor ----- */
+function openRewards(m){S.rw={m,type:'promo_chip',amount:'',detail:'',approver:'',pin:'',err:'',q:'',busy:false};drawRewards()}
+function closeRewards(){S.rw=null;const el=$('rw-modal');if(el)el.remove()}
+function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el=document.createElement('div');el.id='rw-modal';el.className='mc-modal';document.body.appendChild(el)}
+ el.innerHTML=`<div class="mc-dialog" role="dialog" aria-label="Rewards"><div class="flex" style="justify-content:space-between"><b style="font-size:18px">Rewards 獎勵</b><button class="link" data-rw-x>✕</button></div>
+ ${r.m?`<div class="flex" style="margin-top:10px;gap:12px">${photoBox(r.m,56)}<div><b>${esc(r.m.nickname||r.m.name)}</b> <span class="sub">#${esc(r.m.member_no)}</span><br><button class="link" data-rw-change>Change member</button></div></div>`
+  :`<label>Member</label><input id="rw-q" autocomplete="off" placeholder="Member number or name" value="${esc(r.q)}"><div class="sugg" id="rw-sugg"></div>`}
+ <label>Type</label>${mseg('rwtype',[['promo_chip','Promo chip 籌碼'],['promo_cash','Promo cash 現金']],r.type)}
+ <div class="sub" style="margin-top:4px">${r.type==='promo_cash'?'Cash from the cash float.':'Chips from the chip float.'} Approved by a manager. Hotel, transport and tournament tickets: Admin → Rewards.</div>
+ <label>Reason</label><input id="rw-detail" value="${esc(r.detail)}" placeholder="e.g. High hand · Quad Kings">
+ <label>Amount (₱)</label><input id="rw-amt" inputmode="numeric" value="${esc(r.amount)}" placeholder="0">
+ ${apprBlock(r,'rw')}
+ <div class="err" id="rw-err">${esc(r.err)}</div>
+ <div class="flex" style="margin-top:12px"><button class="primary" id="rw-go" ${r.busy?'disabled':''}>Give reward</button><button class="link" data-rw-x>Cancel</button></div></div>`;
+ el.querySelectorAll('[data-rw-x]').forEach(b=>b.onclick=closeRewards);
+ const ch=el.querySelector('[data-rw-change]');if(ch)ch.onclick=()=>{r.m=null;drawRewards();const i=$('rw-q');i&&i.focus()};
+ el.querySelectorAll('[data-mfield="rwtype"] button').forEach(b=>b.onclick=()=>{r.type=b.dataset.v;keep();drawRewards()});
+ function keep(){const d=$('rw-detail'),a=$('rw-amt'),u=$('rw-au'),p=$('rw-ap');if(d)r.detail=d.value;if(a)r.amount=a.value;if(u)r.approver=u.value;if(p)r.pin=p.value}
+ const qi=$('rw-q');if(qi)qi.oninput=()=>{r.q=qi.value;memberSearch(qi.value,list=>{const box=$('rw-sugg');if(!box)return;box.innerHTML=list.map((m,i)=>`<button type="button" data-rwm="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}</button>`).join('');
+  box.querySelectorAll('[data-rwm]').forEach(b=>b.onclick=()=>{keep();r.m=list[Number(b.dataset.rwm)];drawRewards()})})};
+ $('rw-go').onclick=async()=>{keep();r.err='';const amt=Number(String(r.amount).replace(/[,\s]/g,''));
+  if(!r.m)r.err='Choose the member.';else if(!r.detail.trim())r.err='Write the reason.';else if(!Number.isSafeInteger(amt)||amt<=0)r.err='Enter the amount in whole pesos.';else if(!isManagerLogin()&&(!r.approver.trim()||!r.pin))r.err='A manager types their Admin username and password.';
+  if(r.err){drawRewards();return}
+  r.busy=true;drawRewards();
+  try{const res=await api('/rewards/issue','POST',{member_no:r.m.member_no,type:r.type,amount:amt,detail:r.detail.trim(),pay:r.type==='promo_cash'?'cash':'chips',...apprBody(r)});
+   closeRewards();flash(`Reward ${peso(amt)} for ${r.m.nickname||r.m.name} recorded${res.approved_by?' · approved by '+res.approved_by:''}`);if(DB&&DB.pull)DB.pull(true).catch(()=>{})}
+  catch(e){r.busy=false;r.pin='';r.err=errMsg(e);drawRewards()}}}
+
+/* ----- photo: webcam or upload, saved to Admin → Members as a 320×320 JPEG ----- */
+function squareJpeg(src,w,h){const c=document.createElement('canvas'),s=320,mn=Math.min(w,h);c.width=s;c.height=s;c.getContext('2d').drawImage(src,(w-mn)/2,(h-mn)/2,mn,mn,0,0,s,s);return c.toDataURL('image/jpeg',.8)}
+function readPhotoFile(file){return new Promise((ok,no)=>{const u=URL.createObjectURL(file),img=new Image();img.onload=()=>{try{ok(squareJpeg(img,img.naturalWidth,img.naturalHeight))}catch(e){no(e)}URL.revokeObjectURL(u)};img.onerror=()=>{URL.revokeObjectURL(u);no(new Error('Could not read the photo'))};img.src=u})}
+function openCamera(done){let stream=null,shot=null;const el=document.createElement('div');el.id='cam-modal';el.className='mc-modal';document.body.appendChild(el);
+ const stop=()=>{if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}};const close=()=>{stop();el.remove()};
+ el.innerHTML=`<div class="mc-dialog" role="dialog" aria-label="Take photo"><div class="flex" style="justify-content:space-between"><b style="font-size:18px">Take photo</b><button class="link" data-cx>✕</button></div>
+  <select id="cam-sel" style="margin-top:10px;display:none"></select><div style="position:relative;margin-top:10px;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:1/1"><video id="cam-v" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video><img id="cam-img" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover" alt=""></div>
+  <div class="sub" id="cam-msg" style="margin-top:8px">Starting camera…</div>
+  <div class="flex" style="margin-top:12px"><button class="primary" id="cam-shot" disabled>Capture</button><button id="cam-re" style="display:none">Retake</button><button class="primary" id="cam-use" style="display:none">Use photo</button><button class="link" data-cx>Cancel</button></div></div>`;
+ el.querySelectorAll('[data-cx]').forEach(b=>b.onclick=close);
+ const v=$('cam-v'),sel=$('cam-sel'),msg=$('cam-msg');
+ async function start(id){stop();$('cam-shot').disabled=true;try{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('no camera');
+  stream=await navigator.mediaDevices.getUserMedia({video:id?{deviceId:{exact:id},width:{ideal:1280}}:{width:{ideal:1280}},audio:false});v.srcObject=stream;await v.play().catch(()=>{});
+  const cur=stream.getVideoTracks()[0].getSettings().deviceId,devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+  sel.innerHTML=devs.map((d,i)=>`<option value="${esc(d.deviceId)}" ${d.deviceId===cur?'selected':''}>${esc(d.label||'Camera '+(i+1))}</option>`).join('');sel.style.display=devs.length>1?'':'none';
+  try{localStorage.setItem('cage-cam',cur||'')}catch(e){}msg.textContent='Center the face, then press Capture.';$('cam-shot').disabled=false}
+  catch(e){msg.innerHTML='<span class="bad-t">The camera could not be opened.</span> Allow the camera for this site in the browser, or close this and use Upload photo.'}}
+ sel.onchange=()=>start(sel.value);
+ $('cam-shot').onclick=()=>{if(!v.videoWidth)return;shot=squareJpeg(v,v.videoWidth,v.videoHeight);$('cam-img').src=shot;$('cam-img').style.display='';$('cam-shot').style.display='none';$('cam-re').style.display='';$('cam-use').style.display=''};
+ $('cam-re').onclick=()=>{shot=null;$('cam-img').style.display='none';$('cam-shot').style.display='';$('cam-re').style.display='none';$('cam-use').style.display='none'};
+ $('cam-use').onclick=()=>{if(shot)done(shot);close()};
+ let last='';try{last=localStorage.getItem('cage-cam')||''}catch(e){}start(last)}
+
+/* ----- Member Card tab ----- */
+function mcReset(){S.mc={uid:'',look:null,mode:'exist',q:'',list:[],pick:null,cards:null,name:'',natSel:'',natOther:'',photo:'',approver:'',pin:'',err:'',ok:'',busy:false,dups:null}}
+async function mcSetCard(uid){if(!S.mc)mcReset();const keep=S.mc;S.mc={...keep,uid,look:{loading:true},err:'',ok:''};render();
+ try{const r=await api('/cage/card/'+encodeURIComponent(uid));S.mc.look=r;if(r.unknown||r.inactive)S.mc.mode=S.mc.mode||'exist'}catch(e){S.mc.look={error:errMsg(e)}}render()}
+async function mcPick(m){S.mc.pick=m;S.mc.cards=null;S.mc.photo='';render();try{const r=await api('/cage/cards?member_no='+encodeURIComponent(m.member_no));S.mc.cards=r.cards||[]}catch(e){S.mc.cards=[]}render()}
+function vCards(){if(!S.mc)mcReset();const c=S.mc,look=c.look,ro=S.role==='senior';
+ const owner=look&&look.member&&!look.unknown;
+ const cardBox=!c.uid?`<div class="mc-tap"><div><b style="font-size:17px">Tap the card on the reader</b><div class="sub">Or type the card number: <input id="mc-uid" style="max-width:200px;display:inline-block" placeholder="Card number"> <button id="mc-uid-go">Use</button></div></div></div>`
+  :`<div class="mc-tap ${look&&look.unknown?'':look&&look.inactive?'bad':look&&look.member?'':'warn'}"><div><b style="font-size:17px">Card ${esc(c.uid)}</b><div class="sub">${!look||look.loading?'Reading…':look.error?esc(look.error):look.unknown?'Not linked yet — give it to a member below.':look.inactive?`Turned off or replaced${look.member?` · was ${esc(look.member.nickname||look.member.name)} #${esc(look.member.member_no)}`:''}. It can be given to someone else.`:`Belongs to <b>${esc(look.member.nickname||look.member.name)}</b> #${esc(look.member.member_no)}`}</div></div><button class="link" id="mc-clear">Tap another card</button></div>`;
+ let body='';
+ if(c.uid&&look&&look.card&&look.member){body=`<div class="card" style="max-width:760px"><div class="flex" style="gap:14px">${photoBox(look.member,96)}<div><div style="font-size:20px;font-weight:800">${esc(look.member.nickname||look.member.name)}</div><div class="sub">#${esc(look.member.member_no)}${look.member.nationality?' · '+esc(look.member.nationality):''}</div><div class="sub">Card given ${new Date(look.card.linked_at*1000).toLocaleDateString('en-GB')}${look.card.linked_by?' by '+esc(look.card.linked_by):''}</div></div></div>
+  <div class="sub" style="margin-top:10px">Lost card? Tap the new card here and link it to this member: the old one stops working. Or turn this card off now:</div>
+  ${ro?'':`${apprBlock(c,'mc')}<div class="err">${esc(c.err)}</div><div class="flex" style="margin-top:10px"><button class="o-out" id="mc-off" ${c.busy?'disabled':''} style="padding:8px 14px">Turn this card off (lost / broken)</button></div>`}</div>`}
+ else if(c.uid&&look&&(look.unknown||look.inactive)&&!ro){
+  const tabs=mseg('mcmode',[['exist','Existing member 舊會員'],['new','New member 新會員']],c.mode);
+  let form='';
+  if(c.mode==='exist'){form=`<label>Member number or name</label><input id="mc-q" autocomplete="off" value="${esc(c.q)}" placeholder="e.g. 128 or Erwin"><div class="sugg" id="mc-sugg">${c.list.map((m,i)=>`<button type="button" data-mcpick="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}${m.nationality?' <span class="sub">· '+esc(m.nationality)+'</span>':''}</button>`).join('')}</div>
+   ${c.pick?`<div class="card" style="margin-top:10px"><div class="flex" style="gap:14px">${photoBox(c.pick,96,c.photo)}<div><div style="font-size:20px;font-weight:800">${esc(c.pick.nickname||c.pick.name)}</div><div class="sub">#${esc(c.pick.member_no)} · Nationality: ${esc(c.pick.nationality||'—')}</div>${c.cards===null?'<div class="sub">Checking cards…</div>':c.cards.filter(x=>x.active).length?`<div class="sub">Has card ${c.cards.filter(x=>x.active).map(x=>esc(x.uid)).join(', ')} — it will stop working.</div>`:'<div class="sub">No card yet.</div>'}</div></div></div>`:''}`}
+  else{const natSel=c.natSel;form=`<label>Name *</label><input id="mc-name" value="${esc(c.name)}" placeholder="Name or nickname the floor uses">
+   <label>Nationality *</label><select id="mc-nat"><option value="">Choose…</option>${NATIONS.map(n=>`<option ${natSel===n?'selected':''}>${n}</option>`).join('')}<option value="other" ${natSel==='other'?'selected':''}>Other…</option></select>${natSel==='other'?`<input id="mc-nato" style="margin-top:6px" value="${esc(c.natOther)}" placeholder="Type the country">`:''}
+   <div class="sub" style="margin-top:6px">Saved in Admin → Members with the next free EV number.</div>
+   ${c.dups?`<div class="note warn" style="margin-top:8px"><b>This player may already be a member:</b><div class="sugg">${c.dups.map((m,i)=>`<button type="button" data-mcdup="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}</button>`).join('')}</div><div style="margin-top:6px">Pick one to use it, or <button class="link" id="mc-dupok">create a new member anyway</button>.</div></div>`:''}`}
+  const who=c.mode==='exist'?c.pick:(c.name.trim()?{nickname:c.name.trim()}:null);
+  body=`<div class="card" style="max-width:760px">${tabs}<div style="margin-top:6px">${form}</div>
+   ${c.mode==='new'||c.pick?`<label>Photo</label><div class="flex" style="gap:12px;align-items:center">${c.mode==='new'?photoBox({nickname:c.name},96,c.photo):''}<button id="mc-cam">Take photo 拍照</button><label class="mc-file">Upload photo<input type="file" accept="image/*" id="mc-file" style="display:none"></label>${c.photo?'<span class="sub">New photo ready ✓</span>':''}</div>`:''}
+   ${apprBlock(c,'mc')}
+   <div class="err">${esc(c.err)}</div><div class="ok-t" style="margin-top:6px">${esc(c.ok)}</div>
+   <div class="flex" style="margin-top:12px"><button class="primary" id="mc-go" ${c.busy||!who?'disabled':''} style="padding:12px 18px">${c.mode==='exist'?(c.pick?`Link card to ${esc(c.pick.nickname||c.pick.name)} #${esc(c.pick.member_no)}`:'Link card'):'Create member and link card'}</button></div></div>`}
+ return `<h2>Member Card 會員卡</h2><div class="sub" style="max-width:760px">The card only holds its own number. It points to the member in Admin → Members. Giving, replacing and turning off cards needs a manager (their Admin login).</div>${c.ok&&!c.uid?`<div class="note ok" style="max-width:760px;margin-top:10px">${esc(c.ok)}</div>`:''}${cardBox}${body}`}
+function bindCards(){if(S.tab!=='cards'){bindCardPanel();return}const c=S.mc;if(!c)return;
+ const keep=()=>{const u=$('mc-au');if(u)c.approver=u.value;const p=$('mc-ap');if(p)c.pin=p.value;const n=$('mc-name');if(n)c.name=n.value;const o=$('mc-nato');if(o)c.natOther=o.value};
+ const natOf=()=>(c.natSel==='other'?c.natOther:c.natSel).trim();
+ if($('mc-uid-go'))$('mc-uid-go').onclick=()=>{const u=cardUid($('mc-uid').value);if(u)mcSetCard(u);else flash('Not a card number')};
+ if($('mc-clear'))$('mc-clear').onclick=()=>{mcReset();render()};
+ document.querySelectorAll('[data-mfield="mcmode"] button').forEach(b=>b.onclick=()=>{keep();c.mode=b.dataset.v;c.err='';c.dups=null;render()});
+ const qi=$('mc-q');if(qi)qi.oninput=()=>{c.q=qi.value;memberSearch(qi.value,list=>{c.list=list;const box=$('mc-sugg');if(!box)return;box.innerHTML=list.map((m,i)=>`<button type="button" data-mcpick="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}${m.nationality?' <span class="sub">· '+esc(m.nationality)+'</span>':''}</button>`).join('');bindPicks()})};
+ const bindPicks=()=>document.querySelectorAll('[data-mcpick]').forEach(b=>b.onclick=()=>{keep();mcPick(c.list[Number(b.dataset.mcpick)])});bindPicks();
+ if($('mc-name'))$('mc-name').oninput=()=>{c.name=$('mc-name').value;c.dups=null;const g=$('mc-go');if(g)g.disabled=!c.name.trim()||c.busy};
+ if($('mc-nat'))$('mc-nat').onchange=()=>{keep();c.natSel=$('mc-nat').value;render();if(c.natSel==='other'){const o=$('mc-nato');o&&o.focus()}};
+ if($('mc-nato'))$('mc-nato').oninput=()=>{c.natOther=$('mc-nato').value};
+ if($('mc-au'))$('mc-au').oninput=()=>{c.approver=$('mc-au').value};if($('mc-ap'))$('mc-ap').oninput=()=>{c.pin=$('mc-ap').value};
+ document.querySelectorAll('[data-mcdup]').forEach(b=>b.onclick=()=>{const m=c.dups[Number(b.dataset.mcdup)];c.dups=null;c.mode='exist';c.list=[m];mcPick(m)});
+ if($('mc-dupok'))$('mc-dupok').onclick=()=>{keep();c.forceNew=true;c.dups=null;$('mc-go')&&$('mc-go').click()};
+ if($('mc-cam'))$('mc-cam').onclick=()=>{keep();openCamera(d=>{c.photo=d;render()})};
+ if($('mc-file'))$('mc-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;keep();try{c.photo=await readPhotoFile(f);render()}catch(x){flash(errMsg(x))}};
+ const needAppr=()=>!isManagerLogin()&&(!String(c.approver||'').trim()||!c.pin);
+ const link=async no=>api('/cage/card/link','POST',{uid:c.uid,member_no:no,...apprBody(c)});
+ if($('mc-off'))$('mc-off').onclick=async()=>{keep();c.err='';if(needAppr()){c.err='A manager types their Admin username and password.';render();return}c.busy=true;render();
+  try{await api('/cage/card/off','POST',{uid:c.uid,...apprBody(c)});const was=c.look.member;mcReset();S.mc.ok=`Card turned off${was?' for '+(was.nickname||was.name):''}.`;render()}catch(e){c.busy=false;c.pin='';c.err=errMsg(e);render()}};
+ if($('mc-go'))$('mc-go').onclick=async()=>{keep();c.err='';
+  if(c.mode==='exist'&&!c.pick)c.err='Choose the member.';else if(c.mode==='new'&&!c.name.trim())c.err='Write the name.';else if(c.mode==='new'&&!natOf())c.err='Choose the nationality.';else if(needAppr())c.err='A manager types their Admin username and password.';
+  if(c.err){render();return}c.busy=true;render();
+  try{let m=c.pick;
+   if(c.mode==='new'){let r;try{r=await api('/members','POST',{nickname:c.name.trim(),nationality:natOf(),staff_notes:'Added at the cage (Member Card)',confirm_duplicate:!!c.forceNew})}
+    catch(e){if(e.status===409&&e.body&&e.body.code==='possible_duplicate'){c.busy=false;c.dups=e.body.matches||[];render();return}throw e}
+    m={member_no:r.member_no,nickname:c.name.trim(),name:c.name.trim(),nationality:natOf()};c.mode='exist';c.pick=m;c.list=[m];c.forceNew=false}
+   if(c.photo){await api('/members/'+encodeURIComponent(m.member_no)+'/photo','PUT',{data:c.photo});PHOTOS[m.member_no]=c.photo}
+   await link(m.member_no);
+   const done=`Card ${c.uid} now belongs to ${m.nickname||m.name} #${m.member_no}.`;mcReset();S.mc.ok=done;render();flash(done)}
+  catch(e){c.busy=false;c.pin='';c.err=errMsg(e);render()}}}
+
 render();setStatus();start();
 </script>
 </body>

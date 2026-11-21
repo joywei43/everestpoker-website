@@ -245,3 +245,7 @@ CREATE TABLE IF NOT EXISTS cage_docs(coll TEXT NOT NULL, id TEXT NOT NULL, data 
 CREATE INDEX IF NOT EXISTS cage_docs_rev ON cage_docs(rev);
 CREATE TABLE IF NOT EXISTS cage_meta(id INTEGER PRIMARY KEY CHECK(id=1), rev INTEGER NOT NULL);
 INSERT OR IGNORE INTO cage_meta(id,rev) VALUES(1,0);
+
+-- Member cards (NFC). The card holds nothing but its own number (uid); it points to one member. Replaced or lost cards stay with active=0.
+CREATE TABLE IF NOT EXISTS member_cards(uid TEXT PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES members(id), active INTEGER NOT NULL DEFAULT 1, linked_at INTEGER NOT NULL, linked_by TEXT NOT NULL DEFAULT '', approved_by TEXT NOT NULL DEFAULT '', replaced_at INTEGER, replaced_by TEXT);
+CREATE INDEX IF NOT EXISTS member_cards_member ON member_cards(member_id,active);

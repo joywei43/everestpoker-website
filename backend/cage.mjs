@@ -3,13 +3,78 @@
 // POST /cage/doc          → {coll, id, op:'set'|'update'|'delete', data?, ifVersion?}
 import { auditStmt } from './audit.mjs';
 import { handleOperation } from './operation.mjs';
+import { managerApproval } from './cardauth.mjs';
+import { str, normNo, displayName } from './members.mjs';
 
 const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos', 'corrections', 'shifts'];
 const SETTINGS = ['config', 'manpower']; // starting balances, rates and staff costs: changes go to the History Log
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX = { photos: 400000 };
 
+
+// ----- Member cards: a card's own number (UID) points to one member. The card stores nothing else. -----
+const cardUid = (v) => { const u = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return u.length >= 4 && u.length <= 32 ? u : ''; };
+async function cardMember(env, memberId) {
+  const m = await env.DB.prepare('SELECT m.*, g.name group_name, EXISTS(SELECT 1 FROM member_photos p WHERE p.member_id=m.id) has_photo FROM members m LEFT JOIN member_groups g ON g.id=m.group_id WHERE m.id=?').bind(memberId).first();
+  return m && { member_no: m.member_no, name: displayName(m), nickname: m.nickname || '', nationality: m.nationality || '', group_name: m.group_name || null, has_photo: !!m.has_photo, status: m.status };
+}
+async function handleCards(req, env, path, now, reply, user, role) {
+  const manager = role === 'admin' || role === 'master';
+  if (path.startsWith('/cage/card/') && req.method === 'GET') {
+    const uid = cardUid(decodeURIComponent(path.slice('/cage/card/'.length)));
+    if (!uid) return reply({ error: 'Not a card number.' }, 400);
+    const c = await env.DB.prepare('SELECT * FROM member_cards WHERE uid=?').bind(uid).first();
+    if (!c) return reply({ uid, unknown: true });
+    const member = await cardMember(env, c.member_id);
+    if (!c.active) return reply({ uid, inactive: true, replaced_at: c.replaced_at, member });
+    return reply({ uid, card: { uid, linked_at: c.linked_at, linked_by: c.linked_by }, member });
+  }
+  if (path === '/cage/cards' && req.method === 'GET') {
+    const no = normNo(new URL(req.url).searchParams.get('member_no') || '');
+    const m = no && await env.DB.prepare('SELECT id FROM members WHERE member_no=? COLLATE NOCASE').bind(no).first();
+    if (!m) return reply({ error: 'Member not found.' }, 404);
+    const rows = (await env.DB.prepare('SELECT uid,active,linked_at,linked_by,approved_by,replaced_at,replaced_by FROM member_cards WHERE member_id=? ORDER BY linked_at DESC').bind(m.id).all()).results || [];
+    return reply({ cards: rows.map((r) => ({ ...r, active: !!r.active })) });
+  }
+  if ((path === '/cage/card/link' || path === '/cage/card/off') && req.method === 'POST') {
+    if (role === 'senior') return reply({ error: 'Read only.' }, 403);
+    const b = await req.json().catch(() => ({}));
+    const uid = cardUid(b.uid);
+    if (!uid) return reply({ error: 'Tap the card first.' }, 400);
+    // Cards are given and replaced with a manager's approval: signed in as a manager, or a manager types their Admin username + password.
+    let approver = manager ? String(user || '') : null;
+    if (!approver) { const a = await managerApproval(env, b.approver_user, b.approver_password, now); if (a.error) return reply({ error: a.error }, a.status); approver = a.name; }
+    const cur = await env.DB.prepare('SELECT * FROM member_cards WHERE uid=?').bind(uid).first();
+    if (path === '/cage/card/off') {
+      if (!cur || !cur.active) return reply({ error: 'This card is not in use.' }, 404);
+      await env.DB.batch([
+        env.DB.prepare('UPDATE member_cards SET active=0,replaced_at=?,replaced_by=? WHERE uid=?').bind(now, approver, uid),
+        auditStmt(env, now, user || 'staff', 'member.card', `Card ${uid} turned off (lost / broken) · approved by ${approver}`, cur.member_id),
+      ]);
+      return reply({ ok: true });
+    }
+    const no = normNo(b.member_no || '');
+    const m = no && await env.DB.prepare('SELECT id,member_no FROM members WHERE member_no=? COLLATE NOCASE').bind(no).first();
+    if (!m) return reply({ error: 'Member not found.' }, 404);
+    if (cur && cur.active && cur.member_id !== m.id) {
+      const other = await cardMember(env, cur.member_id);
+      return reply({ error: `This card already belongs to ${other ? other.name + ' #' + other.member_no : 'another member'}.`, owner: other }, 409);
+    }
+    if (cur && cur.active && cur.member_id === m.id) return reply({ ok: true, unchanged: true });
+    const old = (await env.DB.prepare('SELECT uid FROM member_cards WHERE member_id=? AND active=1 AND uid<>?').bind(m.id, uid).all()).results || [];
+    await env.DB.batch([
+      env.DB.prepare('UPDATE member_cards SET active=0,replaced_at=?,replaced_by=? WHERE member_id=? AND active=1 AND uid<>?').bind(now, approver, m.id, uid),
+      env.DB.prepare('INSERT INTO member_cards(uid,member_id,active,linked_at,linked_by,approved_by,replaced_at,replaced_by) VALUES(?,?,1,?,?,?,NULL,NULL) ON CONFLICT(uid) DO UPDATE SET member_id=excluded.member_id,active=1,linked_at=excluded.linked_at,linked_by=excluded.linked_by,approved_by=excluded.approved_by,replaced_at=NULL,replaced_by=NULL')
+        .bind(uid, m.id, now, str(user || 'staff', 60), approver),
+      auditStmt(env, now, user || 'staff', 'member.card', `Card ${uid} linked${old.length ? ' (replaces ' + old.map((o) => o.uid).join(', ') + ')' : ''} · approved by ${approver}`, m.id),
+    ]);
+    return reply({ ok: true, member: await cardMember(env, m.id), replaced: old.map((o) => o.uid) });
+  }
+  return null;
+}
+
 export async function handleCage(req, env, path, now, reply, user, role) {
+  if (path === '/cage/cards' || path.startsWith('/cage/card/')) { const r = await handleCards(req, env, path, now, reply, user, role); if (r) return r; }
   if (path === '/cage' && req.method === 'GET') {
     const since = Math.max(0, Math.floor(Number(new URL(req.url).searchParams.get('since')) || 0));
     const rows = (await env.DB.prepare("SELECT coll,id,data,deleted,version,rev FROM cage_docs WHERE rev>? AND coll<>'photos' ORDER BY rev LIMIT 2000").bind(since).all()).results || [];
