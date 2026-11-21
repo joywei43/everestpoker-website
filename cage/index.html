@@ -92,7 +92,7 @@ button.link{border:none;background:none;color:var(--accent);padding:2px 4px}
 </head>
 <body>
 <header><div class="wrap top"><h1>Everest Cage</h1>
-<nav id="nav"></nav><span class="status sub" id="status">Connecting…</span><span class="sub" id="who" style="margin-left:10px"></span><button class="link" id="logout" style="display:none;margin-left:6px">Log out</button></div></header>
+<nav id="nav"></nav><span class="status sub" id="status">Connecting…</span><span class="sub" id="who" style="margin-left:10px"></span><button class="link" id="test-btn" style="display:none;margin-left:8px">Test mode</button><button class="link" id="logout" style="display:none;margin-left:6px">Log out</button></div></header>
 <div id="login" style="display:none;max-width:360px;margin:12vh auto 0;padding:0 16px"><h2>Everest Cage</h2><div class="sub">Sign in with your staff account.</div><form id="lf"><input id="un" placeholder="Username" autocomplete="username" style="margin-top:10px"><input id="pw" type="password" placeholder="Password" autocomplete="current-password" style="margin-top:10px"><div class="err" id="lerr"></div><button class="primary" style="margin-top:12px;width:100%">Sign in</button></form></div>
 <main class="wrap" id="app"></main>
 <script>
@@ -224,7 +224,7 @@ async function saveSettings(s){if(MEM){S.settings=s;render();return}await DB.doc
 const TABS=[['counts','Cage'],['cards','Member Card'],['overview','Overview'],['entry','Record'],['players','Players'],['flow','Daily flow'],['tips','Tips'],['midori','MIDORI'],['manpower','Manpower'],['ledger','Ledger'],['settings','Settings']];
 function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{if(b.dataset.tab==='counts'&&S.cnt&&S.cnt.step==='report')S.cnt=null;if(b.dataset.tab==='counts')S.cw=null;S.tab=b.dataset.tab;S.pending=null;render()})}
-function render(){renderNav();const v={manpower:vManpower,cards:vCards,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,tips:vTips,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(S.role==='senior'?`<div class="hl"><b class="t">Senior Dealer · read only 唯讀</b>You can look at everything here; changes are not saved. 可以查看，無法修改。</div>`:'')+(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
+function render(){renderNav();const v={manpower:vManpower,cards:vCards,counts:vCounts,overview:vOverview,entry:vEntry,players:vPlayers,midori:vMidori,flow:vFlow,tips:vTips,ledger:vLedger,settings:vSettings}[S.tab];$('app').innerHTML=(TESTMODE?`<div class="hl" style="border-color:#E8A317;background:rgba(232,163,23,.16);max-width:none"><b class="t" style="color:#F2C14E">TEST MODE · nothing is saved 測試模式，不會存檔</b>Buy-ins, cash-outs, rewards, opening and closing stay in this browser tab only and disappear when you leave test mode or reload. Member Card (linking cards, new members, photos) is real and is saved. <button class="link" data-test-off>Leave test mode</button></div>`:'')+(S.role==='senior'?`<div class="hl"><b class="t">Senior Dealer · read only 唯讀</b>You can look at everything here; changes are not saved. 可以查看，無法修改。</div>`:'')+(S.dayOverride?`<div class="hl" style="border-color:#C2372F;background:rgba(194,55,47,.10)"><b class="t" style="color:#C2372F">⚠ Entering a past business day: ${esc(S.dayOverride)}</b>Everything you record now is dated ${esc(S.dayOverride)}. <button class="link" id="day-clear">Back to today</button></div>`:'')+v();bind();
  const dc=$('day-clear');if(dc)dc.onclick=()=>{S.dayOverride=null;try{sessionStorage.removeItem('cage-day')}catch(e){}render()}}
 
 function pouchCard(b,p){if(p.held){const v=b.pd_cash||0;return `<div class="card"><div class="row" style="padding-top:0"><b>${p.l}</b><span class="big num ${v<0?'neg':''}">${pesoE(v)}</span></div><div class="sub">Players' money · not usable cash</div></div>`}const parts=p.media.map(m=>[m,b[p.k+'_'+m]||0]);const tot=parts.reduce((s,x)=>s+x[1],0);
@@ -1447,7 +1447,7 @@ function bind(){
 }
 function errMsg(e){const c=e&&e.code;if(c==='quota_exceeded')return 'Storage is full.';if(c==='invalid_argument')return 'Not allowed to save, or the data is not valid.';if(c==='unavailable')return 'Cannot connect right now. Try again.';return (e&&e.message)||'Save failed'}
 let flashT;function flash(t){const s=$('status');s.textContent=t;clearTimeout(flashT);flashT=setTimeout(()=>setStatus(),2500)}
-function setStatus(){$('status').textContent=MEM?'⚠ Not connected. Data stays in this tab only.':(Object.values(S.loaded).every(Boolean)?'Connected · saved automatically':'Loading…')}
+function setStatus(){$('status').textContent=TESTMODE?'TEST MODE · not saved':MEM?'⚠ Not connected. Data stays in this tab only.':(Object.values(S.loaded).every(Boolean)?'Connected · saved automatically':'Loading…')}
 
 const canRender=()=>!S.pending&&!(S.cnt&&['count','result'].includes(S.cnt.step))&&!(S.qa&&!(S.qa.isDefault&&!S.qa.player&&!S.qa.amount&&!S.qaMsg))&&!S.cw&&!(S.tab==='cards'&&document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
 /* ---------- init: Everest API ---------- */
@@ -1456,15 +1456,18 @@ let TOKEN=sessionStorage.getItem('cage-token')||'';
 async function api(path,method='GET',body){const res=await fetch(API+path,{method,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{})},...(body?{body:JSON.stringify(body)}:{})});
  const d=await res.json().catch(()=>({}));if(res.status===401){TOKEN='';sessionStorage.removeItem('cage-token');showLogin();const e=new Error('Please sign in again.');throw e}
  if(!res.ok){const e=new Error(d.error||('Error '+res.status));e.status=res.status;e.body=d;throw e}return d}
-function makeDb(){const store={},subs=[];let rev=0,busy=false;
+function makeDb(){const store={},subs=[];let rev=0,busy=false,test=null;const cur=()=>test||store;
  const newId=()=>Array.from(crypto.getRandomValues(new Uint8Array(15)),b=>'abcdefghijklmnopqrstuvwxyz0123456789'[b%36]).join('');
- const snapColl=c=>({docs:Object.entries(store[c]||{}).map(([id,d])=>({id,data:()=>d.data})),metadata:{fromCache:false}});
+ const snapColl=c=>({docs:Object.entries(cur()[c]||{}).map(([id,d])=>({id,data:()=>d.data})),metadata:{fromCache:false}});
  const emit=()=>subs.forEach(s=>{try{s()}catch(e){console.error(e)}});
- async function pull(force){if(busy)return;busy=true;try{let more=true,changed=!!force||!rev;while(more){const r=await api('/cage?since='+rev);if(r.docs.length)changed=true;for(const d of r.docs){store[d.coll]=store[d.coll]||{};if(d.deleted)delete store[d.coll][d.id];else store[d.coll][d.id]={data:d.data,version:d.version}}rev=r.rev;more=r.more}if(changed){emit();if(canRender())render()}}finally{busy=false}}
- async function write(coll,id,op,data){await api('/cage/doc','POST',{coll,id,op,data});busy=false;await pull(true)}
+ async function pull(force){if(test){if(force){emit();if(canRender())render()}return}if(busy)return;busy=true;try{let more=true,changed=!!force||!rev;while(more){const r=await api('/cage?since='+rev);if(r.docs.length)changed=true;for(const d of r.docs){store[d.coll]=store[d.coll]||{};if(d.deleted)delete store[d.coll][d.id];else store[d.coll][d.id]={data:d.data,version:d.version}}rev=r.rev;more=r.more}if(changed){emit();if(canRender())render()}}finally{busy=false}}
+ async function write(coll,id,op,data){if(test){/* test mode: kept in this tab only */const T=test[coll]=test[coll]||{},old=T[id];if(op==='update'&&!old)throw new Error('Not found');
+  if(op==='delete')delete T[id];else{let d=op==='update'?{...old.data,...data}:data;if(coll==='entries')d={...d,by:(old&&old.data.by)||d.by||(S.user&&S.user.name)||''};T[id]={data:d,version:(old?old.version:0)+1}}emit();if(canRender())render();return}
+  await api('/cage/doc','POST',{coll,id,op,data});busy=false;await pull(true)}
+ function setTest(on){test=on?JSON.parse(JSON.stringify(store)):null;emit();render()}
  const ref=(coll,id)=>({id,set:d=>write(coll,id,'set',JSON.parse(JSON.stringify(d))),update:d=>write(coll,id,'update',JSON.parse(JSON.stringify(d))),delete:()=>write(coll,id,'delete'),
-  onSnapshot:(cb,err)=>{subs.push(()=>{const d=(store[coll]||{})[id];cb({exists:!!d,data:()=>d?d.data:undefined,metadata:{fromCache:false}})})}});
- return{pull,collection:c=>({doc:id=>ref(c,id||newId()),onSnapshot:(cb,err)=>{subs.push(()=>cb(snapColl(c)))}}),doc:p=>{const [c,id]=p.split('/');return ref(c,id)}}}
+  onSnapshot:(cb,err)=>{subs.push(()=>{const d=(cur()[coll]||{})[id];cb({exists:!!d,data:()=>d?d.data:undefined,metadata:{fromCache:false}})})}});
+ return{pull,setTest,isTest:()=>!!test,collection:c=>({doc:id=>ref(c,id||newId()),onSnapshot:(cb,err)=>{subs.push(()=>cb(snapColl(c)))}}),doc:p=>{const [c,id]=p.split('/');return ref(c,id)}}}
 function showLogin(){$('login').style.display='';$('app').style.display='none';$('nav').style.display='none';$('logout').style.display='none';$('who').textContent=''}
 $('lf').onsubmit=async e=>{e.preventDefault();$('lerr').textContent='';try{const res=await fetch(API+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('un').value.trim(),password:$('pw').value})});const d=await res.json();if(!res.ok)throw new Error(d.error||'Sign-in failed');
  TOKEN=d.token;sessionStorage.setItem('cage-token',TOKEN);$('pw').value='';start()}catch(err){$('lerr').textContent=err.message}};
@@ -1473,7 +1476,7 @@ let started=false;
 async function start(){if(!TOKEN){showLogin();return}
  $('login').style.display='none';$('app').style.display='';$('nav').style.display='';$('logout').style.display='';
  let me;try{me=await api('/me')}catch(e){return}
- $('who').textContent=me.user||'';S.role=me.role;if(!S.user||S.user.name!==me.user)setUser({name:me.user,role:me.role});
+ $('who').textContent=me.user||'';S.role=me.role;$('test-btn').style.display=me.role==='master'?'':'none';if(!S.user||S.user.name!==me.user)setUser({name:me.user,role:me.role});
  if(started)return;started=true;
  const db=makeDb();DB=db;const done=k=>{S.loaded[k]=true;setStatus()};
  db.collection('entries').onSnapshot(s=>{S.entries=s.docs.map(d=>({id:d.id,...d.data()}));done('e');});
@@ -1576,6 +1579,7 @@ function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el
   if(!r.m)r.err='Choose the member.';else if(!r.detail.trim())r.err='Write the reason.';else if(!Number.isSafeInteger(amt)||amt<=0)r.err='Enter the amount in whole pesos.';else if(!isManagerLogin()&&(!r.approver.trim()||!r.pin))r.err='A manager types their Admin username and password.';
   if(r.err){drawRewards();return}
   r.busy=true;drawRewards();
+  if(TESTMODE){const cash=r.type==='promo_cash',label=cash?'Promo cash':'Promo chip',nick=r.m.nickname||r.m.name;try{await saveEntry({type:cash?'op_out':'comp_chips',date:bizDay(),time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:new Date().toISOString(),voided:false,player:null,medium:cash?'cash':'chips',method:null,amount:amt,cat:'Player comps · '+label,note:r.detail.trim(),approver:(isManagerLogin()?S.user&&S.user.name:r.approver)||null,compPaid:cash?'cash':'chips',memberNo:r.m.member_no,legs:cash?[{a:'cf',m:'cash',v:-amt}]:[{a:'chip',m:'chips',v:-amt}],pl:{cat:'Player comps · '+label,v:-amt},summary:`Comp · ${label} · ${nick} #${r.m.member_no} · ${r.detail.trim()} (TEST)`});closeRewards();flash('Test reward recorded (not saved)')}catch(e){r.busy=false;r.err=errMsg(e);drawRewards()}return}
   try{const res=await api('/rewards/issue','POST',{member_no:r.m.member_no,type:r.type,amount:amt,detail:r.detail.trim(),pay:r.type==='promo_cash'?'cash':'chips',...apprBody(r)});
    closeRewards();flash(`Reward ${peso(amt)} for ${r.m.nickname||r.m.name} recorded${res.approved_by?' · approved by '+res.approved_by:''}`);if(DB&&DB.pull)DB.pull(true).catch(()=>{})}
   catch(e){r.busy=false;r.pin='';r.err=errMsg(e);drawRewards()}}}
@@ -1664,6 +1668,14 @@ function bindCards(){if(S.tab!=='cards'){bindCardPanel();return}const c=S.mc;if(
    const done=`Card ${c.uid} now belongs to ${m.nickname||m.name} #${m.member_no}.`;mcReset();S.mc.ok=done;render();flash(done)}
   catch(e){c.busy=false;c.pin='';c.err=errMsg(e);render()}}}
 
+/* ----- Test mode (master only): practise the day without touching the books ----- */
+let TESTMODE=false;
+function setTestMode(on){if(!DB||!DB.setTest||(on&&S.role!=='master'))return;TESTMODE=on;S.qa=null;S.qaMsg=null;S.flow=null;S.cnt=null;S.cardM=null;S.pending=null;DB.setTest(on);
+ /* the test day starts open, so the desk works without an opening count */
+ if(on){const op=cageOpen();if(!op||op.first){const now=new Date(),bk=bookNow();DB.collection('counts').doc().set({kind:'open',day:bizDay(),at:now.toISOString(),time:now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),cashier:(S.user?S.user.name:'')+' (test)',supervisor:'',cash:{},chips:{},counted:bk,book:bk,diffs:{},reasons:{},short:0,chipsOut:0,credit:0,fxCount:{same:true},house:{qty:0,prev:null},midoriDay:prevBizDay(),midori:null,openChips:null,photo:null,test:true}).catch(()=>{})}}
+ const b=$('test-btn');if(b){b.textContent=on?'Leave test mode':'Test mode';b.style.color=on?'#F2C14E':''}document.querySelector('header').style.boxShadow=on?'inset 0 -4px 0 #E8A317':'';setStatus();render();flash(on?'Test mode on · nothing is saved':'Test mode off · back to the real books')}
+$('test-btn').onclick=()=>setTestMode(!TESTMODE);
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('[data-test-off]'))setTestMode(false)});
 render();setStatus();start();
 </script>
 </body>
