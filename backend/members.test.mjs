@@ -66,23 +66,23 @@ assert.equal(chen.stats.all.secs, 14400);
 ppm = await call('/ppm', 'PUT', { version: 1, tables }, token);
 assert.equal((await call('/members/EV-000001', 'GET', null, token)).body.sessions.length, 1);
 
-// Change group: past hours stay with Hee, later hours go to JOY.
+// Change group: the whole history moves to JOY, and later hours go to JOY too.
 assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'joy', staff: 'K. Lim', note: 'Host request' }, token)).status, 200);
 const later = Date.now() + 60e3;
 tables[0].sessions.push({ date: 'x', tableId: 1, tableName: 'T1', seatId: 4, memberId: 'EV-000001', startTime: manila(later), endTime: manila(later + 3600e3), activeSeconds: 3000, restSeconds: 600, buyInAmount: 10000, transferNote: null });
 ppm = await call('/ppm', 'PUT', { version: 2, tables }, token);
 chen = (await call('/members/EV-000001', 'GET', null, token)).body;
-assert.deepEqual(chen.sessions.map((s) => s.group_id).sort(), ['hee', 'joy']);
-assert.equal(chen.group_history[0].group_name, 'JOY'); assert.equal(chen.group_history[1].group_name, 'Hee');
+assert.deepEqual(chen.sessions.map((s) => s.group_id).sort(), ['joy', 'joy']);
+assert.equal(chen.group_history[0].group_name, 'JOY'); assert.equal(chen.group_history.length, 1);
 
-// Rewards: charged to the group at the time, voided not deleted.
+// Rewards: charged to the member's group (history moved to JOY), voided not deleted.
 assert.equal((await call('/members/EV-000001/rewards', 'POST', { type: 'hotel', amount: 6500, detail: 'Midori 1 night', recorded_by: 'Maria', approved_by: 'K. Lim', date: '2026-10-05' }, token)).status, 200);
 assert.equal((await call('/members/EV-000001/rewards', 'POST', { type: 'promo_cash', amount: 5000, recorded_by: 'Maria' }, token)).status, 200);
 assert.equal((await call('/members/EV-000001/rewards', 'POST', { type: 'reward_code', amount: 1, recorded_by: 'Maria' }, token)).status, 400);
 assert.equal((await call('/members/EV-000001/rewards', 'POST', { type: 'promo_cash', amount: 10.5, recorded_by: 'Maria' }, token)).status, 400);
 chen = (await call('/members/EV-000001', 'GET', null, token)).body;
 const hotel = chen.rewards.find((x) => x.type === 'hotel'), cash = chen.rewards.find((x) => x.type === 'promo_cash');
-assert.equal(hotel.group_id, 'hee'); assert.equal(cash.group_id, 'joy');
+assert.equal(hotel.group_id, 'joy'); assert.equal(cash.group_id, 'joy');
 assert.equal(chen.stats.all.rewards, 11500);
 assert.equal((await call(`/rewards/${cash.id}/void`, 'POST', { staff: 'K. Lim' }, token)).status, 400, 'reason required');
 assert.equal((await call(`/rewards/${cash.id}/void`, 'POST', { staff: 'K. Lim', reason: 'Entered twice' }, token)).status, 200);
@@ -92,9 +92,9 @@ assert.equal(chen.stats.all.rewards, 6500); assert.ok(chen.rewards.find((x) => x
 // Group summary for a date range.
 let sum = (await call('/groups/summary?from=2026-09-01&to=2027-12-31', 'GET', null, token)).body;
 const hee = sum.groups.find((g) => g.id === 'hee'), joy = sum.groups.find((g) => g.id === 'joy'), dee = sum.groups.find((g) => g.id === 'dee');
-assert.equal(hee.seconds, 14400); assert.equal(joy.seconds, 3000); assert.equal(dee.seconds, 7200);
-assert.equal(hee.players[0].moved_to, 'JOY'); assert.equal(joy.players[0].moved_to, null);
-assert.equal(hee.rewards, 6500); assert.equal(sum.unmatched_sessions, 1); assert.equal(sum.unmatched_seconds, 3600);
+assert.equal(hee ? hee.seconds : 0, 0); assert.equal(joy.seconds, 17400); assert.equal(dee.seconds, 7200);
+assert.equal(joy.players[0].moved_to, null);
+assert.equal(joy.rewards, 6500); assert.equal(sum.unmatched_sessions, 1); assert.equal(sum.unmatched_seconds, 3600);
 
 // Unmatched PPM names can be linked to a member afterwards.
 const refs = (await call('/sessions/unmatched', 'GET', null, token)).body.refs;
@@ -139,8 +139,10 @@ assert.equal((await call('/me', 'GET', null, g.token)).body.user, 'Geraldine');
 assert.equal((await call('/members/EV-000001', 'PUT', { staff_notes: 'Regular on Fridays', staff: 'Someone else' }, g.token)).status, 200);
 chen = (await call('/members/EV-000001', 'GET', null, g.token)).body;
 assert.equal(chen.audit[0].actor, 'Geraldine', 'log shows the signed-in person, not a typed name');
-// Managers approve and edit promotions; group changes, voids, imports, suspensions and accounts are master only.
-assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'dee' }, g.token)).status, 403);
+// Managers approve and edit promotions and ask for group changes; voids, suspensions and accounts are master only.
+assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'dee' }, g.token)).status, 400, 'a manager must give a reason');
+assert.equal((await call('/members/EV-000001/group', 'POST', { group_id: 'dee', note: 'test' }, g.token)).body.requested, true, 'a manager only asks');
+assert.equal((await call('/members/EV-000001', 'GET', null, g.token)).body.member.group_id, 'joy', 'nothing moved yet');
 assert.equal((await call('/members/import', 'POST', { rows: [] }, g.token)).status, 200, 'managers can import');
 assert.equal((await call('/members/EV-000001', 'PUT', { status: 'suspended' }, g.token)).status, 403);
 assert.equal((await call('/staff', 'GET', null, g.token)).status, 403);
@@ -355,7 +357,7 @@ await call('/members/EV-444445/number', 'POST', { member_no: '444444' }, boss.to
   assert.equal(asked.status, 200); assert.equal(asked.body.requested, true);
   g2 = (await call('/groups/summary?from=2026-01-01&to=2027-12-31', 'GET', null, boss.token)).body;
   assert.equal(g2.groups.find((g) => g.id === 'patrick').seconds, patBefore, 'request alone moves nothing');
-  const reqs = (await call('/change-requests?status=pending', 'GET', null, boss.token)).body.requests.filter((r) => r.kind === 'member.group');
+  const reqs = (await call('/change-requests?status=pending', 'GET', null, boss.token)).body.requests.filter((r) => r.kind === 'member.group' && r.member_no === owner);
   assert.equal(reqs.length, 1); assert.match(reqs[0].summary, /In-House → Patrick/);
   assert.equal((await call(`/change-requests/${reqs[0].id}/approve`, 'POST', {}, geraldine.token)).status, 403, 'only the master approves');
   assert.equal((await call(`/change-requests/${reqs[0].id}/approve`, 'POST', {}, boss.token)).status, 200);
