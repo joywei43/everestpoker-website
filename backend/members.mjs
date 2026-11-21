@@ -1,4 +1,4 @@
-import { supervisorApproval } from './cardauth.mjs';
+import { managerApproval } from './cardauth.mjs';
 import { businessDay, runsAround, dayOpenFromRuns } from './operation.mjs';
 // Everest member system — staff API (phase 1).
 // Members, player groups, group history, PPM play time and rewards.
@@ -890,9 +890,9 @@ export async function handleMembersApi(req, env, path, now, reply, user, role = 
     if (givenAt > now + DAY) return bad(reply, 'Date is in the future.');
     const groupId = await groupAt(env, m.id, givenAt);
     const fullDetail = (sub ? sub + ': ' : '') + detail;
-    // At the cage a supervisor approves with their cage PIN; in Admin a manager account approves by itself.
-    const cageApprover = !manager && b.cage_approver ? await supervisorApproval(env, str(b.cage_approver, 60), str(b.cage_pin, 20)) : null;
-    if (b.cage_approver && !manager && !cageApprover) return bad(reply, 'Wrong supervisor PIN.', 403);
+    // At the cage a manager approves by typing their own Admin username + password; a manager account approves by itself.
+    let cageApprover = null;
+    if (!manager && b.approver_user) { const a = await managerApproval(env, b.approver_user, b.approver_password, now); if (a.error) return bad(reply, a.error, a.status); cageApprover = a.name; }
     const approved = manager || !!cageApprover;
     const approver = manager ? (str(b.approved_by, 60) || who(b)) : cageApprover || '';
     const row = await env.DB.prepare('INSERT INTO rewards(member_id,group_id,type,detail,amount,given_at,recorded_by,approved_by,approved_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id')

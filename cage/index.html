@@ -1545,9 +1545,10 @@ function bindCardPanel(){document.querySelectorAll('[data-card-x]').forEach(b=>b
  document.querySelectorAll('[data-card-mc]').forEach(b=>b.onclick=()=>{const uid=S.cardM&&S.cardM.uid;S.cardM=null;S.tab='cards';mcReset();render();if(uid)mcSetCard(uid)});
  document.querySelectorAll('[data-rw-open]').forEach(b=>b.onclick=()=>openRewards(S.cardM&&S.cardM.state==='ok'?S.cardM.m:(S.qa&&S.qa.member)||null))}
 
-/* ----- supervisor approval (name + cage PIN; checked again by the server) ----- */
+/* ----- manager approval: the manager types their own Admin username + password (the cashier stays signed in) ----- */
 function apprBlock(st,prefix){if(isManagerLogin())return `<div class="sub" style="margin-top:10px">Approved by you (${esc(S.user?S.user.name:'manager')}, manager account).</div>`;
- return `<label>Approved by 主管核准</label>${mseg(prefix+'appr',approvers().map(n=>[n,esc(n)]),st.approver)}<label>Supervisor PIN</label><input id="${prefix}-pin" type="password" inputmode="numeric" autocomplete="off" value="${esc(st.pin||'')}" style="max-width:160px">`}
+ return `<label>Approved by 主管核准 · manager's Admin login</label><div class="flex" style="gap:8px;flex-wrap:wrap"><input id="${prefix}-au" autocomplete="off" placeholder="Admin username" value="${esc(st.approver||'')}" style="max-width:200px"><input id="${prefix}-ap" type="password" autocomplete="new-password" placeholder="Password" value="${esc(st.pin||'')}" style="max-width:200px"></div><div class="sub" style="margin-top:4px">Manager or Master account. Not saved on this computer.</div>`}
+const apprBody=st=>isManagerLogin()?{}:{approver_user:(st.approver||'').trim(),approver_password:st.pin||''};
 
 /* ----- Rewards at the cage: promo chip or promo cash, approved by a supervisor ----- */
 function openRewards(m){S.rw={m,type:'promo_chip',amount:'',detail:'',approver:'',pin:'',err:'',q:'',busy:false};drawRewards()}
@@ -1557,7 +1558,7 @@ function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el
  ${r.m?`<div class="flex" style="margin-top:10px;gap:12px">${photoBox(r.m,56)}<div><b>${esc(r.m.nickname||r.m.name)}</b> <span class="sub">#${esc(r.m.member_no)}</span><br><button class="link" data-rw-change>Change member</button></div></div>`
   :`<label>Member</label><input id="rw-q" autocomplete="off" placeholder="Member number or name" value="${esc(r.q)}"><div class="sugg" id="rw-sugg"></div>`}
  <label>Type</label>${mseg('rwtype',[['promo_chip','Promo chip 籌碼'],['promo_cash','Promo cash 現金']],r.type)}
- <div class="sub" style="margin-top:4px">${r.type==='promo_cash'?'Cash from the cash float.':'Chips from the chip float.'} Hotel, transport and tournament tickets: Admin → Rewards.</div>
+ <div class="sub" style="margin-top:4px">${r.type==='promo_cash'?'Cash from the cash float.':'Chips from the chip float.'} Approved by a manager. Hotel, transport and tournament tickets: Admin → Rewards.</div>
  <label>Reason</label><input id="rw-detail" value="${esc(r.detail)}" placeholder="e.g. High hand · Quad Kings">
  <label>Amount (₱)</label><input id="rw-amt" inputmode="numeric" value="${esc(r.amount)}" placeholder="0">
  ${apprBlock(r,'rw')}
@@ -1566,17 +1567,16 @@ function drawRewards(){const r=S.rw;if(!r)return;let el=$('rw-modal');if(!el){el
  el.querySelectorAll('[data-rw-x]').forEach(b=>b.onclick=closeRewards);
  const ch=el.querySelector('[data-rw-change]');if(ch)ch.onclick=()=>{r.m=null;drawRewards();const i=$('rw-q');i&&i.focus()};
  el.querySelectorAll('[data-mfield="rwtype"] button').forEach(b=>b.onclick=()=>{r.type=b.dataset.v;keep();drawRewards()});
- el.querySelectorAll('[data-mfield="rwappr"] button').forEach(b=>b.onclick=()=>{r.approver=b.dataset.v;keep();drawRewards();const p=$('rw-pin');p&&p.focus()});
- function keep(){const d=$('rw-detail'),a=$('rw-amt'),p=$('rw-pin');if(d)r.detail=d.value;if(a)r.amount=a.value;if(p)r.pin=p.value}
+ function keep(){const d=$('rw-detail'),a=$('rw-amt'),u=$('rw-au'),p=$('rw-ap');if(d)r.detail=d.value;if(a)r.amount=a.value;if(u)r.approver=u.value;if(p)r.pin=p.value}
  const qi=$('rw-q');if(qi)qi.oninput=()=>{r.q=qi.value;memberSearch(qi.value,list=>{const box=$('rw-sugg');if(!box)return;box.innerHTML=list.map((m,i)=>`<button type="button" data-rwm="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}</button>`).join('');
   box.querySelectorAll('[data-rwm]').forEach(b=>b.onclick=()=>{keep();r.m=list[Number(b.dataset.rwm)];drawRewards()})})};
  $('rw-go').onclick=async()=>{keep();r.err='';const amt=Number(String(r.amount).replace(/[,\s]/g,''));
-  if(!r.m)r.err='Choose the member.';else if(!r.detail.trim())r.err='Write the reason.';else if(!Number.isSafeInteger(amt)||amt<=0)r.err='Enter the amount in whole pesos.';else if(!isManagerLogin()&&(!r.approver||!r.pin))r.err='A supervisor chooses their name and types their PIN.';
+  if(!r.m)r.err='Choose the member.';else if(!r.detail.trim())r.err='Write the reason.';else if(!Number.isSafeInteger(amt)||amt<=0)r.err='Enter the amount in whole pesos.';else if(!isManagerLogin()&&(!r.approver.trim()||!r.pin))r.err='A manager types their Admin username and password.';
   if(r.err){drawRewards();return}
   r.busy=true;drawRewards();
-  try{const res=await api('/rewards/issue','POST',{member_no:r.m.member_no,type:r.type,amount:amt,detail:r.detail.trim(),pay:r.type==='promo_cash'?'cash':'chips',approved_by:r.approver||undefined,cage_approver:isManagerLogin()?undefined:r.approver,cage_pin:isManagerLogin()?undefined:r.pin});
+  try{const res=await api('/rewards/issue','POST',{member_no:r.m.member_no,type:r.type,amount:amt,detail:r.detail.trim(),pay:r.type==='promo_cash'?'cash':'chips',...apprBody(r)});
    closeRewards();flash(`Reward ${peso(amt)} for ${r.m.nickname||r.m.name} recorded${res.approved_by?' · approved by '+res.approved_by:''}`);if(DB&&DB.pull)DB.pull(true).catch(()=>{})}
-  catch(e){r.busy=false;r.err=e.status===403?'Wrong supervisor PIN.':errMsg(e);drawRewards()}}}
+  catch(e){r.busy=false;r.pin='';r.err=errMsg(e);drawRewards()}}}
 
 /* ----- photo: webcam or upload, saved to Admin → Members as a 320×320 JPEG ----- */
 function squareJpeg(src,w,h){const c=document.createElement('canvas'),s=320,mn=Math.min(w,h);c.width=s;c.height=s;c.getContext('2d').drawImage(src,(w-mn)/2,(h-mn)/2,mn,mn,0,0,s,s);return c.toDataURL('image/jpeg',.8)}
@@ -1629,30 +1629,29 @@ function vCards(){if(!S.mc)mcReset();const c=S.mc,look=c.look,ro=S.role==='senio
    ${apprBlock(c,'mc')}
    <div class="err">${esc(c.err)}</div><div class="ok-t" style="margin-top:6px">${esc(c.ok)}</div>
    <div class="flex" style="margin-top:12px"><button class="primary" id="mc-go" ${c.busy||!who?'disabled':''} style="padding:12px 18px">${c.mode==='exist'?(c.pick?`Link card to ${esc(c.pick.nickname||c.pick.name)} #${esc(c.pick.member_no)}`:'Link card'):'Create member and link card'}</button></div></div>`}
- return `<h2>Member Card 會員卡</h2><div class="sub" style="max-width:760px">The card only holds its own number. It points to the member in Admin → Members. Giving, replacing and turning off cards needs a supervisor.</div>${c.ok&&!c.uid?`<div class="note ok" style="max-width:760px;margin-top:10px">${esc(c.ok)}</div>`:''}${cardBox}${body}`}
+ return `<h2>Member Card 會員卡</h2><div class="sub" style="max-width:760px">The card only holds its own number. It points to the member in Admin → Members. Giving, replacing and turning off cards needs a manager (their Admin login).</div>${c.ok&&!c.uid?`<div class="note ok" style="max-width:760px;margin-top:10px">${esc(c.ok)}</div>`:''}${cardBox}${body}`}
 function bindCards(){if(S.tab!=='cards'){bindCardPanel();return}const c=S.mc;if(!c)return;
- const keep=()=>{const p=$('mc-pin');if(p)c.pin=p.value;const n=$('mc-name');if(n)c.name=n.value;const o=$('mc-nato');if(o)c.natOther=o.value};
+ const keep=()=>{const u=$('mc-au');if(u)c.approver=u.value;const p=$('mc-ap');if(p)c.pin=p.value;const n=$('mc-name');if(n)c.name=n.value;const o=$('mc-nato');if(o)c.natOther=o.value};
  const natOf=()=>(c.natSel==='other'?c.natOther:c.natSel).trim();
  if($('mc-uid-go'))$('mc-uid-go').onclick=()=>{const u=cardUid($('mc-uid').value);if(u)mcSetCard(u);else flash('Not a card number')};
  if($('mc-clear'))$('mc-clear').onclick=()=>{mcReset();render()};
  document.querySelectorAll('[data-mfield="mcmode"] button').forEach(b=>b.onclick=()=>{keep();c.mode=b.dataset.v;c.err='';c.dups=null;render()});
- document.querySelectorAll('[data-mfield="mcappr"] button').forEach(b=>b.onclick=()=>{keep();c.approver=b.dataset.v;render();const p=$('mc-pin');p&&p.focus()});
  const qi=$('mc-q');if(qi)qi.oninput=()=>{c.q=qi.value;memberSearch(qi.value,list=>{c.list=list;const box=$('mc-sugg');if(!box)return;box.innerHTML=list.map((m,i)=>`<button type="button" data-mcpick="${i}"><b>#${esc(m.member_no)}</b> ${esc(m.nickname||m.name)}${m.nationality?' <span class="sub">· '+esc(m.nationality)+'</span>':''}</button>`).join('');bindPicks()})};
  const bindPicks=()=>document.querySelectorAll('[data-mcpick]').forEach(b=>b.onclick=()=>{keep();mcPick(c.list[Number(b.dataset.mcpick)])});bindPicks();
  if($('mc-name'))$('mc-name').oninput=()=>{c.name=$('mc-name').value;c.dups=null;const g=$('mc-go');if(g)g.disabled=!c.name.trim()||c.busy};
  if($('mc-nat'))$('mc-nat').onchange=()=>{keep();c.natSel=$('mc-nat').value;render();if(c.natSel==='other'){const o=$('mc-nato');o&&o.focus()}};
  if($('mc-nato'))$('mc-nato').oninput=()=>{c.natOther=$('mc-nato').value};
- if($('mc-pin'))$('mc-pin').oninput=()=>{c.pin=$('mc-pin').value};
+ if($('mc-au'))$('mc-au').oninput=()=>{c.approver=$('mc-au').value};if($('mc-ap'))$('mc-ap').oninput=()=>{c.pin=$('mc-ap').value};
  document.querySelectorAll('[data-mcdup]').forEach(b=>b.onclick=()=>{const m=c.dups[Number(b.dataset.mcdup)];c.dups=null;c.mode='exist';c.list=[m];mcPick(m)});
  if($('mc-dupok'))$('mc-dupok').onclick=()=>{keep();c.forceNew=true;c.dups=null;$('mc-go')&&$('mc-go').click()};
  if($('mc-cam'))$('mc-cam').onclick=()=>{keep();openCamera(d=>{c.photo=d;render()})};
  if($('mc-file'))$('mc-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;keep();try{c.photo=await readPhotoFile(f);render()}catch(x){flash(errMsg(x))}};
- const needAppr=()=>!isManagerLogin()&&(!c.approver||!c.pin);
- const link=async no=>api('/cage/card/link','POST',{uid:c.uid,member_no:no,approver:isManagerLogin()?(S.user&&S.user.name):c.approver,pin:isManagerLogin()?undefined:c.pin});
- if($('mc-off'))$('mc-off').onclick=async()=>{keep();c.err='';if(needAppr()){c.err='A supervisor chooses their name and types their PIN.';render();return}c.busy=true;render();
-  try{await api('/cage/card/off','POST',{uid:c.uid,approver:isManagerLogin()?(S.user&&S.user.name):c.approver,pin:c.pin});const was=c.look.member;mcReset();S.mc.ok=`Card turned off${was?' for '+(was.nickname||was.name):''}.`;render()}catch(e){c.busy=false;c.err=e.status===403?'Wrong supervisor PIN.':errMsg(e);render()}};
+ const needAppr=()=>!isManagerLogin()&&(!String(c.approver||'').trim()||!c.pin);
+ const link=async no=>api('/cage/card/link','POST',{uid:c.uid,member_no:no,...apprBody(c)});
+ if($('mc-off'))$('mc-off').onclick=async()=>{keep();c.err='';if(needAppr()){c.err='A manager types their Admin username and password.';render();return}c.busy=true;render();
+  try{await api('/cage/card/off','POST',{uid:c.uid,...apprBody(c)});const was=c.look.member;mcReset();S.mc.ok=`Card turned off${was?' for '+(was.nickname||was.name):''}.`;render()}catch(e){c.busy=false;c.pin='';c.err=errMsg(e);render()}};
  if($('mc-go'))$('mc-go').onclick=async()=>{keep();c.err='';
-  if(c.mode==='exist'&&!c.pick)c.err='Choose the member.';else if(c.mode==='new'&&!c.name.trim())c.err='Write the name.';else if(c.mode==='new'&&!natOf())c.err='Choose the nationality.';else if(needAppr())c.err='A supervisor chooses their name and types their PIN.';
+  if(c.mode==='exist'&&!c.pick)c.err='Choose the member.';else if(c.mode==='new'&&!c.name.trim())c.err='Write the name.';else if(c.mode==='new'&&!natOf())c.err='Choose the nationality.';else if(needAppr())c.err='A manager types their Admin username and password.';
   if(c.err){render();return}c.busy=true;render();
   try{let m=c.pick;
    if(c.mode==='new'){let r;try{r=await api('/members','POST',{nickname:c.name.trim(),nationality:natOf(),staff_notes:'Added at the cage (Member Card)',confirm_duplicate:!!c.forceNew})}
@@ -1661,7 +1660,7 @@ function bindCards(){if(S.tab!=='cards'){bindCardPanel();return}const c=S.mc;if(
    if(c.photo){await api('/members/'+encodeURIComponent(m.member_no)+'/photo','PUT',{data:c.photo});PHOTOS[m.member_no]=c.photo}
    await link(m.member_no);
    const done=`Card ${c.uid} now belongs to ${m.nickname||m.name} #${m.member_no}.`;mcReset();S.mc.ok=done;render();flash(done)}
-  catch(e){c.busy=false;c.err=e.status===403?'Wrong supervisor PIN.':errMsg(e);render()}}}
+  catch(e){c.busy=false;c.pin='';c.err=errMsg(e);render()}}}
 
 render();setStatus();start();
 </script>

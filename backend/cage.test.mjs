@@ -96,46 +96,45 @@ console.log('cage insurance ok');
 
 // ----- Member cards -----
 {
-  const { cagePinHash } = await import('./cardauth.mjs');
+  sql.exec(await staffSql(['Phoebe:phoebe-pass:admin']));
   const mk = async (nick) => (await call('/members', 'POST', { nickname: nick, nationality: 'Philippines', confirm_duplicate: true }, maria)).body.member_no;
   const a = await mk('Card Tester A'), b2 = await mk('Card Tester B');
   assert.ok(a && b2, 'members created by staff');
-  await call('/cage/doc', 'POST', { coll: 'config', id: 'settings', op: 'set', data: { openDate: '2026-11-13', supervisors: ['Phoebe'], staff: [{ name: 'Phoebe', role: 'Supervisor', pin: await cagePinHash('Phoebe', '4321') }, { name: 'Mary Anne', role: 'Cage', pin: await cagePinHash('Mary Anne', '1111') }] } }, boss);
+  const ok = { approver_user: 'Phoebe', approver_password: 'phoebe-pass' };
   let c = await call('/cage/card/04A1B2C3', 'GET', null, maria);
   assert.equal(c.status, 200); assert.equal(c.body.unknown, true, 'new card is unknown');
-  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: a }, maria)).status, 403, 'staff need a supervisor');
-  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: a, approver: 'Phoebe', pin: '0000' }, maria)).status, 403, 'wrong PIN');
-  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: a, approver: 'Mary Anne', pin: '1111' }, maria)).status, 403, 'cashier is not a supervisor');
-  c = await call('/cage/card/link', 'POST', { uid: '04:a1:b2:c3', member_no: a, approver: 'Phoebe', pin: '4321' }, maria);
+  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: a }, maria)).status, 403, 'staff need a manager');
+  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: a, approver_user: 'Phoebe', approver_password: 'nope' }, maria)).status, 403, 'wrong password');
+  c = await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: a, approver_user: 'Maria', approver_password: 'maria-pass' }, maria);
+  assert.equal(c.status, 403, 'a staff account cannot approve'); assert.match(c.body.error, /not a manager/);
+  c = await call('/cage/card/link', 'POST', { uid: '04:a1:b2:c3', member_no: a, ...ok }, maria);
   assert.equal(c.status, 200); assert.equal(c.body.member.member_no, a);
   c = await call('/cage/card/04A1B2C3', 'GET', null, maria);
   assert.equal(c.body.member.member_no, a); assert.equal(c.body.member.nationality, 'Philippines'); assert.ok(c.body.card);
-  c = await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: b2, approver: 'Phoebe', pin: '4321' }, maria);
-  assert.equal(c.status, 409, 'a card belongs to one member');
-  // Replace: the old card stops working.
+  assert.equal(c.body.card.linked_by, 'Maria');
+  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: b2, ...ok }, maria)).status, 409, 'a card belongs to one member');
   c = await call('/cage/card/link', 'POST', { uid: '3912374512', member_no: a }, boss);
-  assert.equal(c.status, 200, 'a manager account approves by itself'); assert.deepEqual(c.body.replaced, ['04A1B2C3']);
-  c = await call('/cage/card/04A1B2C3', 'GET', null, maria);
-  assert.equal(c.body.inactive, true, 'replaced card is off');
+  assert.equal(c.status, 200, 'a manager signed in approves by itself'); assert.deepEqual(c.body.replaced, ['04A1B2C3']);
+  assert.equal((await call('/cage/card/04A1B2C3', 'GET', null, maria)).body.inactive, true, 'replaced card is off');
   c = await call('/cage/cards?member_no=' + a, 'GET', null, maria);
   assert.equal(c.body.cards.length, 2); assert.equal(c.body.cards.filter((x) => x.active).length, 1);
-  // The replaced card can be given to someone else.
-  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: b2, approver: 'Phoebe', pin: '4321' }, maria)).status, 200);
+  assert.equal((await call('/cage/card/link', 'POST', { uid: '04A1B2C3', member_no: b2, ...ok }, maria)).status, 200, 'an old card can be given again');
   assert.equal((await call('/cage/card/04A1B2C3', 'GET', null, maria)).body.member.member_no, b2);
-  // Lost card.
-  assert.equal((await call('/cage/card/off', 'POST', { uid: '04A1B2C3', approver: 'Phoebe', pin: '4321' }, maria)).status, 200);
+  assert.equal((await call('/cage/card/off', 'POST', { uid: '04A1B2C3', ...ok }, maria)).status, 200);
   assert.equal((await call('/cage/card/04A1B2C3', 'GET', null, maria)).body.inactive, true);
   assert.equal((await call('/cage/card/xx', 'GET', null, maria)).status, 400);
+  // Too many wrong passwords for one account → wait.
+  for (let i = 0; i < 5; i++) await call('/cage/card/off', 'POST', { uid: '3912374512', approver_user: 'Ana', approver_password: 'bad' }, maria);
+  assert.equal((await call('/cage/card/off', 'POST', { uid: '3912374512', approver_user: 'Ana', approver_password: 'ana-pass' }, maria)).status, 429, 'locked after 5 wrong tries');
 
-  // Rewards at the cage: promo chip approved by a supervisor PIN, recorded in the cage at once.
-  let rw = await call('/rewards/issue', 'POST', { member_no: a, type: 'promo_chip', amount: 2000, detail: 'High hand', pay: 'chips', cage_approver: 'Phoebe', cage_pin: '9999' }, maria);
-  assert.equal(rw.status, 403, 'wrong supervisor PIN');
-  rw = await call('/rewards/issue', 'POST', { member_no: a, type: 'promo_chip', amount: 2000, detail: 'High hand', pay: 'chips', cage_approver: 'Phoebe', cage_pin: '4321' }, maria);
+  // Rewards at the cage: approved by a manager's Admin login, recorded in the cage at once.
+  let rw = await call('/rewards/issue', 'POST', { member_no: a, type: 'promo_chip', amount: 2000, detail: 'High hand', pay: 'chips', approver_user: 'Phoebe', approver_password: 'x' }, maria);
+  assert.equal(rw.status, 403, 'wrong password');
+  rw = await call('/rewards/issue', 'POST', { member_no: a, type: 'promo_chip', amount: 2000, detail: 'High hand', pay: 'chips', ...ok }, maria);
   assert.equal(rw.status, 200); assert.equal(rw.body.approved, true); assert.equal(rw.body.approved_by, 'Phoebe');
-  const cageDocs = (await call('/cage', 'GET', null, maria)).body.docs;
-  const e = cageDocs.find((d) => d.id === 'rw-' + rw.body.id);
+  const e = (await call('/cage', 'GET', null, maria)).body.docs.find((d) => d.id === 'rw-' + rw.body.id);
   assert.ok(e && e.data.type === 'comp_chips' && e.data.approver === 'Phoebe', 'reward is in the cage');
   rw = await call('/rewards/issue', 'POST', { member_no: a, type: 'promo_cash', amount: 500, detail: 'Birthday', pay: 'cash' }, maria);
-  assert.equal(rw.body.approved, false, 'without a supervisor it waits for approval');
+  assert.equal(rw.body.approved, false, 'without a manager it waits for approval');
 }
 console.log('cage cards ok');

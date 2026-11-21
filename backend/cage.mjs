@@ -3,7 +3,7 @@
 // POST /cage/doc          → {coll, id, op:'set'|'update'|'delete', data?, ifVersion?}
 import { auditStmt } from './audit.mjs';
 import { handleOperation } from './operation.mjs';
-import { supervisorApproval } from './cardauth.mjs';
+import { managerApproval } from './cardauth.mjs';
 import { str, normNo, displayName } from './members.mjs';
 
 const COLLS = ['entries', 'players', 'midori', 'ppm', 'manpower', 'counts', 'config', 'photos', 'corrections', 'shifts'];
@@ -41,9 +41,9 @@ async function handleCards(req, env, path, now, reply, user, role) {
     const b = await req.json().catch(() => ({}));
     const uid = cardUid(b.uid);
     if (!uid) return reply({ error: 'Tap the card first.' }, 400);
-    // A supervisor gives and replaces cards: a manager account, or a supervisor with their cage PIN.
-    const approver = manager ? (str(b.approver, 60) || String(user || '')) : await supervisorApproval(env, str(b.approver, 60), str(b.pin, 20));
-    if (!approver) return reply({ error: 'A supervisor must approve with their cage PIN.' }, 403);
+    // Cards are given and replaced with a manager's approval: signed in as a manager, or a manager types their Admin username + password.
+    let approver = manager ? String(user || '') : null;
+    if (!approver) { const a = await managerApproval(env, b.approver_user, b.approver_password, now); if (a.error) return reply({ error: a.error }, a.status); approver = a.name; }
     const cur = await env.DB.prepare('SELECT * FROM member_cards WHERE uid=?').bind(uid).first();
     if (path === '/cage/card/off') {
       if (!cur || !cur.active) return reply({ error: 'This card is not in use.' }, 404);
