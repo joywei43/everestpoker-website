@@ -1,10 +1,11 @@
--- Adds 'other' to the reward types. Run once by deploy-api.yml when the live table does not allow 'other' yet.
+-- Removes the fixed list of reward types from the table (the API checks the type), so adding a type never needs a table change.
+-- Run by deploy-api.yml only while the live table still has a CHECK on type; the copy keeps every reward.
 DROP TABLE IF EXISTS rewards_v2;
 CREATE TABLE rewards_v2(
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  member_id INTEGER NOT NULL REFERENCES members(id),
  group_id TEXT,
- type TEXT NOT NULL CHECK(type IN ('free_chip','promo_cash','promo_chip','rakeback','hotel','transportation','transport_air','transport_grab','tournament_ticket','other')), -- free_chip, transportation: old records only
+ type TEXT NOT NULL, -- checked by the API (REWARD_TYPES in members.mjs)
  detail TEXT NOT NULL DEFAULT '',
  amount INTEGER NOT NULL CHECK(amount>=0),
  given_at INTEGER NOT NULL,
