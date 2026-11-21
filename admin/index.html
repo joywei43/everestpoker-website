@@ -120,7 +120,15 @@ let token = sessionStorage.getItem(TOKEN_KEY) || '';
 let staff = sessionStorage.getItem(USER_KEY) || '';
 let role = sessionStorage.getItem(ROLE_KEY) || 'admin';
 const isManager = () => role === 'admin' || role === 'master';
-const isReadOnly = () => role === 'senior'; // Senior Dealer: sees everything, changes nothing
+const isReadOnly = () => role === 'senior';
+// "Approved by": a list of the Manager and master accounts, the signed-in one first, instead of typing a name.
+let approversCache = null;
+const loadApprovers = async () => { if (!approversCache) { try { approversCache = (await api('/staff/approvers')).approvers; } catch (e) { approversCache = []; } } return approversCache; };
+const approverSelect = (name, list, id = '') => {
+  const me = list.find((n) => n.toLowerCase() === String(staff || '').toLowerCase());
+  if (!list.length) return `<input type="text" ${name ? `name="${name}"` : ''} ${id ? `id="${id}"` : ''} value="${esc(staff)}" maxlength="60">`;
+  return `<select ${name ? `name="${name}"` : ''} ${id ? `id="${id}"` : ''}>${list.map((n) => `<option ${n === (me || list[0]) ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
+}; // Senior Dealer: sees everything, changes nothing
 const isMaster = () => role === 'master';
 let groupsCache = null;
 
@@ -333,6 +341,7 @@ function openMemberDialog(view, member, save) {
 
 // ---------- One member ----------
 async function viewMember(view, no) {
+  const approvers = isManager() ? await loadApprovers() : [];
   let gs, data;
   try { [gs, data] = await Promise.all([groups(), api('/members/' + encodeURIComponent(no))]); }
   catch (e) { if (e.movedTo) { location.replace('#/member/' + encodeURIComponent(e.movedTo)); return; } throw e; }
@@ -402,7 +411,7 @@ async function viewMember(view, no) {
         <label class="f">Date<input type="date" name="date" value="${today()}" max="${today()}"></label>
         <label class="f wide">Detail<input type="text" name="detail" maxlength="200" placeholder="e.g. PromoChip code, Midori 1 night, airport transfer"></label>
         <label class="f">Recorded by<input type="text" name="recorded_by" value="${esc(staff)}" required maxlength="60"></label>
-        ${isManager() ? '<label class="f">Approved by<input type="text" name="approved_by" value="' + esc(staff) + '" maxlength="60"></label>' : '<div class="small muted" style="align-self:end">A manager will approve this.</div>'}
+        ${isManager() ? '<label class="f">Approved by' + approverSelect('approved_by', approvers) + '</label>' : '<div class="small muted" style="align-self:end">A manager will approve this.</div>'}
         <div style="align-self:end"><button class="btn primary">Record reward</button></div>
         <div id="rmsg" style="grid-column:1/-1"></div>
       </form>
@@ -1309,6 +1318,7 @@ async function viewApprovals(view) {
 
 // ---------- Rewards: issue comps (record only; the cage records its own payouts) ----------
 async function viewRewards(view) {
+  const approvers = isManager() ? await loadApprovers() : [];
   const q = new URLSearchParams(location.hash.split('?')[1] || ''), to = q.get('to') || today(), from = q.get('from') || to.slice(0, 8) + '01';
   const data = await api(`/rewards/list?from=${from}&to=${to}`);
   const live = data.rewards.filter((r) => !r.voided), tot = live.reduce((a, r) => a + r.amount, 0), byType = {};
@@ -1322,7 +1332,7 @@ async function viewRewards(view) {
       <label class="f">Value (₱)<input type="number" min="1" step="1" id="rwAmt" required></label>
       <label class="f">Date<input id="rwDate" type="date" value="${today()}" max="${today()}"></label>
       <label class="f wide">Detail<input type="text" maxlength="180" id="rwDetail" placeholder="e.g. Manila → Cebu flight, hotel to club taxi, PromoChip code" required></label>
-      ${isManager() ? `<label class="f">Approved by<input type="text" id="rwAppr" value="${esc(staff)}"></label>` : '<div class="small muted">A manager approves it before it counts in cost totals.</div>'}
+      ${isManager() ? `<label class="f">Approved by${approverSelect('', approvers, 'rwAppr')}</label>` : '<div class="small muted">A manager approves it before it counts in cost totals.</div>'}
       <div style="align-self:end"><button class="btn primary">Issue comp</button></div></form><div id="rwMsg"></div></section>
     <div class="grid">${tile('Comps ' + from + ' – ' + to, peso(tot), live.length + ' rewards')}${Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([k, v]) => tile(esc(k), peso(v), '')).join('')}</div>
     <section class="card"><div class="row between"><h2>Issued</h2><div class="row"><input type="date" id="rwFrom" value="${from}"> – <input type="date" id="rwTo" value="${to}"><button class="btn sm" id="rwGo">Show</button></div></div>

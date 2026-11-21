@@ -13,6 +13,11 @@ const clean = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const ROLES = ['admin', 'staff', 'senior', 'dealer']; // senior = Senior Dealer (read only + insurance), dealer = insurance only
 
 export async function handleStaff(req, env, path, now, reply, user, role, isMaster = () => false) {
+  // Who can approve a comp: every active Manager and the master accounts (names only, for the "Approved by" list).
+  if (path === '/staff/approvers' && req.method === 'GET') {
+    const rows = (await env.DB.prepare('SELECT display_name,username,role FROM staff WHERE active=1 ORDER BY display_name COLLATE NOCASE').all()).results || [];
+    return reply({ approvers: rows.filter((r) => r.role === 'admin' || isMaster(r.username)).map((r) => r.display_name || r.username) });
+  }
   // Only the master account manages staff accounts.
   if (role !== 'master') return bad(reply, 'Only the master account can manage staff accounts.', 403);
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);

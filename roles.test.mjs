@@ -44,3 +44,8 @@ for (const tok of [S, D]) {
 assert.equal((await call('/staff', 'POST', { username: 'Neo', password: 'neo-pass', role: 'dealer' }, boss)).status, 200);
 assert.equal((await call('/staff/Neo', 'PUT', { role: 'senior' }, boss)).status, 200);
 console.log('PASS roles: Senior Dealer reads everything and sells insurance; Dealer only uses insurance; neither voids or changes data');
+{ // "Approved by" list: active Managers and the master.
+  const a = (await call('/staff/approvers', 'GET', null, S)).body.approvers;
+  assert.ok(a.includes('Boss') && !a.includes('Sam') && !a.includes('Dan'), JSON.stringify(a));
+  console.log('PASS approvers list');
+}
