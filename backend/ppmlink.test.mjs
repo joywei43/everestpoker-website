@@ -42,6 +42,13 @@ assert.equal((await call('/ppm', 'GET', null, mary)).body.tables[0].seats[6].buy
   r = await call('/ppm/cage-event', 'POST', { key: 'e1b', kind: 'buyin', member_no: A, amount: 1000 }, mary); assert.equal(r.body.result.action, 'addon');
   const s2 = (await call('/ppm', 'GET', null, mary)).body.tables[0].seats[6];
   assert.equal(s2.status, 'seated'); assert.equal(s2.cashoutAsked, null); assert.ok(s2.lastActiveStart); assert.ok(s2.restSeconds >= 59); assert.equal(s2.buyInAmount, 16000); }
+// A cage correction: adjust the seated player's buy-in by a signed amount; never below 0; the seat stays.
+r = await call('/ppm/cage-event', 'POST', { key: 'adj1', kind: 'adjust', member_no: A, amount: -6000 }, mary);
+assert.equal(r.body.result.action, 'adjusted');
+assert.equal((await call('/ppm', 'GET', null, mary)).body.tables[0].seats[6].buyInAmount, 10000);
+r = await call('/ppm/cage-event', 'POST', { key: 'adj2', kind: 'buyin', member_no: A, amount: -1 }, mary); assert.equal(r.status, 400, 'negative only for adjust');
+await call('/ppm/cage-event', 'POST', { key: 'adj3', kind: 'adjust', member_no: A, amount: 6000 }, mary);
+assert.equal((await call('/ppm', 'GET', null, mary)).body.tables[0].seats[6].buyInAmount, 16000);
 // New player: waiting for a seat; a second buy-in before seating adds up.
 r = await call('/ppm/cage-event', 'POST', { key: 'e2', kind: 'buyin', member_no: B, amount: 5000 }, mary);
 assert.equal(r.body.result.action, 'waiting');
