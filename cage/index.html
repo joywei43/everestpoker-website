@@ -114,7 +114,7 @@ const SYS_TYPES={box_clear:'BBJ / Rake not settled cleared (owner)',tip_move:'Ti
 const typeLabel=k=>(TYPES.find(x=>x.k===k)||{}).l||SYS_TYPES[k]||k;
 const CASH_D=[1000,500,100,50,20,10,5,1];const CHIP_D=[10000,1000,100,25];const HOUSE_D=25;const chipVal=d=>Number(d)===HOUSE_D?0:Number(d);
 const houseQty=c=>Object.values((c&&c.chips)||{}).reduce((s,x)=>s+(Number((x||{})[HOUSE_D])||0),0);
-const DEFAULT_SETTINGS={openDate:'2026-11-01',rent:0,pagcorMin:0,pagcorRate:.25,cdcRate:.05,everestRakeRate:.70,bbjEverestRate:.21,
+const DEFAULT_SETTINGS={openDate:'2026-11-01',chipLossAlert:5000,rent:0,pagcorMin:0,pagcorRate:.25,cdcRate:.05,everestRakeRate:.70,bbjEverestRate:.21,
  fxRates:{TWD:1.8,USD:60},open:{cf_cash:0,pd_cash:0,ins_cash:0,ins_chips:0,day_cash:0,bb_cash:0,chip_chips:0,chipsOut:0,mass_chips:0,box:0,fx_TWD:0,fx_USD:0},owners:[],supervisors:['Joy','Geraldine','Cey','Phoebe']};
 
 /* ---------- state ---------- */
@@ -276,7 +276,7 @@ function vOverview(){
  ${card('Player deposits',dep,`We owe ${pb.filter(v=>v>0).length} player(s)`)}
  ${card('Player credit',loan,`${pb.filter(v=>v<0).length} player(s) owe us`)}
  ${card('MIDORI owes us',rc.rake+rc.bbj,'',`<div class="row"><span class="sub">Rake (formula)</span><span class="num">${peso(rc.rake)}</span></div><div class="row"><span class="sub">BBJ 21%</span><span class="num">${peso(rc.bbj)}</span></div>`)}
- ${(()=>{const u=unsettled();return card('BBJ / Rake not settled',u.amt,'MIDORI rake + BBJ of each day, not yet bought back',u.rows.map(r=>`<div class="row"><span class="sub">${r.d} · MIDORI ${peso(r.md)} − bought ${peso(r.bought)}</span><span class="num">${peso(r.left)}</span></div>`).join(''))})()}
+ ${vChipDiffs()}${(()=>{const u=unsettled();return card('BBJ / Rake not settled',u.amt,'MIDORI rake + BBJ of each day, not yet bought back',u.rows.map(r=>`<div class="row"><span class="sub">${r.d} · MIDORI ${peso(r.md)} − bought ${peso(r.bought)}</span><span class="num">${peso(r.left)}</span></div>`).join(''))})()}
  ${card('Mass chips to redeem',b.mass_chips||0,'Casino chips not changed with MIDORI yet')}
  ${Math.abs(b.behind||0)<0.005&&!Object.keys(b.pbBy||{}).length?'':card('Playing behind (open)',b.behind,'Taken out less brought back, not settled',Object.entries(b.pbBy).map(([n,v])=>`<div class="row"><span class="sub">${esc(n)} (before start)</span><span class="num">${peso(-v)}</span></div>`).join(''))}
  ${card('Foreign cash held',FX_CUR.reduce((s,c)=>s+((b.fx||{})[c]||{php:0}).php,0),'Company advance at locked rates: '+fxLine(b.fx||{}))}
@@ -451,7 +451,7 @@ function vSettings(){const st=settings(),o=st.open;
  <label>Tip split (one per line: role, %)</label><textarea id="st-tips" rows="8">${esc(tipSplit().map(([r,p])=>`${r}, ${p}`).join('\n'))}</textarea>
  <label>Who gets each share (one per line — role: name, name)</label><textarea id="st-tippeople" rows="8">${esc(Object.entries(tipPeople()).map(([r,n])=>`${r}: ${n.join(', ')}`).join('\n'))}</textarea></div>
  <h2>Rates</h2><div class="card" style="max-width:760px"><div class="form2">
- <div><label>Monthly rent</label><input data-st="rent" value="${st.rent}"></div><div><label>PAGCOR monthly minimum</label><input data-st="pagcorMin" value="${st.pagcorMin}"></div>
+ <div><label>Chip difference alert 籌碼差異警示 (₱ per day)</label><input data-st="chipLossAlert" value="${st.chipLossAlert??5000}"></div><div><label>Monthly rent</label><input data-st="rent" value="${st.rent}"></div><div><label>PAGCOR monthly minimum</label><input data-st="pagcorMin" value="${st.pagcorMin}"></div>
  <div><label>Locked rate · TWD (₱ per 1)</label><input data-fx="TWD" value="${fxRate('TWD',st)}"></div><div><label>Locked rate · USD (₱ per 1)</label><input data-fx="USD" value="${fxRate('USD',st)}"></div>
  <div><label>Everest rake share</label><input data-st="everestRakeRate" value="${st.everestRakeRate}"></div><div><label>Everest BBJ share</label><input data-st="bbjEverestRate" value="${st.bbjEverestRate}"></div></div></div>
  <div class="err" id="st-err"></div><button class="primary" id="st-save" style="margin-top:12px">Save settings</button><span class="sub" id="st-msg" style="margin-left:10px"></span>`}
@@ -765,10 +765,10 @@ function vDesk(op){const b=balances(),l=lastCount();if(!S.qa){const k=S.deskKind
  <details style="margin-top:12px" ${pk||['ins','xfer','chip_pay','other_out','op_in','op_out','swap_c2ch','swap_ch2c','mv_cf2day','mv_day2cf'].includes(q.k)?'':'open'}><summary class="sub" style="cursor:pointer">More 更多 (playing behind, deposits, tips, foreign cash)</summary>${vQuickGroups(['buyin','cashout','chip_pay','xfer','op_in','op_out','swap_c2ch','swap_ch2c'])}${!pk&&!['ins','xfer','chip_pay','op_in','op_out','swap_c2ch','swap_ch2c'].includes(q.k)?`<div id="form-here">${vQuickForm()}</div>`:''}${vInsFloat()}</details></div>
  </div><aside class="desk-side">${vPpmPanel()}${vRecords(true)}</aside></div>
  <details style="margin-top:14px"><summary class="sub" style="cursor:pointer">Count history</summary>${vCountHistory()}</details>`}
-function vCountHistory(){return `<div class="card"><table><tr><th>Business day</th><th>Count</th><th>Time</th><th>Cashier / Supervisor</th><th class="r">Differences</th><th class="r">Chips short</th><th>Signed copy</th><th></th></tr>
+function vCountHistory(){return `<div class="card"><table><tr><th>Business day</th><th>Count</th><th>Time</th><th>Cashier / Supervisor</th><th class="r">Differences</th><th class="r">Chips short</th><th class="r">Lost / extra</th><th>Signed copy</th><th></th></tr>
  ${S.counts.slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).map(c=>{const d=Object.values(c.diffs||{}).filter(v=>Math.abs(v)>0.001).length;
  return `<tr><td class="num">${esc(c.day)}</td><td>${c.kind==='open'?'Opening':'Closing'}</td><td class="num">${esc(c.time)}</td><td>${esc(c.cashier)} / ${esc(c.supervisor)}</td><td class="r">${d?`<span class="pill bad">${d} line${d>1?'s':''}</span>`:'<span class="pill cash">None</span>'}</td>
- <td class="r num">${c.kind==='close'?pesoE(c.short||0):''}</td><td>${c.photo?'<span class="pill cash">Filed</span>':'<span class="pill warn">Missing</span>'}</td><td><button class="link" data-viewcnt="${c.id}">Report</button></td></tr>`}).join('')||'<tr><td colspan="8" class="sub">No counts yet.</td></tr>'}</table></div>`}
+ <td class="r num">${c.kind==='close'?pesoE(c.short||0):''}</td><td class="r num">${c.kind==='close'?(()=>{const x=chipDiffs().find(y=>y.d===c.day);return !x||x.bought<0.005?'<span class="sub">not bought back yet</span>':Math.abs(x.diff)<0.005?'0':`<span class="${x.big?'pill bad':''}">${x.diff>0?'lost':'extra'} ${pesoE(Math.abs(x.diff))}</span>`})():''}</td><td>${c.photo?'<span class="pill cash">Filed</span>':'<span class="pill warn">Missing</span>'}</td><td><button class="link" data-viewcnt="${c.id}">Report</button></td></tr>`}).join('')||'<tr><td colspan="9" class="sub">No counts yet.</td></tr>'}</table></div>`}
 function vCountHome(){const op=cageOpen(),l=lastCount(),b=balances();if(op)return vDesk(op);const rec=!S.counts.some(c=>c.kind==='close'&&c.day===bizDay());
  return `<div class="desk-grid"><div class="desk-main"><h2 style="margin-top:6px">Cage</h2><div class="card" style="max-width:680px"><div class="row" style="padding-top:0"><div><b>${op&&op.first?'Not started yet':op?'Cage is open':'Cage is closed'}</b><div class="sub">${l?`Last ${l.kind==='open'?'opened':'closed'}: business day ${esc(l.day)}, ${esc(l.time)} by ${esc(l.cashier)}`:'No count yet.'}</div></div>
  <span class="pill ${op&&!op.first?'cash':'info'}">${op&&op.first?'New':op?'Open':'Closed'}</span></div>
@@ -776,10 +776,10 @@ function vCountHome(){const op=cageOpen(),l=lastCount(),b=balances();if(op)retur
  ${rec?'':`<div class="note info" style="max-width:680px;margin-top:12px"><b>View only · cage not open 未開帳，只能查看</b><br>Tap a member card to look the player up. Cards are given in the Member Card tab. Open the cage to record.</div>`}
  ${vCardPanel(!rec)}
  ${rec?`<h2>Record 記帳</h2>${vQuickBar()}${vInsFloat()}`:''}</div><aside class="desk-side">${vPpmPanel()}${vRecords(true)}</aside></div>
- <h2>Count history</h2><div class="card"><table><tr><th>Business day</th><th>Count</th><th>Time</th><th>Cashier / Supervisor</th><th class="r">Differences</th><th class="r">Chips short</th><th>Signed copy</th><th></th></tr>
+ <h2>Count history</h2><div class="card"><table><tr><th>Business day</th><th>Count</th><th>Time</th><th>Cashier / Supervisor</th><th class="r">Differences</th><th class="r">Chips short</th><th class="r">Lost / extra</th><th>Signed copy</th><th></th></tr>
  ${S.counts.slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).map(c=>{const d=Object.values(c.diffs||{}).filter(v=>Math.abs(v)>0.001).length;
  return `<tr><td class="num">${esc(c.day)}</td><td>${c.kind==='open'?'Opening':'Closing'}</td><td class="num">${esc(c.time)}</td><td>${esc(c.cashier)} / ${esc(c.supervisor)}</td><td class="r">${d?`<span class="pill bad">${d} line${d>1?'s':''}</span>`:'<span class="pill cash">None</span>'}</td>
- <td class="r num">${c.kind==='close'?pesoE(c.short||0):''}</td><td>${c.photo?'<span class="pill cash">Filed</span>':'<span class="pill warn">Missing</span>'}</td><td><button class="link" data-viewcnt="${c.id}">Report</button></td></tr>`}).join('')||'<tr><td colspan="8" class="sub">No counts yet.</td></tr>'}</table></div>`}
+ <td class="r num">${c.kind==='close'?pesoE(c.short||0):''}</td><td class="r num">${c.kind==='close'?(()=>{const x=chipDiffs().find(y=>y.d===c.day);return !x||x.bought<0.005?'<span class="sub">not bought back yet</span>':Math.abs(x.diff)<0.005?'0':`<span class="${x.big?'pill bad':''}">${x.diff>0?'lost':'extra'} ${pesoE(Math.abs(x.diff))}</span>`})():''}</td><td>${c.photo?'<span class="pill cash">Filed</span>':'<span class="pill warn">Missing</span>'}</td><td><button class="link" data-viewcnt="${c.id}">Report</button></td></tr>`}).join('')||'<tr><td colspan="9" class="sub">No counts yet.</td></tr>'}</table></div>`}
 async function makePDF(c){const host=document.createElement('div');host.style.cssText='position:absolute;left:-10000px;top:0';host.innerHTML=repHTML(c);document.body.appendChild(host);
  try{const {jsPDF}=window.jspdf;const pdf=new jsPDF({unit:'pt',format:'a4'});const pages=host.querySelectorAll('.rep');
   for(let i=0;i<pages.length;i++){const cv=await html2canvas(pages[i],{scale:2,backgroundColor:'#ffffff'});if(i)pdf.addPage();pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',0,0,595.28,841.89)}
@@ -953,6 +953,16 @@ const BUYBACK='Rake / BBJ buyback';
 function unsettled(){const st=settings(),today=bizDay(),bought={};for(const e of liveEntries())if(e.type==='buyback'){const d=bbDayOf(e);bought[d]=round2((bought[d]||0)+Number(e.amount||0))}
  const days=new Set([...Object.keys(S.midori||{}),...Object.keys(bought)].filter(d=>d>=st.openDate&&d<today));const rows=[...days].sort().map(d=>{const md=midoriDayTotal(d);return {d,md:md?md.t:0,bought:bought[d]||0,left:round2((md?md.t:0)-(bought[d]||0))}});
  return {amt:round2(rows.reduce((x,r)=>x+Math.max(0,r.left),0)),rows:rows.filter(r=>r.left>0.004)}}
+/* Chip float difference per closed day: chips short at closing minus what was bought back from MIDORI for that day.
+   Plus = chips lost (dropped, taken by a player); minus = chips extra. Small amounts are normal; above the alert it is flagged. */
+function chipDiffs(){const st=settings(),A=Number(st.chipLossAlert??5000),M={};const g=d=>M[d]=M[d]||{d,short:0,bought:0};
+ for(const e of liveEntries())if(e.date>=st.openDate&&e.type==='chip_short')g(e.date).short+=Number(e.amount||0);
+ for(const c of S.counts)if(c.kind==='close'&&c.day>=st.openDate)g(c.day);
+ for(const e of liveEntries())if(e.type==='buyback'){const d=bbDayOf(e);if(M[d])M[d].bought+=Number(e.amount||0)}
+ return Object.values(M).map(x=>{const diff=round2(x.short-x.bought);return {...x,diff,big:Math.abs(diff)>A&&x.bought>0.004}}).sort((a,b)=>b.d.localeCompare(a.d))}
+function vChipDiffs(){const rows=chipDiffs().filter(x=>x.bought>0.004||x.short>0.004),A=Number(settings().chipLossAlert??5000);if(!rows.length)return '';const done=rows.filter(x=>x.bought>0.004),lost=round2(done.reduce((t,x)=>t+x.diff,0));
+ return `<div class="card"><div class="row" style="padding-top:0"><b>Chips lost / extra by day 每日籌碼遺失・多出</b><span class="big num ${lost>0.004?'neg':''}">${lost>0.004?'lost ':lost<-0.004?'extra ':''}${peso(Math.abs(lost))}</span></div><div class="sub">Chips short at closing minus the rake / BBJ bought back for that day. Lost = dropped, taken by a player… Over ${peso(A)} a day is flagged. 關帳短少 − 當天買回 = 遺失（正）或多出（負）。</div>
+ <table style="margin-top:6px"><tr><th>Day</th><th class="r">Short at close</th><th class="r">Bought back</th><th class="r">Lost / extra</th></tr>${rows.slice(0,14).map(x=>`<tr><td class="num">${x.d}</td><td class="r num">${peso(x.short)}</td><td class="r num">${x.bought>0.004?peso(x.bought):'<span class="sub">not yet</span>'}</td><td class="r num">${x.bought>0.004?(Math.abs(x.diff)<0.005?'<span class="pill cash">0</span>':`<span class="${x.big?'pill bad':''}">${x.diff>0?'lost ':'extra '}${peso(Math.abs(x.diff))}</span>`):''}</td></tr>`).join('')}</table></div>`}
 function midoriDayTotal(d){const m=S.midori[d];if(!m)return null;const r=TABLES.reduce((x,t)=>x+Number((m.rake||{})[t]||0),0),b=TABLES.reduce((x,t)=>x+Number((m.bbj||{})[t]||0),0);return r+b>0?{r,b,t:r+b}:null}
 /* A buyback covers the chips of one business day: its chipsDay, or (older records) the day before it was entered. */
 function bbDayOf(e){if(e.chipsDay)return e.chipsDay;const [y,m,d]=String(e.date).split('-').map(Number);return new Date(Date.UTC(y,m-1,d-1)).toISOString().slice(0,10)}
