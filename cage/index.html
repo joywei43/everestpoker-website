@@ -114,7 +114,7 @@ const SYS_TYPES={box_clear:'BBJ / Rake not settled cleared (owner)',tip_move:'Ti
 const typeLabel=k=>(TYPES.find(x=>x.k===k)||{}).l||SYS_TYPES[k]||k;
 const CASH_D=[1000,500,100,50,20,10,5,1];const CHIP_D=[10000,1000,100,25];const HOUSE_D=25;const chipVal=d=>Number(d)===HOUSE_D?0:Number(d);
 const houseQty=c=>Object.values((c&&c.chips)||{}).reduce((s,x)=>s+(Number((x||{})[HOUSE_D])||0),0);
-const DEFAULT_SETTINGS={openDate:'2026-11-01',chipLossAlert:5000,rent:0,pagcorMin:0,pagcorRate:.25,cdcRate:.05,everestRakeRate:.70,bbjEverestRate:.21,
+const DEFAULT_SETTINGS={openDate:'2026-11-01',chipLossAlert:2000,rent:0,pagcorMin:0,pagcorRate:.25,cdcRate:.05,everestRakeRate:.70,bbjEverestRate:.21,
  fxRates:{TWD:1.8,USD:60},open:{cf_cash:0,pd_cash:0,ins_cash:0,ins_chips:0,day_cash:0,bb_cash:0,chip_chips:0,chipsOut:0,mass_chips:0,box:0,fx_TWD:0,fx_USD:0},owners:[],supervisors:['Joy','Geraldine','Cey','Phoebe']};
 
 /* ---------- state ---------- */
@@ -451,7 +451,7 @@ function vSettings(){const st=settings(),o=st.open;
  <label>Tip split (one per line: role, %)</label><textarea id="st-tips" rows="8">${esc(tipSplit().map(([r,p])=>`${r}, ${p}`).join('\n'))}</textarea>
  <label>Who gets each share (one per line — role: name, name)</label><textarea id="st-tippeople" rows="8">${esc(Object.entries(tipPeople()).map(([r,n])=>`${r}: ${n.join(', ')}`).join('\n'))}</textarea></div>
  <h2>Rates</h2><div class="card" style="max-width:760px"><div class="form2">
- <div><label>Chip difference alert 籌碼差異警示 (₱ per day)</label><input data-st="chipLossAlert" value="${st.chipLossAlert??5000}"></div><div><label>Monthly rent</label><input data-st="rent" value="${st.rent}"></div><div><label>PAGCOR monthly minimum</label><input data-st="pagcorMin" value="${st.pagcorMin}"></div>
+ <div><label>Chip difference alert 籌碼差異警示 (₱ per day)</label><input data-st="chipLossAlert" value="${st.chipLossAlert??2000}"></div><div><label>Monthly rent</label><input data-st="rent" value="${st.rent}"></div><div><label>PAGCOR monthly minimum</label><input data-st="pagcorMin" value="${st.pagcorMin}"></div>
  <div><label>Locked rate · TWD (₱ per 1)</label><input data-fx="TWD" value="${fxRate('TWD',st)}"></div><div><label>Locked rate · USD (₱ per 1)</label><input data-fx="USD" value="${fxRate('USD',st)}"></div>
  <div><label>Everest rake share</label><input data-st="everestRakeRate" value="${st.everestRakeRate}"></div><div><label>Everest BBJ share</label><input data-st="bbjEverestRate" value="${st.bbjEverestRate}"></div></div></div>
  <div class="err" id="st-err"></div><button class="primary" id="st-save" style="margin-top:12px">Save settings</button><span class="sub" id="st-msg" style="margin-left:10px"></span>`}
@@ -955,12 +955,12 @@ function unsettled(){const st=settings(),today=bizDay(),bought={};for(const e of
  return {amt:round2(rows.reduce((x,r)=>x+Math.max(0,r.left),0)),rows:rows.filter(r=>r.left>0.004)}}
 /* Chip float difference per closed day: chips short at closing minus what was bought back from MIDORI for that day.
    Plus = chips lost (dropped, taken by a player); minus = chips extra. Small amounts are normal; above the alert it is flagged. */
-function chipDiffs(){const st=settings(),A=Number(st.chipLossAlert??5000),M={};const g=d=>M[d]=M[d]||{d,short:0,bought:0};
+function chipDiffs(){const st=settings(),A=Number(st.chipLossAlert??2000),M={};const g=d=>M[d]=M[d]||{d,short:0,bought:0};
  for(const e of liveEntries())if(e.date>=st.openDate&&e.type==='chip_short')g(e.date).short+=Number(e.amount||0);
  for(const c of S.counts)if(c.kind==='close'&&c.day>=st.openDate)g(c.day);
  for(const e of liveEntries())if(e.type==='buyback'){const d=bbDayOf(e);if(M[d])M[d].bought+=Number(e.amount||0)}
  return Object.values(M).map(x=>{const diff=round2(x.short-x.bought);return {...x,diff,big:Math.abs(diff)>A&&x.bought>0.004}}).sort((a,b)=>b.d.localeCompare(a.d))}
-function vChipDiffs(){const rows=chipDiffs().filter(x=>x.bought>0.004||x.short>0.004),A=Number(settings().chipLossAlert??5000);if(!rows.length)return '';const done=rows.filter(x=>x.bought>0.004),lost=round2(done.reduce((t,x)=>t+x.diff,0));
+function vChipDiffs(){const rows=chipDiffs().filter(x=>x.bought>0.004||x.short>0.004),A=Number(settings().chipLossAlert??2000);if(!rows.length)return '';const done=rows.filter(x=>x.bought>0.004),lost=round2(done.reduce((t,x)=>t+x.diff,0));
  return `<div class="card"><div class="row" style="padding-top:0"><b>Chips lost / extra by day 每日籌碼遺失・多出</b><span class="big num ${lost>0.004?'neg':''}">${lost>0.004?'lost ':lost<-0.004?'extra ':''}${peso(Math.abs(lost))}</span></div><div class="sub">Chips short at closing minus the rake / BBJ bought back for that day. Lost = dropped, taken by a player… Over ${peso(A)} a day is flagged. 關帳短少 − 當天買回 = 遺失（正）或多出（負）。</div>
  <table style="margin-top:6px"><tr><th>Day</th><th class="r">Short at close</th><th class="r">Bought back</th><th class="r">Lost / extra</th></tr>${rows.slice(0,14).map(x=>`<tr><td class="num">${x.d}</td><td class="r num">${peso(x.short)}</td><td class="r num">${x.bought>0.004?peso(x.bought):'<span class="sub">not yet</span>'}</td><td class="r num">${x.bought>0.004?(Math.abs(x.diff)<0.005?'<span class="pill cash">0</span>':`<span class="${x.big?'pill bad':''}">${x.diff>0?'lost ':'extra '}${peso(Math.abs(x.diff))}</span>`):''}</td></tr>`).join('')}</table></div>`}
 function midoriDayTotal(d){const m=S.midori[d];if(!m)return null;const r=TABLES.reduce((x,t)=>x+Number((m.rake||{})[t]||0),0),b=TABLES.reduce((x,t)=>x+Number((m.bbj||{})[t]||0),0);return r+b>0?{r,b,t:r+b}:null}
