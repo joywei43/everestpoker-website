@@ -1,5 +1,5 @@
 // Cage ↔ PPM: buy-ins, add-ons and cash-outs are recorded once, at the cage, and PPM follows.
-//   POST /ppm/cage-event  {key, kind:'buyin'|'cashout', member_no, amount}
+//   POST /ppm/cage-event  {key, kind:'buyin'|'cashout'|'adjust', member_no, amount}  (adjust: signed change to the buy-in after a cage correction)
 //        buy-in of a seated player → add-on on that seat; otherwise → "waiting for a seat".
 //        cash-out of a seated player → the seat is left with that cash-out (session written as at Leave).
 //   GET  /ppm/waiting     players waiting for a seat (shown in PPM as a pop-up and on the cage desk)
@@ -72,14 +72,27 @@ export async function handlePpmLink(req, env, path, nowSec, reply, user, role) {
 
   if (path === '/ppm/cage-event' && req.method === 'POST') {
     const key = str(body.key, 80), kind = str(body.kind, 10), amount = Number(body.amount);
-    if (!key || !['buyin', 'cashout'].includes(kind) || !Number.isSafeInteger(amount) || amount < 0) return reply({ error: 'Invalid cage event.' }, 400);
+    if (!key || !['buyin', 'cashout', 'adjust'].includes(kind) || !Number.isSafeInteger(amount) || (kind !== 'adjust' && amount < 0)) return reply({ error: 'Invalid cage event.' }, 400);
     const seen = await env.DB.prepare('SELECT result FROM ppm_events WHERE key=?').bind(key).first();
     if (seen) return reply({ ok: true, repeated: true, result: JSON.parse(seen.result || '{}') });
     const m = await memberRow(env, str(body.member_no, 20));
     if (!m) return reply({ ok: true, result: { action: 'no_member' } }); // a name without a member number: PPM is not changed
     const name = m.nickname || displayName(m);
     let result;
-    if (kind === 'buyin') {
+    if (kind === 'adjust') {
+      // A cage correction changed a buy-in: change the seat's total (or the waiting amount). Never below 0; the seat is not freed.
+      const out = await changePpm(env, nowMs, user, async (ts) => {
+        const at = await findSeat(env, ts, m.id);
+        if (!at) return { changed: false, action: 'not_seated' };
+        at.s.buyInAmount = Math.max(0, (Number(at.s.buyInAmount) || 0) + amount);
+        return { changed: true, action: 'adjusted', table: at.t.name, seat: at.s.id };
+      });
+      if (out.action === 'not_seated') {
+        const w = await env.DB.prepare("SELECT id FROM ppm_waiting WHERE member_id=? AND status='waiting'").bind(m.id).first();
+        if (w) await env.DB.prepare('UPDATE ppm_waiting SET amount=MAX(0,amount+?) WHERE id=?').bind(amount, w.id).run();
+        result = { action: w ? 'adjusted_waiting' : 'not_seated' };
+      } else result = { action: 'adjusted', table: out.table, seat: out.seat };
+    } else if (kind === 'buyin') {
       const out = await changePpm(env, nowMs, user, async (ts) => {
         const at = await findSeat(env, ts, m.id);
         if (!at) return { changed: false, action: 'waiting' };
@@ -112,7 +125,7 @@ export async function handlePpmLink(req, env, path, nowSec, reply, user, role) {
     await env.DB.batch([
       env.DB.prepare('INSERT OR IGNORE INTO ppm_events(key,at,result) VALUES(?,?,?)').bind(key, nowSec, JSON.stringify(result)),
       env.DB.prepare('DELETE FROM ppm_events WHERE at<?').bind(nowSec - 7 * 86400),
-      auditStmt(env, nowSec, user || 'cage', 'ppm.cage', `${kind === 'buyin' ? 'Buy-in' : 'Cash-out'} ₱${amount} ${name} #${m.member_no} → ${result.action === 'addon' ? 'add-on at ' + result.table + ' #' + result.seat : result.action === 'left' ? 'left ' + result.table + ' #' + result.seat : result.action === 'waiting' ? 'waiting for a seat' : 'not seated in PPM'}`, m.id),
+      auditStmt(env, nowSec, user || 'cage', 'ppm.cage', `${kind === 'buyin' ? 'Buy-in' : kind === 'adjust' ? 'Buy-in correction' : 'Cash-out'} ₱${amount} ${name} #${m.member_no} → ${result.action === 'addon' ? 'add-on at ' + result.table + ' #' + result.seat : result.action === 'left' ? 'left ' + result.table + ' #' + result.seat : result.action === 'waiting' ? 'waiting for a seat' : 'not seated in PPM'}`, m.id),
     ]);
     return reply({ ok: true, result });
   }
