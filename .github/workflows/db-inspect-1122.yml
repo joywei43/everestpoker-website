@@ -1,4 +1,5 @@
-# Temporary, read only: lists everything written since 2026-11-22 06:55 (Taipei). Branch is deleted afterwards.
+# Temporary: removes the 2026-11-22 test data, then checks. Branch is deleted afterwards.
+# Was: lists everything written since 2026-11-22 06:55 (Taipei). Branch is deleted afterwards.
 name: DB inspect 1122
 on:
   push:
@@ -16,5 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Remove test data (one time)
+        run: npx --yes wrangler@4 d1 execute everest-waiting --remote --file=cleanup-1122.sql
       - run: |
           while IFS= read -r q; do [ -z "$q" ] && continue; echo "=== $q" | cut -c1-90; npx --yes wrangler@4 d1 execute everest-waiting --remote --json --command "$q" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s);for(const x of r)for(const row of x.results)console.log("ROW "+JSON.stringify(row))}catch(e){console.log(s)}})'; done < inspect-1122.sql

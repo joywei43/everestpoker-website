@@ -1,0 +1,27 @@
+-- Test data from 2026-11-22 06:55-07:45 (Taipei). Rewards are kept.
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='df8lo8lbbxqw9va' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='7rq5boty759mlff' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='va12xb5tni7m6od' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='iayqxlu4dp2r43d' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='qotq8p9p5od0r1j' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='zj773l3o52xr0y8' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='0230i4quztantk6' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='oc8az21355e233g' AND deleted=0;
+UPDATE cage_meta SET rev=rev+1 WHERE id=1;
+UPDATE cage_docs SET deleted=1,data='{}',version=version+1,rev=(SELECT rev FROM cage_meta WHERE id=1),updated=1795305000,updated_by='cleanup (test data)' WHERE coll='entries' AND id='3ff4u19b54m6v5v' AND deleted=0;
+UPDATE ppm SET version=version+1,data=json_set(data,'$[0].seats',json('[{"id":1,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":2,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":3,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":4,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":5,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":6,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":7,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":8,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false},{"id":9,"memberId":"","status":"idle","activeSeconds":0,"restSeconds":0,"lastActiveStart":null,"lastRestStart":null,"buyInAmount":0,"transferNote":null,"sessionStart":null,"selectedForBatch":false}]'),'$[0].sessions',json('[]'),'$[0].isRunning',json('false'),'$[0].openedAt',NULL,'$[0].closedAt',NULL,'$[0].lastStartTime',NULL,'$[0].elapsedSeconds',0) WHERE id=1 AND json_extract(data,'$[0].openedAt')='2026-11-22 06:56:57';
+UPDATE room SET version=version+1,data=json_set(data,'$.occupied[0]',json('[0,0,0,0,0,0,0,0,0]'),'$.tableOpen[0]',json('false')) WHERE id=1;
+DELETE FROM session_results WHERE session_id IN (717,718);
+DELETE FROM play_sessions WHERE id IN (717,718);
+DELETE FROM ppm_waiting WHERE id IN (1,2,3,4,5,6);
+DELETE FROM ppm_events WHERE at>=1795301700;
+DELETE FROM table_runs WHERE run_key='T1|1795301816';
+DELETE FROM audit_log WHERE at>=1795301700 AND action LIKE 'ppm.%';
