@@ -79,6 +79,9 @@ export async function handlePpmLink(req, env, path, nowSec, reply, user, role) {
     if (!m) return reply({ ok: true, result: { action: 'no_member' } }); // a name without a member number: PPM is not changed
     const name = m.nickname || displayName(m);
     let result;
+    // The member already left the seat (for example a second cash-out, or a correction after Leave):
+    // change their last finished game session of the last 12 hours instead.
+    const lastSession = async () => env.DB.prepare('SELECT id FROM play_sessions WHERE member_id=? AND end_at>=? ORDER BY end_at DESC LIMIT 1').bind(m.id, nowSec - 12 * 3600).first();
     if (kind === 'adjust') {
       // A cage correction changed a buy-in: change the seat's total (or the waiting amount). Never below 0; the seat is not freed.
       const out = await changePpm(env, nowMs, user, async (ts) => {
@@ -90,7 +93,9 @@ export async function handlePpmLink(req, env, path, nowSec, reply, user, role) {
       if (out.action === 'not_seated') {
         const w = await env.DB.prepare("SELECT id FROM ppm_waiting WHERE member_id=? AND status='waiting'").bind(m.id).first();
         if (w) await env.DB.prepare('UPDATE ppm_waiting SET amount=MAX(0,amount+?) WHERE id=?').bind(amount, w.id).run();
-        result = { action: w ? 'adjusted_waiting' : 'not_seated' };
+        let ls = null;
+        if (!w && (ls = await lastSession())) await env.DB.prepare('UPDATE play_sessions SET buy_in=MAX(0,COALESCE(buy_in,0)+?) WHERE id=?').bind(amount, ls.id).run();
+        result = { action: w ? 'adjusted_waiting' : ls ? 'session_updated' : 'not_seated' };
       } else result = { action: 'adjusted', table: out.table, seat: out.seat };
     } else if (kind === 'buyin') {
       const out = await changePpm(env, nowMs, user, async (ts) => {
@@ -120,7 +125,12 @@ export async function handlePpmLink(req, env, path, nowSec, reply, user, role) {
       });
       // Bought in but never seated, then cashed out: off the waiting list.
       await env.DB.prepare("UPDATE ppm_waiting SET status='gone',seated_at=? WHERE member_id=? AND status='waiting'").bind(nowSec, m.id).run();
-      result = out.action === 'left' ? { action: 'left', table: out.table, seat: out.seat } : { action: 'not_seated' };
+      let ls = null;
+      if (out.action !== 'left' && (ls = await lastSession())) await env.DB.batch([
+        env.DB.prepare("INSERT OR IGNORE INTO session_results(session_id,cash_out,busted,entered_by,updated_at) VALUES(?,0,0,'cage',?)").bind(ls.id, nowSec),
+        env.DB.prepare("UPDATE session_results SET cash_out=cash_out+?,busted=0,entered_by='cage',updated_at=? WHERE session_id=?").bind(amount, nowSec, ls.id),
+      ]);
+      result = out.action === 'left' ? { action: 'left', table: out.table, seat: out.seat } : ls ? { action: 'session_updated' } : { action: 'not_seated' };
     }
     await env.DB.batch([
       env.DB.prepare('INSERT OR IGNORE INTO ppm_events(key,at,result) VALUES(?,?,?)').bind(key, nowSec, JSON.stringify(result)),

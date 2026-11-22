@@ -73,6 +73,12 @@ assert.equal(sess.cashOutAmount, 22000); assert.equal(sess.buyInAmount, 16000); 
 const ps = sql.prepare("SELECT ps.buy_in, sr.cash_out, m.member_no FROM play_sessions ps JOIN members m ON m.id=ps.member_id LEFT JOIN session_results sr ON sr.session_id=ps.id").all();
 assert.equal(ps.length, 1); assert.equal(ps[0].member_no, A); assert.equal(ps[0].cash_out, 22000); assert.equal(ps[0].buy_in, 16000);
 const pub = (await call('/state')).body.state; assert.equal(pub.occupied[0][6], 0); assert.equal(pub.occupied[0][3], 1);
+// A second cash-out after the seat was left, and a buy-in correction after Leave: the last game session changes.
+r = await call('/ppm/cage-event', 'POST', { key: 'e4b', kind: 'cashout', member_no: A, amount: 1000 }, mary);
+assert.equal(r.body.result.action, 'session_updated');
+r = await call('/ppm/cage-event', 'POST', { key: 'e4c', kind: 'adjust', member_no: A, amount: -6000 }, mary);
+assert.equal(r.body.result.action, 'session_updated');
+{ const x = sql.prepare("SELECT ps.buy_in, sr.cash_out FROM play_sessions ps LEFT JOIN session_results sr ON sr.session_id=ps.id").get(); assert.equal(x.cash_out, 23000); assert.equal(x.buy_in, 10000); }
 // Bought in, never seated, cashed out: off the waiting list.
 await call('/ppm/cage-event', 'POST', { key: 'e5', kind: 'buyin', member_no: C, amount: 3000 }, mary);
 r = await call('/ppm/cage-event', 'POST', { key: 'e6', kind: 'cashout', member_no: C, amount: 3000 }, mary);
