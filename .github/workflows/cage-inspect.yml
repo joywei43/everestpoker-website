@@ -41,6 +41,7 @@ jobs:
             echo '{"entries":'; q "SELECT id, data, deleted FROM cage_docs WHERE coll='entries' AND (json_extract(data,'\$.date') BETWEEN date('$DAY','-$BACK day') AND '$DAY')"
             echo ',"counts":'; q "SELECT id, data, deleted FROM cage_docs WHERE coll='counts' AND json_extract(data,'\$.day') BETWEEN date('$DAY','-$BACK day') AND '$DAY'"
             echo ',"settings":'; q "SELECT data FROM cage_docs WHERE coll='config' AND id='settings'"
+            echo ',"players":'; q "SELECT id, data, deleted FROM cage_docs WHERE coll='players'"
             echo '}'
           } > /tmp/out.json
           openssl rand -hex 32 > /tmp/k
