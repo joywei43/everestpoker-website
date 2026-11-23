@@ -587,7 +587,7 @@ function vCloseStep(){const f=S.flow,d=f.d,b=balances(),day=bizDay();const nav=(
   ${(()=>{const A=acctToday(day);return `<h3 style="margin:16px 0 4px">On-day buy-in check 當日現金核對</h3>
   <table style="max-width:520px"><tr><td>On-day cash in the books 帳上當日現金</td><td class="r num">${pesoE(b.day_cash||0)}</td></tr><tr><td class="sub">Cash buy-ins − cash cash-outs − cash out by chip ± other cash of the day</td><td></td></tr></table>
   <label>On-day cash counted, whole drawer 當日現金實點（全部）(₱)</label><input id="cs-day" inputmode="decimal" value="${esc(d.dayCount??'')}" placeholder="${b.day_cash||0}" style="max-width:220px">
-  ${d.dayCount!==''&&d.dayCount!=null&&Math.abs(num(d.dayCount)-(b.day_cash||0))>0.001?`<div class="note warn" style="margin-top:6px">Difference 差額 ${sgnE(round2(num(d.dayCount)-(b.day_cash||0)))}. Usually a buy-in or cash-out not recorded, a wrong buy-in method, or playing behind. 通常是買碼、結碼漏記、方式選錯或代打。</div><label>Why? 原因</label><input id="cs-dayr" value="${esc(d.dayReason||'')}">`:''}
+  ${d.dayCount!==''&&d.dayCount!=null&&Math.abs(num(d.dayCount)-(b.day_cash||0))>0.001?`<div class="note warn" style="margin-top:6px">Difference 差額 ${sgnE(round2(num(d.dayCount)-(b.day_cash||0)))}. Usually a buy-in or cash-out not recorded, a wrong buy-in method, or playing behind. 通常是買碼、結碼漏記、方式選錯或代打。</div><label>Why? 原因</label><input id="cs-dayr" value="${esc(d.dayReason||'')}">${Math.abs(num(d.dayCount)-(b.day_cash||0))>Number(settings().cashDiffApprove??1000)?`<div class="note bad" style="margin-top:6px"><b>Big difference. Count only the on-day drawer — not the cash float. 差額過大：只點當日抽屜，不要把現金流算進來。</b> A manager must approve. 需主管批准。</div><label>Manager approving 批准主管</label>${seg('csdaymgr',approvers().map(n=>[n,n]),d.dayMgr)}`:''}`:''}
   ${A.length?`<div class="sub" style="margin-top:10px">Player accounts today 今日帳卡進出 (not in on-day cash)</div><table style="max-width:620px"><tr><th>Player</th><th class="r">Taken on account</th><th class="r">Back to account</th><th class="r">Deposit / withdraw</th><th class="r">Balance now</th></tr>${A.map(r=>`<tr><td>${esc(r.n)}</td><td class="r num">${r.take?r.take.toLocaleString('en-US'):''}</td><td class="r num">${r.back?r.back.toLocaleString('en-US'):''}</td><td class="r num">${r.dw?sgnE(r.dw):''}</td><td class="r num ${r.bal<0?'neg':''}">${peso(r.bal)}</td></tr>`).join('')}</table>
   <label style="display:flex;gap:8px;align-items:center;color:var(--ink);margin-top:6px"><input type="checkbox" id="cs-acctok" style="width:auto" ${d.acctOk?'checked':''}> Matches the paper player accounts 與紙本帳卡一致</label>`:''}`})()}
   <div class="hl" style="margin-top:16px"><b class="t">Do this now 現在請做</b><ol>
@@ -622,6 +622,7 @@ function vCloseStep(){const f=S.flow,d=f.d,b=balances(),day=bizDay();const nav=(
   <div class="note info">Confirming records one closing entry${X.net<0?' with a negative amount':''}: insurance chips to cash, tips ${pesoE(X.tipT)} to tip reserves, mass chips ${pesoE(X.mass)} to the cash float, with the details above. After the count, on-day cash also goes into the cash float.</div>${nav('pb','post','Confirm and go to the count')}`);
  return ''}
 async function postClose(){const f=S.flow,d=f.d,X=closeNumbers(),day=bizDay(),now=new Date(),b=balances();
+ {const done=liveEntries().find(e=>e.type==='close_day'&&e.date===day);if(done){flash(`The closing step for ${day} was already saved at ${done.time||''}${done.by?' by '+done.by:''} (tips, on-day cash, insurance). Not saved again — go on to count the cage. 這天的關帳步驟已存過，沒有重複存，請直接清點。`);return}}
  const base={date:day,time:now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:now.toISOString(),voided:false,player:null,medium:null,note:''};
  if(Math.abs(X.insCnt-X.insBook)>0.001&&!d.insReason.trim())throw new Error('Go back to step 2 and write why the insurance chips are different.');
  for(const p of X.uns)if(!((d.pb[p.who]||{}).r||'').trim())throw new Error(`Go back to step 5 and write why ${p.who} is not settled.`);
@@ -633,7 +634,7 @@ async function postClose(){const f=S.flow,d=f.d,X=closeNumbers(),day=bizDay(),no
  {const dayPre=b.day_cash||0,cnt=num(d.dayCount),diff=round2(cnt-dayPre);
   if(Math.abs(diff)>0.001)await saveEntry({...base,type:'count_adj',amount:Math.abs(diff),legs:[{a:'day',m:'cash',v:diff}],pl:{cat:'Count difference',v:diff},note:d.dayReason||'',summary:`Close: on-day cash difference ${sgn(diff)}`});
   const rest=round2(cnt-X.insCnt-X.tipT);if(Math.abs(rest)>0.001)await saveEntry({...base,type:'day_close',amount:Math.abs(rest),legs:[{a:'day',m:'cash',v:-rest},{a:'cf',m:'cash',v:rest}],pl:null,summary:`Close: on-day buy-in cash ${pesoE(rest)} → Cash float (all on-day cash moved)`});}
- const info={insurance:X.insCnt,insBook:X.insBook,insReason:d.insReason,pbSettled:X.settled,pbUnsettled:X.uns.map(p=>({who:p.who,amt:-p.net,reason:(d.pb[p.who]||{}).r||''})),pbResult:X.pbRes,tips:X.alloc,tipTotal:X.tipT,dayCount:num(d.dayCount),dayBook:b.day_cash||0,dayReason:d.dayReason||'',dealerTips:(d.dealers||[]).filter(r=>num(r.a)>0).map(r=>({n:r.n.trim(),a:num(r.a)})),mass:X.mass,net:X.net,insPcs:d.insPcs&&Object.values(d.insPcs).some(v=>Number(v))?d.insPcs:null};
+ const info={insurance:X.insCnt,insBook:X.insBook,insReason:d.insReason,pbSettled:X.settled,pbUnsettled:X.uns.map(p=>({who:p.who,amt:-p.net,reason:(d.pb[p.who]||{}).r||''})),pbResult:X.pbRes,tips:X.alloc,tipTotal:X.tipT,dayCount:num(d.dayCount),dayBook:b.day_cash||0,dayReason:d.dayReason||'',dayMgr:d.dayMgr||null,dealerTips:(d.dealers||[]).filter(r=>num(r.a)>0).map(r=>({n:r.n.trim(),a:num(r.a)})),mass:X.mass,net:X.net,insPcs:d.insPcs&&Object.values(d.insPcs).some(v=>Number(v))?d.insPcs:null};
  await saveEntry({...base,type:'close_day',amount:X.net,legs:[],pl:null,closeInfo:info,summary:`Close: on-day net income ${sgn(X.net)} to Cash float (insurance ${sgn(X.insCnt)}, playing behind ${sgn(X.pbRes)})`});
  f.info=info}
 function cntBlock(kind,key,label,denoms,unit){const v=S.cnt[kind][key]=S.cnt[kind][key]||{};const val=d=>kind==='chips'?chipVal(d):d;const tot=denoms.reduce((s,d)=>s+val(d)*(Number(v[d])||0),0);
@@ -889,6 +890,7 @@ function bindCounts(){const q=$;
  if(q('cs-acctok'))q('cs-acctok').onchange=()=>{d.acctOk=q('cs-acctok').checked};
  if(q('cs-day'))q('cs-day').onchange=()=>{d.dayCount=q('cs-day').value;render()};
  if(q('cs-dayr'))q('cs-dayr').oninput=()=>{d.dayReason=q('cs-dayr').value};
+ document.querySelectorAll('[data-field=csdaymgr] button').forEach(b=>b.onclick=()=>{d.dayMgr=b.dataset.v;render()});
  if(q('cs-massopen'))q('cs-massopen').onclick=()=>{S.flow.massOpen=true;render()};
  if(q('cs-massx'))q('cs-massx').onclick=()=>{S.flow.massOpen=false;render()};
  if(q('cs-massok'))q('cs-massok').onclick=async()=>{const x=q('cs-massok'),bk=balances().mass_chips||0,m=num(q('cs-mass').value);if(!(m>0)){q('cs-merr').textContent='Enter the cash handed in.';return}if(m>bk+0.001){q('cs-merr').textContent='More than the mass chips in the books ('+pesoE(bk)+').';return}
@@ -912,6 +914,7 @@ function bindCounts(){const q=$;
    if(!d.insOk&&d.insCount===''){err.textContent='Tick “Insurance chips match the record”, or enter what was counted. 請確認保險籌碼。';return}
    if(d.dayCount===''||d.dayCount==null||!Number.isFinite(num(d.dayCount))){err.textContent='Count the on-day cash drawer and enter the total. 請點當日現金並填入。';return}
    if(Math.abs(num(d.dayCount)-(b.day_cash||0))>0.001&&!(d.dayReason||'').trim()){err.textContent='Write why the on-day cash is different. 請寫當日現金差額原因。';return}
+   if(Math.abs(num(d.dayCount)-(b.day_cash||0))>Number(settings().cashDiffApprove??1000)&&!d.dayMgr){err.textContent='The on-day cash difference needs a manager. 當日現金差額過大，需主管批准。';return}
    if(acctToday(bizDay()).length&&!d.acctOk){err.textContent='Check the player accounts against the paper and tick the box. 請核對帳卡後打勾。';return}
    const u=X.uns.find(p=>!((d.pb[p.who]||{}).r||'').trim());if(u){err.textContent=`Write why ${u.who} is not settled.`;return}}
   if(fwd){if(S.flow.step==='players'&&!d.players){err.textContent='Tick the box when every player has cashed out.';return}
