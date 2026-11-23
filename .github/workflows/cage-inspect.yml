@@ -1,0 +1,45 @@
+# Reads the cage records of one business day from D1, encrypted with .github/cage-inspect-public.pem (RSA + AES).
+# Only the holder of the matching private key can read the output; the public log shows ciphertext only.
+name: Cage inspect
+
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: 'Business day YYYY-MM-DD'
+        required: true
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+      DAY: ${{ github.event.inputs.day }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sed -i "s/REPLACE_WITH_D1_DATABASE_ID/${D1_DATABASE_ID}/" wrangler.toml
+      - name: Export and encrypt
+        run: |
+          set -e
+          echo "$DAY" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || { echo "day must be YYYY-MM-DD"; exit 1; }
+          q() { npx --yes wrangler@4 d1 execute everest-waiting --remote --json --command "$1" 2>/dev/null; }
+          {
+            echo '{"entries":'; q "SELECT id, data, deleted FROM cage_docs WHERE coll='entries' AND (json_extract(data,'\$.date') BETWEEN date('$DAY','-1 day') AND '$DAY')"
+            echo ',"counts":'; q "SELECT id, data, deleted FROM cage_docs WHERE coll='counts' AND json_extract(data,'\$.day') BETWEEN date('$DAY','-1 day') AND '$DAY'"
+            echo ',"settings":'; q "SELECT data FROM cage_docs WHERE coll='config' AND id='settings'"
+            echo '}'
+          } > /tmp/out.json
+          openssl rand -hex 32 > /tmp/k
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in /tmp/out.json -out /tmp/out.enc -pass file:/tmp/k
+          openssl pkeyutl -encrypt -pubin -inkey ../.github/cage-inspect-public.pem -in /tmp/k -out /tmp/k.enc
+          echo "KEY-BEGIN"; base64 -w0 /tmp/k.enc; echo; echo "KEY-END"
+          echo "DATA-BEGIN"; base64 -w 76 /tmp/out.enc; echo "DATA-END"; wc -c /tmp/out.json /tmp/out.enc
+          rm -f /tmp/out.json /tmp/k
