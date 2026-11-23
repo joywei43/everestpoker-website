@@ -1009,7 +1009,7 @@ async function viewInsurance(view) {
       <span class="row" style="gap:6px"><a class="btn" href="../insurance/" target="_blank" rel="noopener">Open insurance app ↗</a><button class="btn" id="csv">Export CSV</button></span></div>
     <section class="card"><form id="rf" class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
       <label class="f">From<input type="date" name="from" value="${esc(d.from)}"></label><label class="f">To<input type="date" name="to" value="${esc(d.to)}"></label>
-      <button class="btn primary">Show</button><button type="button" class="btn sm" data-days="0">Today</button><button type="button" class="btn sm" data-days="6">7 days</button><button type="button" class="btn sm" data-days="29">30 days</button></form></section>
+      <button class="btn primary">Show</button><button type="button" class="btn sm" data-days="0">Today</button><button type="button" class="btn sm" data-rng="tw">This week</button><button type="button" class="btn sm" data-rng="lw">Last week</button><button type="button" class="btn sm" data-rng="tm">This month</button><button type="button" class="btn sm" data-rng="lm">Last month</button></form></section>
     <div class="grid">
       ${tile('Sold', peso(T.sold), T.tickets + ' tickets')}
       ${tile('Paid out', peso(T.paid), T.hits + ' hit · ' + T.misses + ' kept')}
@@ -1031,6 +1031,14 @@ async function viewInsurance(view) {
   const rf = view.querySelector('#rf');
   rf.onsubmit = (e) => { e.preventDefault(); go({ from: rf.from.value, to: rf.to.value }); };
   rf.querySelectorAll('[data-days]').forEach((b) => b.onclick = () => go({ from: daysAgo(Number(b.dataset.days)), to: today() }));
+  // Weeks run Monday to Sunday.
+  const dshift = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const rng = (k) => { const t = today(), wd = (new Date(t + 'T00:00:00Z').getUTCDay() + 6) % 7, mon = dshift(t, -wd);
+    if (k === 'tw') return { from: mon, to: dshift(mon, 6) };
+    if (k === 'lw') return { from: dshift(mon, -7), to: dshift(mon, -1) };
+    if (k === 'tm') return { from: t.slice(0, 8) + '01', to: t };
+    const first = t.slice(0, 8) + '01', lastEnd = dshift(first, -1); return { from: lastEnd.slice(0, 8) + '01', to: lastEnd }; };
+  rf.querySelectorAll('[data-rng]').forEach((b) => b.onclick = () => go(rng(b.dataset.rng)));
   view.querySelectorAll('[data-void]').forEach((b) => b.onclick = async () => { const reason = prompt('Reason for voiding this ticket:'); if (!reason) return; try { await api(`/insurance/${b.dataset.void}/void`, 'POST', { reason }); viewInsurance(view); } catch (err) { alert(err.message); } });
   view.querySelector('#csv').onclick = () => {
     const lines = [['Day', 'Time', 'Hand', 'Table', 'Level', 'Pot', 'Pot amount', 'Players', 'Buyer', 'Street', 'Board', 'Next card', 'Outs', 'Odds', 'Max buy', 'Bought', 'Pays', 'Result', 'House result', 'Sold by', 'Void reason']]
