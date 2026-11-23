@@ -451,7 +451,7 @@ function vSettings(){const st=settings(),o=st.open;
  <label>Tip split (one per line: role, %)</label><textarea id="st-tips" rows="8">${esc(tipSplit().map(([r,p])=>`${r}, ${p}`).join('\n'))}</textarea>
  <label>Who gets each share (one per line — role: name, name)</label><textarea id="st-tippeople" rows="8">${esc(Object.entries(tipPeople()).map(([r,n])=>`${r}: ${n.join(', ')}`).join('\n'))}</textarea></div>
  <h2>Rates</h2><div class="card" style="max-width:760px"><div class="form2">
- <div><label>Cash difference needing a manager 現金差額需主管批准 (₱)</label><input data-st="cashDiffApprove" value="${st.cashDiffApprove??1000}"></div><div><label>Chip difference alert 籌碼差異警示 (₱ per day)</label><input data-st="chipLossAlert" value="${st.chipLossAlert??2000}"></div><div><label>Monthly rent</label><input data-st="rent" value="${st.rent}"></div><div><label>PAGCOR monthly minimum</label><input data-st="pagcorMin" value="${st.pagcorMin}"></div>
+ <div><label>Cash difference needing a manager 現金差額需主管批准 (₱)</label><input data-st="cashDiffApprove" value="${st.cashDiffApprove??1000}"></div><div><label>Track lost chips from 籌碼遺失從哪天起算</label><input data-st="chipLossFrom" value="${esc(st.chipLossFrom||'2026-11-22')}"></div><div><label>Chip difference alert 籌碼差異警示 (₱ per day)</label><input data-st="chipLossAlert" value="${st.chipLossAlert??2000}"></div><div><label>Monthly rent</label><input data-st="rent" value="${st.rent}"></div><div><label>PAGCOR monthly minimum</label><input data-st="pagcorMin" value="${st.pagcorMin}"></div>
  <div><label>Locked rate · TWD (₱ per 1)</label><input data-fx="TWD" value="${fxRate('TWD',st)}"></div><div><label>Locked rate · USD (₱ per 1)</label><input data-fx="USD" value="${fxRate('USD',st)}"></div>
  <div><label>Everest rake share</label><input data-st="everestRakeRate" value="${st.everestRakeRate}"></div><div><label>Everest BBJ share</label><input data-st="bbjEverestRate" value="${st.bbjEverestRate}"></div></div></div>
  <div class="err" id="st-err"></div><button class="primary" id="st-save" style="margin-top:12px">Save settings</button><span class="sub" id="st-msg" style="margin-left:10px"></span>`}
@@ -998,9 +998,9 @@ function unsettled(){const st=settings(),today=bizDay(),bought={};for(const e of
  return {amt:round2(rows.reduce((x,r)=>x+Math.max(0,r.left),0)),rows:rows.filter(r=>r.left>0.004)}}
 /* Chip float difference per closed day: chips short at closing minus what was bought back from MIDORI for that day.
    Plus = chips lost (dropped, taken by a player); minus = chips extra. Small amounts are normal; above the alert it is flagged. */
-function chipDiffs(){const st=settings(),A=Number(st.chipLossAlert??2000),M={};const g=d=>M[d]=M[d]||{d,short:0,bought:0};
- for(const e of liveEntries())if(e.date>=st.openDate&&e.type==='chip_short')g(e.date).short+=Number(e.amount||0);
- for(const c of S.counts)if(c.kind==='close'&&c.day>=st.openDate)g(c.day);
+function chipDiffs(){const st=settings(),A=Number(st.chipLossAlert??2000),M={},from=st.chipLossFrom||'2026-11-22';const g=d=>M[d]=M[d]||{d,short:0,bought:0};
+ for(const e of liveEntries())if(e.date>=st.openDate&&e.date>=from&&e.type==='chip_short')g(e.date).short+=Number(e.amount||0);
+ for(const c of S.counts)if(c.kind==='close'&&c.day>=st.openDate&&c.day>=from)g(c.day);
  for(const e of liveEntries())if(e.type==='buyback'){const d=bbDayOf(e);if(M[d])M[d].bought+=Number(e.amount||0)}
  return Object.values(M).map(x=>{const diff=round2(x.short-x.bought);return {...x,diff,big:Math.abs(diff)>A&&x.bought>0.004}}).sort((a,b)=>b.d.localeCompare(a.d))}
 function vChipDiffs(){const rows=chipDiffs().filter(x=>x.bought>0.004||x.short>0.004),A=Number(settings().chipLossAlert??2000);if(!rows.length)return '';const done=rows.filter(x=>x.bought>0.004),lost=round2(done.reduce((t,x)=>t+x.diff,0));
@@ -1543,7 +1543,7 @@ function bind(){
  if(q('st-pastgo'))q('st-pastgo').onclick=()=>{const v=q('st-pastday').value;if(!v)return;S.dayOverride=v;try{sessionStorage.setItem('cage-day',v)}catch(e){}S.tab='counts';S.qa=null;render()};
  if(q('st-save'))q('st-save').onclick=async()=>{const st=settings();const open={...(st.open.fxGuests?{fxGuests:st.open.fxGuests}:{})};let bad=false;
   document.querySelectorAll('[data-open]').forEach(i=>{const n=num(i.value||0);if(!Number.isFinite(n))bad=true;open[i.dataset.open]=n});
-  const p={};document.querySelectorAll('[data-st]').forEach(i=>{const n=num(i.value);if(!Number.isFinite(n)||n<0)bad=true;p[i.dataset.st]=n});
+  const p={};document.querySelectorAll('[data-st]').forEach(i=>{if(i.dataset.st==='chipLossFrom'){if(!/^\d{4}-\d{2}-\d{2}$/.test(i.value.trim()))bad=true;p.chipLossFrom=i.value.trim();return}const n=num(i.value);if(!Number.isFinite(n)||n<0)bad=true;p[i.dataset.st]=n});
   const fxRates={};document.querySelectorAll('[data-fx]').forEach(i=>{const n=num(i.value);if(!(n>0))bad=true;fxRates[i.dataset.fx]=n});const date=q('st-date').value;if(bad||!date){q('st-err').textContent='Check the start day and that every amount is a number.';return}
   const owners=q('st-owners').value.split(',').map(s=>s.trim()).filter(Boolean);
   const tips=q('st-tips').value.split('\n').map(l=>l.split(',').map(x=>x.trim())).filter(x=>x[0]).map(([r,pc])=>[r,num(pc)]);
