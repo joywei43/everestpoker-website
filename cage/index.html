@@ -159,7 +159,7 @@ function balances(upTo){
    else if(g.a==='prepaid')b.prepaid[g.p]=round2((b.prepaid[g.p]||0)+g.v);
    else if(g.a==='fx'){const f=b.fx[g.cur]=b.fx[g.cur]||{amt:0,php:0};f.amt=round2(f.amt+g.fv);f.php=round2(f.php+g.v)}
    else if(g.a==='tipsheld'){b.tipsheld=(b.tipsheld||0)+g.v;if(g.p){b.tipsBy=b.tipsBy||{};for(const [n,v] of tipTo(g.p,g.v,e.date))b.tipsBy[n]=round2((b.tipsBy[n]||0)+v)}}
-   else{const k=g.a+'_'+g.m;b[k]=(b[k]||0)+g.v}
+   else{const k=g.a+'_'+g.m;b[k]=(b[k]||0)+chipLegV(e,g)}
   }}
  const il=insLive();if(il)for(const [d,x] of Object.entries(il.days)){if(d<st.openDate||d<INS_LINK||(upTo&&d>upTo)||(lastClose&&d<=lastClose))continue;b.ins_chips=round2((b.ins_chips||0)+x.net)}
  return b}
@@ -762,7 +762,7 @@ function repPage2(c){const ci=c.closeInfo||{},pl=c.players||{},md=S.midori[c.day
 /* Where each pouch's money went on one business day: start = the opening count, then every kind of movement, end = after the closing count. */
 function dayFlow(day,openId){const P={cash:[['cf','pd'],'cash'],day:[['day'],'cash'],chip:[['chip'],'chips'],mass:[['mass'],'chips'],ins:[['ins'],'chips']};const oc=openId?S.counts.find(x=>x.id===openId):null;const o={};
  for(const [k,[as,m]] of Object.entries(P)){const start=oc?(k==='cash'?(oc.counted.cf_cash||0)+(oc.counted.pd_cash||0):(oc.counted[as[0]+'_'+m]||0)):null;const g=new Map();
-  for(const e of liveEntries()){if(e.date!==day||(oc&&e.countId===oc.id&&e.type==='count_adj'))continue;for(const l of e.legs||[]){if(!as.includes(l.a)||(l.m||'cash')!==m||!l.v)continue;const lb=e.type==='count_adj'?(k==='chip'?'Counted vs books 實點與帳面差':'Count difference 清點差額'):flowLabel(e);const x=g.get(lb)||{in:0,out:0,n:0};if(l.v>0)x.in+=l.v;else x.out-=l.v;x.n++;g.set(lb,x)}}
+  for(const e of liveEntries()){if(e.date!==day||(oc&&e.countId===oc.id&&e.type==='count_adj'))continue;for(const l0 of e.legs||[]){const l={...l0,v:chipLegV(e,l0)};if(!as.includes(l.a)||(l.m||'cash')!==m||!l.v)continue;const lb=e.type==='count_adj'?(k==='chip'?'Counted vs books 實點與帳面差':'Count difference 清點差額'):flowLabel(e);const x=g.get(lb)||{in:0,out:0,n:0};if(l.v>0)x.in+=l.v;else x.out-=l.v;x.n++;g.set(lb,x)}}
   const net=[...g.values()].reduce((t,x)=>t+x.in-x.out,0);o[k]={start,rows:[...g].sort((a,b)=>(b[1].in+b[1].out)-(a[1].in+a[1].out)),net:round2(net),end:start==null?null:round2(start+net)}}
  o.swaps=liveEntries().filter(e=>e.date===day&&(e.type==='swap_c2ch'||e.type==='swap_ch2c'||e.type==='mv_cf2day'||e.type==='mv_day2cf')).sort((a,b)=>String(a.time).localeCompare(String(b.time)));
  o.dayToCf=round2(liveEntries().filter(e=>e.date===day).reduce((t,e)=>{const ls=e.legs||[];return ls.some(l=>l.a==='day'&&l.v<0)?t+ls.filter(l=>l.a==='cf'&&l.v>0).reduce((x,l)=>x+l.v,0):t},0));
@@ -955,6 +955,9 @@ const pLabel=p=>p.name+(p.no?' #'+p.no:'');
 function findPlayer(name){const r=findPlayer0(name);if(r)return r;const k=nkey(String(name||'').replace(/\s*#\s*\S+$/,''));if(!k)return null;const L=S.players.filter(p=>nkey(p.name)===k);return L.find(p=>p.no)||L[0]||null}
 function findPlayer0(name){const n=lname(name).replace(/\s*#\s*/,' #');const m=n.match(/#(\S+)$/);return S.players.find(p=>lname(p.name)===n||lname(pLabel(p))===n)||(m?(S.players.find(p=>p.no&&normNo(p.no)===normNo(m[1]))||S.players.find(p=>!p.no&&lname(p.name)===n.replace(/\s*#\S+$/,''))):null)}
 const isAcct=p=>!!(p&&p.account);
+/* Only 1,000 and 100 chips have value in the chip float. The part of an amount under 100 (e.g. 48,175 → 75) is paid in house 25 chips, which have no value, so it is left out of the chip float (from 2026-11-24; count differences stay exact). */
+const CHIP100_FROM='2026-11-24';
+const chipLegV=(e,g)=>g.a==='chip'&&(g.m||'chips')==='chips'&&e.type!=='count_adj'&&String(e.date)>=CHIP100_FROM?Math.trunc(g.v/100)*100:g.v;
 /* Credit OUT / Credit Payback buttons: hidden from the cage staff for now (the owner records credit). Owner (master) still sees them; settings.creditDesk=true shows them to everyone. */
 const creditDesk=()=>S.role==='master'||!!settings().creditDesk;
 const acctOf=p=>!p?null:isAcct(p)?p:(p.under?S.players.find(x=>x.id===p.under&&isAcct(x))||null:null);
