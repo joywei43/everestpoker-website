@@ -186,6 +186,7 @@ function render() {
         ${link('members', 'Members')}
         ${link('playergroups', 'Player groups')}
         ${link('unmatchedppm', 'Unmatched PPM')}
+        ${link('schedule', 'Schedule 班表')}
         ${link('rewards', 'Rewards')}
         ${link('approvals', 'Approvals', '<span class="pill" id="pendingPill" hidden></span>')}
         ${link('promotions', 'Promotions')}
@@ -201,7 +202,7 @@ function render() {
   </div>`;
   renderStaff();
   const view = document.getElementById('view');
-  const pages = { rewards: viewRewards, tablereport: viewTableReport, insurance: viewInsurance, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: viewOperation, operationreport: viewReport, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
+  const pages = { schedule: viewSchedule, rewards: viewRewards, tablereport: viewTableReport, insurance: viewInsurance, members: viewMembers, member: viewMember, playergroups: viewGroups, unmatchedppm: viewUnmatched, approvals: viewApprovals, liveoperation: viewOperation, operationreport: viewReport, promotions: viewPromotions, telegrampost: viewTelegram, staffaccounts: isMaster() ? viewStaff : viewMembers, importmembers: isManager() ? viewImport : viewMembers, historylog: isMaster() ? viewHistory : viewMembers };
   refreshPending();
   (pages[page] || viewMembers)(view, parseHash().arg).catch((e) => { view.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; });
 }
@@ -978,6 +979,138 @@ ${rows.map((x) => `<tr><td class="n">${x.i}</td><td><b>${esc(x.name)}</b>${x.ful
   w.document.close();
 }
 // Table insurance log: what was sold, paid out and kept, by day, with the float.
+// ---------- Staff schedule (班表) ----------
+// Upload the week / month schedule (Excel .xlsx, .csv, or paste from Excel / Google Sheets). Who is off each day is saved to the cage,
+// where shared tips (Cashier / Cage, FnB service, Floor) are split among the people working; an off person's share goes to the Incentive fund.
+const SCH_OFF = /^(off|x|休|休假|rd|rest|rest ?day|day ?off|leave|vl|sl|absent|-|–|—|0|no)$/i;
+async function unzipXlsx(buf) {
+  const u8 = new Uint8Array(buf), dv = new DataView(buf), files = {};
+  let eocd = -1; for (let i = u8.length - 22; i >= Math.max(0, u8.length - 66000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('This is not an Excel (.xlsx) file.');
+  const n = dv.getUint16(eocd + 10, true); let p = dv.getUint32(eocd + 16, true);
+  for (let k = 0; k < n; k++) {
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(u8.slice(p + 46, p + 46 + nl)); p += 46 + nl + xl + cl;
+    if (!/^xl\/(sharedStrings\.xml|workbook\.xml|_rels\/workbook\.xml\.rels|worksheets\/sheet\d+\.xml)$/.test(name)) continue;
+    const start = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), raw = u8.slice(start, start + csize);
+    files[name] = method === 0 ? new TextDecoder().decode(raw) : await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  }
+  return files;
+}
+async function readXlsxRows(file) {
+  const f = await unzipXlsx(await file.arrayBuffer()), X = (s) => new DOMParser().parseFromString(s, 'application/xml');
+  const ss = f['xl/sharedStrings.xml'] ? [...X(f['xl/sharedStrings.xml']).getElementsByTagName('si')].map((si) => [...si.getElementsByTagName('t')].map((t) => t.textContent).join('')) : [];
+  let sheet = 'xl/worksheets/sheet1.xml';
+  try { // first sheet in the workbook order
+    const wb = X(f['xl/workbook.xml']), rid = wb.getElementsByTagName('sheet')[0].getAttribute('r:id'), rels = X(f['xl/_rels/workbook.xml.rels']);
+    const t = [...rels.getElementsByTagName('Relationship')].find((r) => r.getAttribute('Id') === rid); if (t) sheet = 'xl/' + t.getAttribute('Target').replace(/^\/?xl\//, '');
+  } catch (e) {}
+  if (!f[sheet]) sheet = Object.keys(f).filter((k) => k.startsWith('xl/worksheets/')).sort()[0];
+  const col = (ref) => { let c = 0; for (const ch of ref.replace(/\d+/g, '')) c = c * 26 + ch.charCodeAt(0) - 64; return c - 1; };
+  return [...X(f[sheet]).getElementsByTagName('row')].map((r) => {
+    const out = [];
+    for (const c of r.getElementsByTagName('c')) {
+      const t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0];
+      out[col(c.getAttribute('r'))] = t === 's' ? ss[Number(v && v.textContent)] : t === 'inlineStr' ? [...c.getElementsByTagName('t')].map((x) => x.textContent).join('') : (v ? v.textContent : '');
+    }
+    return Array.from(out, (x) => (x == null ? '' : String(x)));
+  });
+}
+const schCsv = (text) => { const rows = []; let row = [], cur = '', q = false; const sep = text.split('\n')[0].includes('\t') ? '\t' : ',';
+  for (let i = 0; i < text.length; i++) { const ch = text[i];
+    if (q) { if (ch === '"' && text[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === sep) { row.push(cur); cur = ''; } else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; } else if (ch !== '\r') cur += ch; }
+  if (cur || row.length) { row.push(cur); rows.push(row); } return rows; };
+const SCH_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+function schDate(v, ym) {
+  const s = String(v || '').trim(), [y0, m0] = ym.split('-').map(Number), iso = (y, m, d) => (m >= 1 && m <= 12 && d >= 1 && d <= 31) ? `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` : null;
+  let m;
+  if (!s) return null;
+  if ((m = s.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) return iso(+m[1], +m[2], +m[3]);
+  if (/^\d{5}(\.\d+)?$/.test(s) && +s > 40000) return new Date(Date.UTC(1899, 11, 30) + Math.floor(+s) * 864e5).toISOString().slice(0, 10); // Excel date
+  if ((m = s.match(/(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?/))) { const y = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : y0; return iso(y, +m[1], +m[2]); }
+  if ((m = s.match(/([A-Za-z]{3})[a-z]*\.?\s*(\d{1,2})/)) && SCH_MON[m[1].toLowerCase()]) return iso(y0, SCH_MON[m[1].toLowerCase()], +m[2]);
+  if ((m = s.match(/(\d{1,2})[\s-]*([A-Za-z]{3})/)) && SCH_MON[m[2].toLowerCase()]) return iso(y0, SCH_MON[m[2].toLowerCase()], +m[1]);
+  if ((m = s.match(/(?:^|\D)(\d{1,2})(?:日)?$/))) return iso(y0, m0, +m[1]);
+  return null;
+}
+// Rows → {days:[iso], people:[{name, roster, off:Set(day)}]}. The header row is the first row with two or more dates.
+function parseSchedule(rows, ym, roster) {
+  rows = rows.filter((r) => r.some((c) => String(c).trim()));
+  const hi = rows.findIndex((r) => r.slice(1).filter((c) => schDate(c, ym)).length >= 2);
+  if (hi < 0) throw new Error('No dates found. The first row should be: Name, then one column per day (e.g. 11/27 or 2026-11-27).');
+  const head = rows[hi], cols = head.map((c, i) => (i > 0 ? schDate(c, ym) : null));
+  const days = [...new Set(cols.filter(Boolean))].sort(), lower = new Map(roster.map((n) => [n.toLowerCase(), n]));
+  const people = rows.slice(hi + 1).map((r) => {
+    const raw = String(r[0] || '').trim(); if (!raw || /^(total|count|working)/i.test(raw)) return null;
+    const name = lower.get(raw.toLowerCase()) || raw, off = new Set();
+    cols.forEach((d, i) => { if (d && SCH_OFF.test(String(r[i] == null ? '' : r[i]).trim() || 'off')) off.add(d); });
+    return { name, roster: lower.has(raw.toLowerCase()), off };
+  }).filter(Boolean);
+  return { days, people };
+}
+async function viewSchedule(view) {
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const ym = params.get('m') || today().slice(0, 7), [y, m] = ym.split('-').map(Number), last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const from = `${ym}-01`, to = `${ym}-${String(last).padStart(2, '0')}`;
+  const d = await api('/cage/schedule?' + new URLSearchParams({ from, to }));
+  const ts = d.tipStaff || { pool: [], personal: [] }, groups = [...ts.pool, ...ts.personal], roster = groups.flatMap(([, n]) => n);
+  const saved = Object.fromEntries(d.days.map((x) => [x.day, x]));
+  const allDays = Array.from({ length: last }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`);
+  const wd = (x) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(x + 'T00:00:00Z').getUTCDay()];
+  let pending = null;
+  const grid = (days, offOf, extra = []) => `<div style="overflow:auto"><table class="sch"><tr><th style="text-align:left">Staff</th>${days.map((x) => `<th>${x.slice(8)}<br><span class="muted">${wd(x)}</span></th>`).join('')}</tr>
+    ${groups.map(([g, ns]) => `<tr><td colspan="${days.length + 1}" class="muted" style="text-align:left;font-size:12px;padding-top:8px">${esc(g)}</td></tr>${ns.map((n) => `<tr><td style="text-align:left;white-space:nowrap">${esc(n)}</td>${days.map((x) => offOf(x, n) ? '<td class="off">OFF</td>' : '<td class="on">✓</td>').join('')}</tr>`).join('')}`).join('')}
+    ${extra.join('')}
+    <tr><td style="text-align:left"><b>Working 上班人數</b></td>${days.map((x) => `<td><b>${roster.filter((n) => !offOf(x, n)).length}</b></td>`).join('')}</tr></table></div>`;
+  view.innerHTML = `<style>.sch{border-collapse:collapse;font-size:13px}.sch th,.sch td{border:1px solid var(--line);padding:4px 6px;text-align:center;min-width:34px}.sch td.on{background:#E7F4EC;color:#1E6B3E}.sch td.off{background:#EEE;color:#888;font-weight:600}</style>
+    <div class="row between"><div><h1>Schedule 班表</h1><p class="sub">Who works each day. Shared tips (Cashier / Cage, FnB Service, Floor) are split among the people working; the share of someone who is off goes to the Incentive fund. 每天誰上班；共享小費只分給當天上班的人，休假者的份額歸 Incentive fund。</p></div>
+    <div class="row"><input type="month" id="schM" value="${ym}" style="width:auto"></div></div>
+    ${isManager() ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Upload the schedule 上傳班表</h2>
+    <p class="sub">Excel (.xlsx) or CSV, or copy the table in Excel / Google Sheets and paste it below. First row: <b>Name</b>, then one column per day (11/27, 2026-11-27, Nov 27…). Each cell: anything = working; empty, <b>OFF</b>, X, 休, RD, Leave = off.
+    Excel／CSV 檔，或從 Excel／Google Sheets 複製貼上。第一列：Name＋每天一欄；格子有填 = 上班，空白／OFF／X／休 = 休假。</p>
+    <div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" id="schFile" accept=".xlsx,.csv,.tsv,.txt"><button class="btn" id="schTpl" type="button">Download a template 下載範本</button></div>
+    <textarea id="schPaste" rows="4" placeholder="Or paste from Excel / Google Sheets here 或貼在這裡" style="width:100%;margin-top:8px"></textarea>
+    <div class="row" style="gap:10px;margin-top:8px"><button class="btn" id="schRead" type="button">Read the pasted table 讀取貼上內容</button></div>
+    <div id="schMsg" style="margin-top:8px"></div><div id="schPrev"></div></section>` : ''}
+    <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Saved for ${ym} 已存班表</h2>
+    ${roster.length ? '' : '<div class="msg err">No tip roster yet: set the staff in the cage (Tips → staff roles).</div>'}
+    <p class="sub">${d.days.length ? `${d.days.length} day(s) saved. Days not saved: everyone works. 未存的日子視為全員上班。` : 'Nothing saved for this month yet: everyone works. 本月尚未存班表，視為全員上班。'}</p>
+    ${grid(allDays, (x, n) => !!(saved[x] && (saved[x].off || []).includes(n)))}</section>`;
+  document.getElementById('schM').onchange = (e) => { location.hash = '#/schedule?m=' + e.target.value; };
+  if (!isManager()) return;
+  const msg = document.getElementById('schMsg'), prev = document.getElementById('schPrev');
+  const show = (rows) => {
+    try {
+      const s = parseSchedule(rows, ym, roster), byName = new Map(s.people.map((p) => [p.name, p]));
+      const unknown = s.people.filter((p) => !p.roster), missing = roster.filter((n) => !byName.has(n));
+      pending = { days: s.days, off: Object.fromEntries(s.days.map((x) => [x, roster.filter((n) => byName.has(n) && byName.get(n).off.has(x))])) };
+      prev.innerHTML = `<h3>Check before saving 存檔前確認 · ${s.days[0]} → ${s.days[s.days.length - 1]} (${s.days.length} days)</h3>
+        ${unknown.length ? `<div class="msg err">Not on the tip roster (ignored): ${unknown.map((p) => esc(p.name)).join(', ')}. Check the spelling or add them to the roster in the cage. 不在小費名單（略過），請檢查拼字。</div>` : ''}
+        ${missing.length ? `<div class="msg">Not on the schedule (counted as working): ${missing.map(esc).join(', ')}. 班表上沒有的人視為上班。</div>` : ''}
+        ${grid(s.days, (x, n) => pending.off[x].includes(n))}
+        <div class="row" style="gap:10px;margin-top:10px"><button class="btn primary" id="schSave" type="button">Save ${s.days.length} days 存檔</button><span class="muted">Saving replaces the days off already saved for these days. 會覆蓋這些日子原本的休假設定。</span></div>`;
+      flash(msg, '');
+      document.getElementById('schSave').onclick = async (ev) => {
+        ev.target.disabled = true;
+        try {
+          for (const x of pending.days) await api('/cage/doc', 'POST', { coll: 'shifts', id: x, op: 'set', data: { off: pending.off[x], by: staff || '', at: new Date().toISOString(), src: 'upload' } });
+          flash(msg, `Saved ${pending.days.length} days. The cage uses it for tips right away. 已存，Cage 分小費立即套用。`, 'ok'); setTimeout(() => viewSchedule(view), 900);
+        } catch (e) { ev.target.disabled = false; flash(msg, e.message, 'err'); }
+      };
+    } catch (e) { prev.innerHTML = ''; flash(msg, e.message, 'err'); }
+  };
+  document.getElementById('schFile').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try { show(/\.xlsx$/i.test(f.name) ? await readXlsxRows(f) : schCsv(await f.text())); } catch (er) { flash(msg, er.message, 'err'); }
+  };
+  document.getElementById('schRead').onclick = () => { const t = document.getElementById('schPaste').value; if (t.trim()) show(schCsv(t)); };
+  document.getElementById('schTpl').onclick = () => {
+    const start = new Date(today() + 'T00:00:00Z'), days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * 864e5).toISOString().slice(0, 10));
+    const csv = [['Name', ...days.map((x) => `${+x.slice(5, 7)}/${+x.slice(8)}`)], ...roster.map((n) => [n, ...days.map(() => 'W')])].map((r) => r.join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `Everest-schedule-${days[0]}.csv`; a.click();
+  };
+}
 async function viewInsurance(view) {
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
   const from = params.get('from') || daysAgo(6), to = params.get('to') || today();

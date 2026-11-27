@@ -137,4 +137,11 @@ console.log('cage insurance ok');
   rw = await call('/rewards/issue', 'POST', { member_no: a, type: 'promo_cash', amount: 500, detail: 'Birthday', pay: 'cash' }, maria);
   assert.equal(rw.body.approved, false, 'without a manager it waits for approval');
 }
+// Staff schedule: days off saved per day, read back with the tip roster.
+assert.equal((await call('/cage/doc', 'POST', { coll: 'shifts', id: '2026-11-27', op: 'set', data: { off: ['Lhen'], src: 'upload' } }, boss)).status, 200);
+r = await call('/cage/schedule?from=2026-11-24&to=2026-11-30', 'GET', null, maria);
+assert.equal(r.status, 200); assert.deepEqual(r.body.days, [{ day: '2026-11-27', off: ['Lhen'], src: 'upload' }]);
+assert.equal((await call('/cage/schedule?from=x&to=y', 'GET', null, maria)).status, 400);
+assert.equal((await call('/cage/schedule?from=2026-11-24&to=2026-11-30')).status, 401);
+
 console.log('cage cards ok');

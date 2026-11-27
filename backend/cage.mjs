@@ -117,6 +117,16 @@ export async function handleCage(req, env, path, now, reply, user, role) {
     const r = await env.DB.prepare("SELECT data FROM cage_docs WHERE coll='photos' AND id=? AND deleted=0").bind(id).first();
     return r ? reply(JSON.parse(r.data)) : reply({ error: 'Not found' }, 404);
   }
+  // Staff schedule for the admin console: the tip roster (from cage settings) and the days off saved per business day.
+  if (path === '/cage/schedule' && req.method === 'GET') {
+    const q = new URL(req.url).searchParams, ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+    const from = q.get('from'), to = q.get('to');
+    if (!ok(from) || !ok(to) || from > to) return reply({ error: 'Give from and to days.' }, 400);
+    const st = await env.DB.prepare("SELECT data FROM cage_docs WHERE coll='config' AND id='settings' AND deleted=0").first();
+    const set = st ? JSON.parse(st.data) : {};
+    const rows = (await env.DB.prepare("SELECT id,data FROM cage_docs WHERE coll='shifts' AND deleted=0 AND id>=? AND id<=? ORDER BY id").bind(from, to).all()).results || [];
+    return reply({ tipStaff: set.tipStaff || null, days: rows.map((r) => ({ day: r.id, ...JSON.parse(r.data) })) });
+  }
   if (path === '/cage/doc' && req.method === 'POST') {
     const raw = await req.text();
     if (raw.length > 450000) return reply({ error: 'Too large' }, 413);
