@@ -1356,6 +1356,9 @@ async function applyCorrection(c){const e=S.entries.find(x=>x.id===c.entryId);if
  const a=c.after||{},pid=a.player||e.player,p=S.players.find(x=>x.id===pid),keepQa=S.qa,keepDay=S.dayOverride;
  try{S.dayOverride=e.date;qaNew(a.type||e.type);Object.assign(S.qa,{player:p?pLabel(p):'',amount:String(a.amount??e.amount),method:a.method||(e.method==='credit'?'account':e.method)||'cash',credit:(a.method||(e.method==='credit'?'account':e.method))==='account',approver:e.approver||S.user.name,ack:true,lockAck:p?p.id:'',cat:e.cat||'',note:e.note||'',keepTime:e.time,keepCreated:e.createdAt,corrOf:e.id});
   if(S.qa.method==='fx'&&e.fx){Object.assign(S.qa,{cur:e.fx.cur,fv:String(Math.abs(e.fx.fv)),rate:String(e.fx.rate||'')})}
+  /* Credit OUT for others: keep the lender's card as the player and lend to the (possibly corrected) player again. 出給別人的信用取碼：保留出借帳卡。 */
+  const L=e.lender&&(a.type||e.type)==='buyin'&&S.qa.method==='account'?S.players.find(x=>x.id===e.lender):null;
+  if(L&&p&&L.id!==p.id)Object.assign(S.qa,{player:pLabel(L),forOther:true,toPlayer:pLabel(p),lockAck:L.id,note:String(e.note||'').replace(/^Lent to .*? 出給 [^·]*(· )?/,'').trim()});
   const ok=await qaSave();if(!ok)throw new Error(S.qaMsg?S.qaMsg.text:'Could not save the corrected record.');
   await voidEntry(e.id,`Corrected: ${corrText(c)} · ${c.reason}`);ppmCorrect(e,a.type||e.type,pid,num(a.amount??e.amount))}finally{S.qa=keepQa;S.dayOverride=keepDay}return true}
 function bindCorr(){const q=$;
