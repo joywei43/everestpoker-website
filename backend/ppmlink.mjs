@@ -27,7 +27,8 @@ function sessionRow(t, s, nowMs, cashOut) {
 
 // Change the PPM state on the server, with the same version check and public-room update as a PPM save.
 async function changePpm(env, now, user, mutate) {
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 60 + Math.random() * 140 * attempt)); // PPM screens save often: wait a moment and read again
     const row = await env.DB.prepare('SELECT version,data FROM ppm WHERE id=1').first();
     const room = await env.DB.prepare('SELECT version,data FROM room WHERE id=1').first();
     const ts = JSON.parse(row.data);

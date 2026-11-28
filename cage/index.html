@@ -214,9 +214,23 @@ function buildEntry(f){
 /* ---------- PPM link: buy-ins go to the seating list, cash-outs free the seat ---------- */
 const PL={waiting:[],tables:[],at:0,err:'',open:null,tbl:{}};
 const PPM_ACT={adjusted:'PPM: buy-in total corrected',adjusted_waiting:'PPM: waiting amount corrected',addon:'Add-on added to the seat in PPM',waiting:'PPM: waiting for a seat',left:'PPM: seat freed',not_seated:'PPM: not seated, nothing to free',no_member:'PPM: member number not found'};
-function ppmSend(kind,no,amount){if(TESTMODE||MEM||!TOKEN)return;const key='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
- const go=n=>api('/ppm/cage-event','POST',{key,kind,member_no:no,amount}).then(r=>{const a=r&&r.result&&r.result.action;if(a&&PPM_ACT[a])setTimeout(()=>flash(PPM_ACT[a]+(r.result.table?` (${r.result.table} · Seat ${r.result.seat})`:'')),2700);ppmLinkLoad(true)}).catch(e=>{if(n<3&&!(e&&e.status&&e.status<500&&e.status!==409))setTimeout(()=>go(n+1),1500*(n+1));else{PL.err='Could not send to PPM: '+errMsg(e)+' · seat or free the player in PPM by hand';if(canRender())render()}});go(0)}
-function ppmLinkLoad(force){if(MEM||!TOKEN||typeof api!=='function'||PL.loading||(!force&&Date.now()-PL.at<8000))return;PL.loading=true;
+/* Every event is kept on this device until PPM has it (the key makes a resend harmless), so a busy moment or a dropped connection cannot lose a cash-out. */
+const PPM_Q='cage-ppm-pending';const ppmQ=()=>{try{return JSON.parse(localStorage.getItem(PPM_Q)||'[]')}catch(e){return[]}};const ppmQset=a=>{try{localStorage.setItem(PPM_Q,JSON.stringify(a.slice(-50)))}catch(e){}};
+function ppmSend(kind,no,amount,key0){if(TESTMODE||MEM||!TOKEN)return;const key=key0||'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+ const q=ppmQ();if(!q.some(x=>x.key===key)){q.push({key,kind,no,amount,at:Date.now()});ppmQset(q)}
+ const done=()=>ppmQset(ppmQ().filter(x=>x.key!==key));
+ const go=n=>api('/ppm/cage-event','POST',{key,kind,member_no:no,amount}).then(r=>{done();const a=r&&r.result&&r.result.action;if(a&&PPM_ACT[a])setTimeout(()=>flash(PPM_ACT[a]+(r.result.table?` (${r.result.table} · Seat ${r.result.seat})`:'')),2700);ppmLinkLoad(true)}).catch(e=>{if(e&&e.status&&e.status<500&&e.status!==409){done();PL.err='PPM refused it: '+errMsg(e);if(canRender())render();return}if(n<3)setTimeout(()=>go(n+1),1500*(n+1));else{PL.err='PPM did not answer yet: '+errMsg(e)+' · it will be sent again automatically';if(canRender())render()}});go(0)}
+// Send again what did not reach PPM (on load and with every PPM refresh); give up after 12 hours.
+let ppmFlushing=false;function ppmFlush(){if(ppmFlushing||TESTMODE||MEM||!TOKEN)return;const q=ppmQ().filter(x=>Date.now()-x.at<12*3600e3);ppmQset(q);if(!q.length)return;ppmFlushing=true;
+ Promise.all(q.map(x=>api('/ppm/cage-event','POST',{key:x.key,kind:x.kind,member_no:x.no,amount:x.amount}).then(()=>x.key).catch(e=>e&&e.status&&e.status<500&&e.status!==409?x.key:null)))
+  .then(keys=>{ppmQset(ppmQ().filter(x=>!keys.includes(x.key)));ppmFlushing=false;if(keys.some(Boolean)){PL.err='';ppmLinkLoad(true)}})}
+// A cage cash-out after the player sat down, while PPM still shows them seated: the seat was not freed.
+function ppmStuck(){const out=[];const loc=iso=>{const d=new Date(new Date(iso).getTime()+8*3600e3);return d.toISOString().slice(0,19).replace('T',' ')};
+ for(const t of PL.tables)for(const x of t.seats){if(x.status==='idle'||!x.memberId)continue;const dg=(String(x.memberId).match(/(\d{6})(?!.*\d)/)||[])[1];if(!dg)continue;
+  const outs=liveEntries().filter(e=>e.type==='cashout'&&e.createdAt&&Date.now()-new Date(e.createdAt).getTime()<18*3600e3&&loc(e.createdAt)>String(x.sessionStart||'')&&(((S.players.find(p=>p.id===e.player)||{}).no||(String(e.summary).match(/#(EV-\d{6})/)||[])[1]||'').endsWith(dg)));
+  if(outs.length)out.push({t,x,no:'EV-'+dg,amount:outs.reduce((a,e)=>a+num(e.amount),0),key:'x'+outs.map(e=>e.id).join('-'),at:outs[outs.length-1].time})}
+ return out}
+function ppmLinkLoad(force){if(MEM||!TOKEN||typeof api!=='function'||PL.loading||(!force&&Date.now()-PL.at<8000))return;PL.loading=true;ppmFlush();
  Promise.all([api('/ppm/waiting'),api('/ppm')]).then(([w,p])=>{const sig=JSON.stringify([w.waiting,p.tables&&p.tables.map(t=>[t.isRunning,t.seats.map(x=>[x.status,x.memberId,!!x.cashoutAsked])])]);const changed=sig!==PL.sig;Object.assign(PL,{waiting:w.waiting||[],tables:p.tables||[],at:Date.now(),err:'',loading:false,sig});ppmPanelRefresh(changed)})
   .catch(e=>{Object.assign(PL,{at:Date.now(),loading:false,err:'PPM: '+errMsg(e)});ppmPanelRefresh(true)})}
 function ppmPanelRefresh(changed){const el=document.getElementById('ppm-panel');if(!el){if(changed&&S.tab==='counts'&&canRender())render();return}
@@ -232,10 +246,12 @@ function vPpmPanel(){if(MEM||!TOKEN)return '';ppmLinkLoad();const run=PL.tables.
  ${TESTMODE?'<div class="note info" style="margin-bottom:6px">Test mode: buy-ins and cash-outs are not sent to PPM.</div>':''}
  <b>Waiting for a seat 等候入座</b> <span class="sub">${PL.waiting.length}</span>
  <table>${wl||'<tr><td class="sub">Nobody waiting. A buy-in with a member number lands here.</td></tr>'}</table>
+ ${(()=>{const st=ppmStuck();return st.length?`<div class="note warn" style="margin-top:8px"><b>Cashed out at the cage, still seated in PPM 已結出但仍在桌上</b>${st.map(({t,x,no,amount,key,at})=>`<div class="flex" style="justify-content:space-between;gap:8px;margin-top:4px"><span>${esc(x.memberId)} · ${esc(t.name||'T'+t.id)} Seat ${x.id} · cash-out ${pesoE(amount)} at ${esc(at||'')}</span>${may?`<button class="link" data-pstuck="${esc(key)}|${esc(no)}|${amount}">Free seat 釋出座位</button>`:''}</div>`).join('')}</div>`:''})()}
  <div style="margin-top:8px"><b>Ready to cash out 準備結帳</b> <span class="sub">${ready.length}</span></div>
  <table>${ready.map(({t,x})=>`<tr><td><b>${esc(x.memberId)}</b> <span class="sub">${esc(t.name||'T'+t.id)} · Seat ${x.id}${x.cashoutAsked.at?' · '+new Date(x.cashoutAsked.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):''}</span></td><td class="r">${may&&canRecordToday()?`<button class="link" data-pco="${esc(x.memberId)}">Cash out 結出</button>`:''}</td></tr>`).join('')||'<tr><td class="sub">No one yet. The table asks from PPM.</td></tr>'}</table>
  ${PL.err?`<div class="err" style="margin-top:6px">${esc(PL.err)}</div>`:''}<div class="sub" style="margin-top:6px">${PL.at?'Updated '+new Date(PL.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Loading PPM…'} · a cash-out at the cage frees the seat.</div></div></div>`}
-function bindPpmPanel(){document.querySelectorAll('[data-pw]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.pw);PL.open=PL.open===id?null:id;render()});
+function bindPpmPanel(){document.querySelectorAll('[data-pstuck]').forEach(b=>b.onclick=()=>{const [key,no,amt]=b.dataset.pstuck.split('|');b.disabled=true;ppmSend('cashout',no,Number(amt),key)});
+ document.querySelectorAll('[data-pw]').forEach(b=>b.onclick=()=>{const id=Number(b.dataset.pw);PL.open=PL.open===id?null:id;render()});
  document.querySelectorAll('[data-pwt]').forEach(el=>el.onchange=()=>{PL.tbl[el.dataset.pwt]=Number(el.value);render()});
  document.querySelectorAll('[data-pws]').forEach(b=>b.onclick=async()=>{const [id,t,seat]=b.dataset.pws.split('|').map(Number);b.disabled=true;try{await api('/ppm/seat','POST',{id,table_id:t,seat_id:seat});PL.open=null;flash('Seated in PPM');}catch(e){PL.err=errMsg(e)}ppmLinkLoad(true);render()});
  document.querySelectorAll('[data-pwx]').forEach(b=>b.onclick=async()=>{const w=PL.waiting.find(x=>x.id===Number(b.dataset.pwx));if(!w||!confirm(`Take ${w.nickname||w.name} off the waiting list? (not playing)`))return;try{await api('/ppm/waiting/'+w.id+'/remove','POST',{reason:'not playing (cage)'});PL.open=null}catch(e){PL.err=errMsg(e)}ppmLinkLoad(true);render()});
