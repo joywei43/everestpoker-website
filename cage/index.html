@@ -158,7 +158,7 @@ function balances(upTo){
    else if(g.a==='box')b.box+=g.v;
    else if(g.a==='prepaid')b.prepaid[g.p]=round2((b.prepaid[g.p]||0)+g.v);
    else if(g.a==='fx'){const f=b.fx[g.cur]=b.fx[g.cur]||{amt:0,php:0};f.amt=round2(f.amt+g.fv);f.php=round2(f.php+g.v)}
-   else if(g.a==='tipsheld'){b.tipsheld=(b.tipsheld||0)+g.v;if(g.p){b.tipsBy=b.tipsBy||{};for(const [n,v] of tipTo(g.p,g.v,e.date))b.tipsBy[n]=round2((b.tipsBy[n]||0)+v)}}
+   else if(g.a==='tipsheld'){b.tipsheld=(b.tipsheld||0)+g.v;if(g.p){b.tipsBy=b.tipsBy||{};/* Tips earned are split by who worked that day; tips paid out come off the person named, as they are. */for(const [n,v] of (e.type==='tip_pay'?[[g.p,g.v]]:tipTo(g.p,g.v,e.date)))b.tipsBy[n]=round2((b.tipsBy[n]||0)+v)}}
    else{const k=g.a+'_'+g.m;b[k]=(b[k]||0)+chipLegV(e,g)}
   }}
  const il=insLive();if(il)for(const [d,x] of Object.entries(il.days)){if(d<st.openDate||d<INS_LINK||(upTo&&d>upTo)||(lastClose&&d<=lastClose))continue;b.ins_chips=round2((b.ins_chips||0)+x.net)}
