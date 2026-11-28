@@ -43,7 +43,7 @@ jobs:
             echo ',"staff_roles":'; q "SELECT role, active, COUNT(*) n FROM staff GROUP BY role, active"
             echo ',"tables":'; q "SELECT name, tbl_name, sql FROM sqlite_master WHERE tbl_name IN ('staff','rewards') OR sql LIKE '%rewards%'"
             echo ',"rewards":'; q "SELECT id, type, detail, amount, given_at, voided FROM rewards ORDER BY id"
-            echo ',"cage_player":'; q "SELECT coll, id, data, deleted, updated FROM cage_docs WHERE updated >= $SINCE AND coll IN ('players','entries','corrections') AND data LIKE '%000040%'"
+            echo ',"cage_settings":'; q "SELECT version, json_extract(data,'\$.tipStaff') AS tipStaff, json_extract(data,'\$.tipFix') AS tipFix, json_extract(data,'\$.tipPeople') AS tipPeople FROM cage_docs WHERE coll='config' AND id='settings'"
             echo ',"ppm_audit":'; q "SELECT id, at, actor, action, member_id, detail FROM audit_log WHERE at >= $SINCE AND (action LIKE 'ppm%' OR action LIKE 'cage%') ORDER BY id"
             echo ',"ppm_events":'; q "SELECT key, at, result FROM ppm_events WHERE at >= $SINCE ORDER BY at"
             echo ',"groups":'; q "SELECT g.id, g.name, g.kind, g.owner, g.sort, g.active, l.label FROM member_groups g LEFT JOIN group_labels l ON l.group_id=g.id ORDER BY g.sort"
