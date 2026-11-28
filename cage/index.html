@@ -247,7 +247,15 @@ async function saveEntry(e){if(S.user&&!e.by)e.by=S.user.name;if(MEM){e.id='m'+D
  const ref=DB.collection('entries').doc();await ref.set(e)}
 async function voidEntry(id,reason){const e=S.entries.find(x=>x.id===id);if(!e)return;
  if(MEM){e.voided=true;e.voidReason=reason;render();return}
- await DB.doc('entries/'+id).update({voided:true,voidReason:reason,voidedAt:new Date().toISOString()})}
+ await DB.doc('entries/'+id).update({voided:true,voidReason:reason,voidedAt:new Date().toISOString()});
+ if(!CLOSE_TYPES.includes(e.type))await closedDayFix(e.date)}
+/* After the close moved all on-day cash into the cash float, a void or correction of that day's buy-in / cash-out would leave the on-day pouch
+   off by that amount (and the cash float the other way). Move the difference so the on-day pouch is back to 0 for that day. */
+const CLOSE_TYPES=['day_close','close_day','tips_out','ins_settle','count_adj','chip_short','mass_close','ins_move'];
+async function closedDayFix(day){try{if(DB&&DB.pull)await DB.pull()}catch(e){}const L=liveEntries();if(!L.some(e=>e.date===day&&e.type==='day_close'))return;
+ let v=0;for(const e of L)if(e.date===day)for(const g of e.legs||[])if(g.a==='day'&&(g.m||'cash')==='cash')v+=g.v;v=round2(v);if(Math.abs(v)<0.005)return;
+ const now=new Date();await saveEntry({date:day,time:now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),createdAt:now.toISOString(),voided:false,player:null,medium:'cash',type:'day_close',amount:v,
+  legs:[{a:'day',m:'cash',v:-v},{a:'cf',m:'cash',v:v}],pl:null,summary:`Correction after the close: on-day ${v>0?'cash':'shortfall'} ${pesoE(Math.abs(v))} ${v>0?'→ Cash float':'taken back from the cash float'} (a record was corrected after the on-day cash was moved)`,by:S.user?S.user.name:''})}
 async function savePlayer(p){if(MEM){p.id='p'+Date.now();S.players.push(p);render();return p.id}const ref=DB.collection('players').doc();await ref.set(p);return ref.id}
 async function saveMidoriDay(d,v){if(MEM){S.midori[d]=v;render();return}await DB.doc('midori/'+d).set(v)}
 async function saveSettings(s){if(MEM){S.settings=s;render();return}await DB.doc('config/settings').set(s)}
@@ -670,7 +678,7 @@ function vCountForm(){const c=S.cnt;
  ${c.fx.same?'':`<div class="form2" style="margin-top:6px">${FX_CUR.map(k=>`<div><label>${k} counted</label><input data-fxc="${k}" inputmode="decimal" value="${esc(c.fx[k])}" placeholder="${bk[k].amt}"></div>`).join('')}</div>`}</div>`})()}
  <div class="note warn">Count each pouch on its own. Don't move money between pouches while counting. Press Enter to jump to the next line.</div>
  <div class="err" id="cn-err"></div><div class="flex" style="margin-top:8px"><button class="primary" id="cn-submit">Submit count</button>${c.kind==='close'?'':''}<button class="link" id="flow-cancel">Cancel</button></div>`}
-function chipsOutToday(day){const st=settings();let v=day===st.openDate?Number(st.open.chipsOut||0):0;for(const e of liveEntries()){if(e.date!==day||!['buyin','cashout','p_deposit','p_withdraw','ins_settle','tips_out','other_out','op_out','chip_pay'].includes(e.type))continue;for(const g of e.legs||[])if(g.a==='chip'&&g.m==='chips')v-=g.v}return round2(v)}
+function chipsOutToday(day){const st=settings();let v=day===st.openDate?Number(st.open.chipsOut||0):0;for(const e of liveEntries()){if(e.date!==day||!['buyin','cashout','p_deposit','p_withdraw','ins_settle','tips_out','other_out','op_out','chip_pay'].includes(e.type))continue;for(const g of e.legs||[])if(g.a==='chip'&&g.m==='chips')v-=chipLegV(e,g)}return round2(v)}
 function creditToday(day){return liveEntries().filter(e=>e.date===day&&e.type==='buyin').reduce((s,e)=>s+(e.method==='credit'?e.amount:e.method==='account'?(e.credit||0):0),0)}
 function fxResult(c){const bk=fxBook(),o={};for(const k of FX_CUR){const b=bk[k],cnt=c.fx.same?b.amt:(c.fx[k]===''?0:num(c.fx[k])),d=round2(cnt-b.amt),rate=b.amt?b.php/b.amt:fxRate(k);o[k]={book:b.amt,counted:cnt,diff:d,php:round2(d*rate)}}return o}
 function computeResult(){const c=S.cnt,t=cntTotals(c),bk=bookNow(),diffs={};let short=0,out=0;
