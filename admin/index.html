@@ -1035,6 +1035,15 @@ function schDate(v, ym) {
   return null;
 }
 // Rows → {days:[iso], people:[{name, roster, off:Set(day)}]}. The header row is the first row with two or more dates.
+// A shift written as 18-02, 18:00-02:00, 9-17 or 18~2: start and end hour (end past midnight when it is earlier). Returns {text:'18-02', hours} or null.
+function schShift(v) {
+  const m = String(v || '').trim().match(/^(\d{1,2})(?:[:.]?(\d{2}))?\s*(?:-|–|~|to)\s*(\d{1,2})(?:[:.]?(\d{2}))?$/i);
+  if (!m) return null;
+  const a = +m[1] + (+m[2] || 0) / 60, b = +m[3] + (+m[4] || 0) / 60;
+  if (a > 24 || b > 24) return null;
+  const p2 = (h, mm) => String(h).padStart(2, '0') + (mm && mm !== '00' ? ':' + mm : '');
+  return { text: `${p2(+m[1], m[2])}-${p2(+m[3], m[4])}`, hours: Math.round(((b - a + 24) % 24 || 24) * 100) / 100 };
+}
 function parseSchedule(rows, ym, roster) {
   rows = rows.filter((r) => r.some((c) => String(c).trim()));
   const hi = rows.findIndex((r) => r.slice(1).filter((c) => schDate(c, ym)).length >= 2);
@@ -1043,9 +1052,9 @@ function parseSchedule(rows, ym, roster) {
   const days = [...new Set(cols.filter(Boolean))].sort(), lower = new Map(roster.map((n) => [n.toLowerCase(), n]));
   const people = rows.slice(hi + 1).map((r) => {
     const raw = String(r[0] || '').trim(); if (!raw || /^(total|count|working)/i.test(raw)) return null;
-    const name = lower.get(raw.toLowerCase()) || raw, off = new Set();
-    cols.forEach((d, i) => { if (d && SCH_OFF.test(String(r[i] == null ? '' : r[i]).trim() || 'off')) off.add(d); });
-    return { name, roster: lower.has(raw.toLowerCase()), off };
+    const name = lower.get(raw.toLowerCase()) || raw, off = new Set(), shift = {};
+    cols.forEach((d, i) => { if (!d) return; const v = String(r[i] == null ? '' : r[i]).trim(); if (SCH_OFF.test(v || 'off')) off.add(d); else { const t = schShift(v); if (t) shift[d] = t.text; } });
+    return { name, roster: lower.has(raw.toLowerCase()), off, shift };
   }).filter(Boolean);
   return { days, people };
 }
@@ -1059,16 +1068,18 @@ async function viewSchedule(view) {
   const allDays = Array.from({ length: last }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`);
   const wd = (x) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(x + 'T00:00:00Z').getUTCDay()];
   let pending = null;
-  const grid = (days, offOf, extra = []) => `<div style="overflow:auto"><table class="sch"><tr><th style="text-align:left">Staff</th>${days.map((x) => `<th>${x.slice(8)}<br><span class="muted">${wd(x)}</span></th>`).join('')}</tr>
-    ${groups.map(([g, ns]) => `<tr><td colspan="${days.length + 1}" class="muted" style="text-align:left;font-size:12px;padding-top:8px">${esc(g)}</td></tr>${ns.map((n) => `<tr><td style="text-align:left;white-space:nowrap">${esc(n)}</td>${days.map((x) => offOf(x, n) ? '<td class="off">OFF</td>' : '<td class="on">✓</td>').join('')}</tr>`).join('')}`).join('')}
+  const hrs = (t) => (t ? (schShift(t) || {}).hours || 0 : 0), fmtH = (h) => (h ? (Math.round(h * 10) / 10).toString() : '');
+  const grid = (days, offOf, extra = [], shiftOf = () => '') => `<div style="overflow:auto"><table class="sch"><tr><th style="text-align:left">Staff</th>${days.map((x) => `<th>${x.slice(8)}<br><span class="muted">${wd(x)}</span></th>`).join('')}<th>Hours<br><span class="muted">時數</span></th></tr>
+    ${groups.map(([g, ns]) => `<tr><td colspan="${days.length + 2}" class="muted" style="text-align:left;font-size:12px;padding-top:8px">${esc(g)}</td></tr>${ns.map((n) => `<tr><td style="text-align:left;white-space:nowrap">${esc(n)}</td>${days.map((x) => offOf(x, n) ? '<td class="off">OFF</td>' : `<td class="on">${shiftOf(x, n) ? `<span style="font-size:11px;white-space:nowrap">${esc(shiftOf(x, n))}</span>` : '✓'}</td>`).join('')}<td><b>${fmtH(days.reduce((a, x) => a + (offOf(x, n) ? 0 : hrs(shiftOf(x, n))), 0)) || ''}</b></td></tr>`).join('')}`).join('')}
     ${extra.join('')}
-    <tr><td style="text-align:left"><b>Working 上班人數</b></td>${days.map((x) => `<td><b>${roster.filter((n) => !offOf(x, n)).length}</b></td>`).join('')}</tr></table></div>`;
+    <tr><td style="text-align:left"><b>Working 上班人數</b></td>${days.map((x) => `<td><b>${roster.filter((n) => !offOf(x, n)).length}</b></td>`).join('')}<td></td></tr>
+    <tr><td style="text-align:left"><b>Man-hours 人力時數</b></td>${days.map((x) => { const h = roster.reduce((a, n) => a + (offOf(x, n) ? 0 : hrs(shiftOf(x, n))), 0); return `<td>${h ? fmtH(h) : ''}</td>`; }).join('')}<td><b>${fmtH(days.reduce((a, x) => a + roster.reduce((b, n) => b + (offOf(x, n) ? 0 : hrs(shiftOf(x, n))), 0), 0)) || ''}</b></td></tr></table></div>`;
   view.innerHTML = `<style>.sch{border-collapse:collapse;font-size:13px}.sch th,.sch td{border:1px solid var(--line);padding:4px 6px;text-align:center;min-width:34px}.sch td.on{background:#E7F4EC;color:#1E6B3E}.sch td.off{background:#EEE;color:#888;font-weight:600}</style>
     <div class="row between"><div><h1>Schedule 班表</h1><p class="sub">Who works each day. Shared tips (Cashier / Cage, FnB Service, Floor) are split among the people working; the share of someone who is off goes to the Incentive fund. 每天誰上班；共享小費只分給當天上班的人，休假者的份額歸 Incentive fund。</p></div>
     <div class="row"><input type="month" id="schM" value="${ym}" style="width:auto"></div></div>
     ${isManager() ? `<section class="card" style="margin-top:12px"><h2 style="margin-top:0">Upload the schedule 上傳班表</h2>
-    <p class="sub">Excel (.xlsx) or CSV, or copy the table in Excel / Google Sheets and paste it below. First row: <b>Name</b>, then one column per day (11/27, 2026-11-27, Nov 27…). Each cell: anything = working; empty, <b>OFF</b>, X, 休, RD, Leave = off.
-    Excel／CSV 檔，或從 Excel／Google Sheets 複製貼上。第一列：Name＋每天一欄；格子有填 = 上班，空白／OFF／X／休 = 休假。</p>
+    <p class="sub">Excel (.xlsx) or CSV, or copy the table in Excel / Google Sheets and paste it below. First row: <b>Name</b>, then one column per day (11/27, 2026-11-27, Nov 27…). Each cell: a shift such as <b>18-02</b> (18:00–02:00) or <b>10-18</b>, or anything else = working; empty, <b>OFF</b>, X, 休, RD, Leave = off.
+    Excel／CSV 檔，或從 Excel／Google Sheets 複製貼上。第一列：Name＋每天一欄；格子填上班時段（如 18-02 = 18:00–02:00）或任何內容 = 上班，空白／OFF／X／休 = 休假；時段會算進人力時數。</p>
     <div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" id="schFile" accept=".xlsx,.csv,.tsv,.txt"><button class="btn" id="schTpl" type="button">Download a template 下載範本</button></div>
     <textarea id="schPaste" rows="4" placeholder="Or paste from Excel / Google Sheets here 或貼在這裡" style="width:100%;margin-top:8px"></textarea>
     <div class="row" style="gap:10px;margin-top:8px"><button class="btn" id="schRead" type="button">Read the pasted table 讀取貼上內容</button></div>
@@ -1076,7 +1087,7 @@ async function viewSchedule(view) {
     <section class="card" style="margin-top:12px"><h2 style="margin-top:0">Saved for ${ym} 已存班表</h2>
     ${roster.length ? '' : '<div class="msg err">No tip roster yet: set the staff in the cage (Tips → staff roles).</div>'}
     <p class="sub">${d.days.length ? `${d.days.length} day(s) saved. Days not saved: everyone works. 未存的日子視為全員上班。` : 'Nothing saved for this month yet: everyone works. 本月尚未存班表，視為全員上班。'}</p>
-    ${grid(allDays, (x, n) => !!(saved[x] && (saved[x].off || []).includes(n)))}</section>`;
+    ${grid(allDays, (x, n) => !!(saved[x] && (saved[x].off || []).includes(n)), [], (x, n) => (saved[x] && saved[x].shift && saved[x].shift[n]) || '')}</section>`;
   document.getElementById('schM').onchange = (e) => { location.hash = '#/schedule?m=' + e.target.value; };
   if (!isManager()) return;
   const msg = document.getElementById('schMsg'), prev = document.getElementById('schPrev');
@@ -1084,17 +1095,18 @@ async function viewSchedule(view) {
     try {
       const s = parseSchedule(rows, ym, roster), byName = new Map(s.people.map((p) => [p.name, p]));
       const unknown = s.people.filter((p) => !p.roster), missing = roster.filter((n) => !byName.has(n));
-      pending = { days: s.days, off: Object.fromEntries(s.days.map((x) => [x, roster.filter((n) => byName.has(n) && byName.get(n).off.has(x))])) };
+      pending = { days: s.days, off: Object.fromEntries(s.days.map((x) => [x, roster.filter((n) => byName.has(n) && byName.get(n).off.has(x))])),
+        shift: Object.fromEntries(s.days.map((x) => [x, Object.fromEntries(roster.filter((n) => byName.has(n) && byName.get(n).shift[x]).map((n) => [n, byName.get(n).shift[x]]))])) };
       prev.innerHTML = `<h3>Check before saving 存檔前確認 · ${s.days[0]} → ${s.days[s.days.length - 1]} (${s.days.length} days)</h3>
         ${unknown.length ? `<div class="msg err">Not on the tip roster (ignored): ${unknown.map((p) => esc(p.name)).join(', ')}. Check the spelling or add them to the roster in the cage. 不在小費名單（略過），請檢查拼字。</div>` : ''}
         ${missing.length ? `<div class="msg">Not on the schedule (counted as working): ${missing.map(esc).join(', ')}. 班表上沒有的人視為上班。</div>` : ''}
-        ${grid(s.days, (x, n) => pending.off[x].includes(n))}
+        ${grid(s.days, (x, n) => pending.off[x].includes(n), [], (x, n) => pending.shift[x][n] || '')}
         <div class="row" style="gap:10px;margin-top:10px"><button class="btn primary" id="schSave" type="button">Save ${s.days.length} days 存檔</button><span class="muted">Saving replaces the days off already saved for these days. 會覆蓋這些日子原本的休假設定。</span></div>`;
       flash(msg, '');
       document.getElementById('schSave').onclick = async (ev) => {
         ev.target.disabled = true;
         try {
-          for (const x of pending.days) await api('/cage/doc', 'POST', { coll: 'shifts', id: x, op: 'set', data: { off: pending.off[x], by: staff || '', at: new Date().toISOString(), src: 'upload' } });
+          for (const x of pending.days) await api('/cage/doc', 'POST', { coll: 'shifts', id: x, op: 'set', data: { off: pending.off[x], shift: pending.shift[x], by: staff || '', at: new Date().toISOString(), src: 'upload' } });
           flash(msg, `Saved ${pending.days.length} days. The cage uses it for tips right away. 已存，Cage 分小費立即套用。`, 'ok'); setTimeout(() => viewSchedule(view), 900);
         } catch (e) { ev.target.disabled = false; flash(msg, e.message, 'err'); }
       };
@@ -1107,7 +1119,7 @@ async function viewSchedule(view) {
   document.getElementById('schRead').onclick = () => { const t = document.getElementById('schPaste').value; if (t.trim()) show(schCsv(t)); };
   document.getElementById('schTpl').onclick = () => {
     const start = new Date(today() + 'T00:00:00Z'), days = Array.from({ length: 7 }, (_, i) => new Date(start.getTime() + i * 864e5).toISOString().slice(0, 10));
-    const csv = [['Name', ...days.map((x) => `${+x.slice(5, 7)}/${+x.slice(8)}`)], ...roster.map((n) => [n, ...days.map(() => 'W')])].map((r) => r.join(',')).join('\r\n');
+    const csv = [['Name', ...days.map((x) => `${+x.slice(5, 7)}/${+x.slice(8)}`)], ...roster.map((n) => [n, ...days.map(() => '18-02')])].map((r) => r.join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `Everest-schedule-${days[0]}.csv`; a.click();
   };
 }

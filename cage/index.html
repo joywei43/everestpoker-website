@@ -528,19 +528,22 @@ function tipPeople(){const t=settings().tipPeople;return t&&typeof t==='object'?
 function dealerRole(){const r=tipSplit().find(([n])=>/dealer/i.test(n));return r?r[0]:null}
 /* Tip staff: who puts tips into the contribution pool (dealers) and who keeps personal tips. */
 const DEFAULT_TIP_STAFF={pool:[['Senior Dealer',['Wilmer','Lhen','Mhaiy']],['Dealer',['Ysay','Naj','Chei']]],personal:[['Floor Manager',['Cey']],['Administration Manager',['Phoebe']],['Cage',['Mary Anne','Jhianna']],['Service (FnB)',['Shout','Oliver','Regene']]]};
-function tipStaff(){const t=settings().tipStaff;return t&&Array.isArray(t.pool)?t:DEFAULT_TIP_STAFF}
+/* Roster changes take effect from a business day (tipStaffHist), so earlier tips stay with the people who worked then. */
+function tipStaffAt(day){const h=(settings().tipStaffHist||[]).filter(x=>x&&x.from<=(day||'9999')).sort((a,b)=>a.from.localeCompare(b.from)).pop();if(h&&Array.isArray(h.pool))return h;const t=settings().tipStaff;return t&&Array.isArray(t.pool)?t:DEFAULT_TIP_STAFF}
+function tipStaff(){return tipStaffAt(bizDay())}
 const poolNames=()=>tipStaff().pool.flatMap(([,n])=>n);
 function personalTips(){const n=tipStaff().personal.flatMap(([,x])=>x);return n.length?n:['FnB Service','Cage','Admin']}
 /* Old tip lines that were not a person: a fixed name (Acra = Naj), or a group shared by who worked that day (Cashier = Cage role). */
 const DEFAULT_TIP_FIX={alias:{'Acra':'Naj','PB':'Phoebe','Admin':'Incentive fund'},group:{'Cashier':'Cage','Cage':'Cage','FnB Service':'Service (FnB)','Floor supervisor':'Floor Manager'}};
-function tipFix(){const t=settings().tipFix;return t&&t.alias?t:DEFAULT_TIP_FIX}
-const roleMembers=r=>{const ts=tipStaff();const x=[...ts.pool,...ts.personal].find(([n])=>n===r);return x?x[1]:[]};
+function tipFix(day){const h=day?tipStaffAt(day):null;if(h&&h.fix&&h.fix.alias)return h.fix;const t=settings().tipFix;return t&&t.alias?t:DEFAULT_TIP_FIX}
+// A group may name several roles joined with + (e.g. Service (FnB)+Head of FnB).
+const roleMembers=(r,day)=>{const ts=day?tipStaffAt(day):tipStaff();return [...new Set(String(r).split('+').flatMap(one=>{const x=[...ts.pool,...ts.personal].find(([n])=>n===one.trim());return x?x[1]:[]}))]};
 const offOn=d=>(S.shifts&&S.shifts[d]&&S.shifts[d].off)||[];
 const onShift=(d,n)=>!offOn(d).includes(n);
 /* A tip line goes to: itself (a person), a fixed person (Acra → Naj), or is split among that role's staff who were not off that day. */
-const FUND='Incentive fund';const onRoster=n=>[...tipStaff().pool,...tipStaff().personal].some(([,x])=>x.includes(n));
+const FUND='Incentive fund';const onRoster=(n,day)=>{const ts=day?tipStaffAt(day):tipStaff();return [...ts.pool,...ts.personal].some(([,x])=>x.includes(n))};
 /* Nobody of that role working, or the person was off that day: the share goes to the Incentive fund. */
-function tipTo(p,v,day){const fx=tipFix();const one=n=>onRoster(n)&&!onShift(day,n)?FUND:n;if(fx.alias[p])return [[one(fx.alias[p]),v]];const r=fx.group[p];if(!r)return [[one(p),v]];const ppl=roleMembers(r).filter(n=>onShift(day,n));if(!ppl.length)return [[FUND,v]];const each=Math.floor(v/ppl.length*100)/100;return ppl.map((n,i)=>[n,i===ppl.length-1?round2(v-each*(ppl.length-1)):each])}
+function tipTo(p,v,day){const fx=tipFix(day);const one=n=>onRoster(n,day)&&!onShift(day,n)?FUND:n;if(fx.alias[p])return [[one(fx.alias[p]),v]];const r=fx.group[p];if(!r)return [[one(p),v]];const ppl=roleMembers(r,day).filter(n=>onShift(day,n));if(!ppl.length)return [[FUND,v]];const each=Math.floor(v/ppl.length*100)/100;return ppl.map((n,i)=>[n,i===ppl.length-1?round2(v-each*(ppl.length-1)):each])}
 const roleOf=n=>{const ts=tipStaff();for(const [r,x] of [...ts.pool,...ts.personal])if(x.some(y=>y.toLowerCase()===String(n).toLowerCase()))return r;return ''};
 const parseRoles=t=>String(t||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.indexOf(':');return i<0?null:[l.slice(0,i).trim(),l.slice(i+1).split(',').map(x=>x.trim()).filter(Boolean)]}).filter(x=>x&&x[0]);
 function vTips(){const ts=tipStaff(),tp=tipPeople(),dr=dealerRole(),can=S.role&&S.role!=='staff',b=balances(),by=b.tipsBy||{};
@@ -1642,7 +1645,7 @@ function bind(){
  document.querySelectorAll('[data-off]').forEach(c=>c.onclick=async()=>{const [d,n]=c.dataset.off.split('|');const cur=offOn(d);const off=cur.includes(n)?cur.filter(x=>x!==n):[...cur,n];const doc={off,by:(S.user&&S.user.name)||'',at:new Date().toISOString()};try{if(MEM){S.shifts=S.shifts||{};S.shifts[d]=doc;render()}else await DB.doc('shifts/'+d).set(doc)}catch(e){flash(errMsg(e));render()}});
  if(q('tp-edit'))q('tp-edit').onclick=()=>{S.tipEdit=true;render()};if(q('tp-x'))q('tp-x').onclick=()=>{S.tipEdit=false;render()};
  if(q('tp-pedit'))q('tp-pedit').onclick=()=>{S.tipShareEdit=true;render()};if(q('tp-px'))q('tp-px').onclick=()=>{S.tipShareEdit=false;render()};
- if(q('tp-save'))q('tp-save').onclick=async()=>{const pool=parseRoles(q('tp-pool').value),personal=parseRoles(q('tp-pers').value);if(!pool.length){q('tp-err').textContent='Add at least one dealer line, e.g. Dealer: Ysay, Naj';return}try{await saveSettings({...settings(),tipStaff:{pool,personal},tipPeople:{...tipPeople(),[dealerRole()||'Dealers']:pool.flatMap(([,n])=>n)}});S.tipEdit=false;render();flash('Tip staff saved')}catch(e){q('tp-err').textContent=errMsg(e)}};
+ if(q('tp-save'))q('tp-save').onclick=async()=>{const pool=parseRoles(q('tp-pool').value),personal=parseRoles(q('tp-pers').value);if(!pool.length){q('tp-err').textContent='Add at least one dealer line, e.g. Dealer: Ysay, Naj';return}try{const from=bizDay(),hist=(settings().tipStaffHist||[]).filter(x=>x.from!==from);await saveSettings({...settings(),tipStaff:{pool,personal},tipStaffHist:hist.length||settings().tipStaff?[...(hist.length?hist:[{from:'2000-01-01',...(settings().tipStaff||DEFAULT_TIP_STAFF),fix:tipFix()}]),{from,pool,personal,fix:tipFix()}]:undefined,tipPeople:{...tipPeople(),[dealerRole()||'Dealers']:pool.flatMap(([,n])=>n)}});S.tipEdit=false;render();flash('Tip staff saved')}catch(e){q('tp-err').textContent=errMsg(e)}};
  if(q('tp-psave'))q('tp-psave').onclick=async()=>{const r=parseRoles(q('tp-people').value);try{await saveSettings({...settings(),tipPeople:Object.fromEntries(r)});S.tipShareEdit=false;render();flash('Saved')}catch(e){flash(errMsg(e))}};
  if(q('fl-day')){const go=n=>{const [y,m,d]=(S.flowDay||bizDay()).split('-').map(Number);S.flowDay=new Date(Date.UTC(y,m-1,d+n)).toISOString().slice(0,10);render()};q('fl-day').onchange=e=>{S.flowDay=e.target.value||null;render()};q('fl-prev').onclick=()=>go(-1);q('fl-next').onclick=()=>go(1);q('fl-today').onclick=()=>{S.flowDay=null;render()}}
  if(q('lf-csv'))q('lf-csv').onclick=async()=>{const rows=[['Business day','Time','Type','Details','Cash float','Insurance cash','Insurance chips','On-day cash','Chip float','Note','Voided']];

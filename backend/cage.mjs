@@ -125,7 +125,9 @@ export async function handleCage(req, env, path, now, reply, user, role) {
     const st = await env.DB.prepare("SELECT data FROM cage_docs WHERE coll='config' AND id='settings' AND deleted=0").first();
     const set = st ? JSON.parse(st.data) : {};
     const rows = (await env.DB.prepare("SELECT id,data FROM cage_docs WHERE coll='shifts' AND deleted=0 AND id>=? AND id<=? ORDER BY id").bind(from, to).all()).results || [];
-    return reply({ tipStaff: set.tipStaff || null, days: rows.map((r) => ({ day: r.id, ...JSON.parse(r.data) })) });
+    // The roster in force at the end of the range (roster changes take effect from a business day).
+    const hist = (Array.isArray(set.tipStaffHist) ? set.tipStaffHist : []).filter((h) => h && h.from <= to).sort((a, b) => a.from.localeCompare(b.from)).pop();
+    return reply({ tipStaff: hist && Array.isArray(hist.pool) ? { pool: hist.pool, personal: hist.personal || [] } : set.tipStaff || null, days: rows.map((r) => ({ day: r.id, ...JSON.parse(r.data) })) });
   }
   if (path === '/cage/doc' && req.method === 'POST') {
     const raw = await req.text();
